@@ -28,8 +28,20 @@ export default router.post(
         type: z.literal("video"),
         mode: z.array(
           z.union([
-            z.enum(["singleImage", "startEndRequired", "endFrameOptional", "startFrameOptional", "text", "audioReference", "videoReference"]),
-            z.array(z.string().regex(/^(videoReference|imageReference|audioReference):\d+$/)),
+            z.enum([
+              "singleImage",
+              "startEndRequired",
+              "endFrameOptional",
+              "startFrameOptional",
+              "text",
+              "audioReference",
+              "videoReference",
+            ]),
+            z.array(
+              z
+                .string()
+                .regex(/^(videoReference|imageReference|audioReference):\d+$/),
+            ),
           ]),
         ),
         audio: z.union([z.literal("optional"), z.boolean()]),
@@ -37,6 +49,17 @@ export default router.post(
           z.object({
             duration: z.array(z.number()),
             resolution: z.array(z.string()),
+          }),
+        ),
+      }),
+      z.object({
+        name: z.string(),
+        modelName: z.string(),
+        type: z.literal("tts"),
+        voices: z.array(
+          z.object({
+            title: z.string(),
+            voice: z.string(),
           }),
         ),
       }),

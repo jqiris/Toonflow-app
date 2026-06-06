@@ -8,7 +8,10 @@ interface TableSchema {
   initData?: (knex: Knex) => Promise<void>;
 }
 
-export default async (knex: Knex, forceInit: boolean = false): Promise<void> => {
+export default async (
+  knex: Knex,
+  forceInit: boolean = false,
+): Promise<void> => {
   const tables: TableSchema[] = [
     // 用户表
     {
@@ -21,7 +24,9 @@ export default async (knex: Knex, forceInit: boolean = false): Promise<void> => 
         table.unique(["id"]);
       },
       initData: async (knex) => {
-        await knex("o_user").insert([{ id: 1, name: "admin", password: "admin123" }]);
+        await knex("o_user").insert([
+          { id: 1, name: "admin", password: "admin123" },
+        ]);
       },
     },
     //项目表
@@ -113,7 +118,7 @@ export default async (knex: Knex, forceInit: boolean = false): Promise<void> => 
             key: "ttsDubbing",
             name: "TTS配音",
             desc: "根据剧本内容生成角色配音，支持多种声音风格和情绪",
-            disabled: true,
+            disabled: false,
           },
           {
             model: "",
@@ -612,6 +617,18 @@ export default async (knex: Knex, forceInit: boolean = false): Promise<void> => 
             models: "[]",
             enable: 0,
           },
+          {
+            id: "qwen3_tts",
+            inputValues: "{}",
+            models: "[]",
+            enable: 0,
+          },
+          {
+            id: "audio_ace",
+            inputValues: "{}",
+            models: "[]",
+            enable: 0,
+          },
         ]);
       },
     },
@@ -939,7 +956,12 @@ export default async (knex: Knex, forceInit: boolean = false): Promise<void> => 
     {
       name: "o_skillAttribution",
       builder: (table) => {
-        table.text("skillId").notNullable().references("id").inTable("o_skillList").onDelete("CASCADE");
+        table
+          .text("skillId")
+          .notNullable()
+          .references("id")
+          .inTable("o_skillList")
+          .onDelete("CASCADE");
         table.text("attribution").notNullable(); // "production_agent_decision.md" | "production_agent_execution.md" | "production_agent_supervision.md" | "script_agent_decision.md" | "script_agent_execution.md" | "script_agent_supervision.md" | "universal_agent.md"
         table.primary(["skillId", "attribution"]);
         table.index(["attribution"]);

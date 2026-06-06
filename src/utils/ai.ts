@@ -1,8 +1,15 @@
-import { generateText, streamText, wrapLanguageModel, stepCountIs, extractReasoningMiddleware } from "ai";
+import {
+  generateText,
+  streamText,
+  wrapLanguageModel,
+  stepCountIs,
+  extractReasoningMiddleware,
+} from "ai";
 import { devToolsMiddleware } from "@ai-sdk/devtools";
 import axios from "axios";
 import { transform } from "sucrase";
 import u from "@/utils";
+import { logger } from "@/utils/vm";
 
 type AiType =
   | "scriptAgent"
@@ -43,32 +50,51 @@ const AiTypeValues: AiType[] = [
   "productionAgent:storyboardTableAgent",
   "universalAi",
 ];
-async function resolveModelName(value: AiType | `${string}:${string}`): Promise<`${string}:${string}`> {
+async function resolveModelName(
+  value: AiType | `${string}:${string}`,
+): Promise<`${string}:${string}`> {
   if (AiTypeValues.includes(value as AiType)) {
-    const agentUseModeVal = await u.db("o_setting").where("key", "agentUseMode").first();
+    const agentUseModeVal = await u
+      .db("o_setting")
+      .where("key", "agentUseMode")
+      .first();
 
     //正常流程
     //高级配置
     if (agentUseModeVal?.value == "1") {
-      const agentDeployData = await u.db("o_agentDeploy").where("key", value).first();
-      if (!agentDeployData?.modelName) throw new Error(`高级配置模式下，未找到对应的模型配置 ${value}`);
+      const agentDeployData = await u
+        .db("o_agentDeploy")
+        .where("key", value)
+        .first();
+      if (!agentDeployData?.modelName)
+        throw new Error(`高级配置模式下，未找到对应的模型配置 ${value}`);
       return agentDeployData?.modelName as `${number}:${string}`;
     }
     //简易配置
     if (agentUseModeVal?.value == "0") {
       const [mainly] = value!.split(/:(.+)/);
-      const mainlyData = await u.db("o_agentDeploy").where("key", mainly).first();
-      if (!mainlyData?.modelName) throw new Error(`简易配置模式下，未找到部署配置 ${value}`);
+      const mainlyData = await u
+        .db("o_agentDeploy")
+        .where("key", mainly)
+        .first();
+      if (!mainlyData?.modelName)
+        throw new Error(`简易配置模式下，未找到部署配置 ${value}`);
       return mainlyData?.modelName as `${number}:${string}`;
     }
 
     //未查到agentUseModeVal 维持原判断
-    const agentDeployData = await u.db("o_agentDeploy").where("key", value).first();
+    const agentDeployData = await u
+      .db("o_agentDeploy")
+      .where("key", value)
+      .first();
     let modelName = null;
 
     if (!agentDeployData?.modelName) {
       const [mainly] = agentDeployData!.key!.split(/:(.+)/);
-      const mainlyData = await u.db("o_agentDeploy").where("key", mainly).first();
+      const mainlyData = await u
+        .db("o_agentDeploy")
+        .where("key", mainly)
+        .first();
       if (!mainlyData?.modelName) throw new Error(`未找到部署配置 ${value}`);
       modelName = mainlyData.modelName;
     }
@@ -80,28 +106,45 @@ async function resolveModelName(value: AiType | `${string}:${string}`): Promise<
 
 async function getModelConfig(value: AiType | `${string}:${string}`) {
   if (AiTypeValues.includes(value as AiType)) {
-    const agentUseModeVal = await u.db("o_setting").where("key", "agentUseMode").first();
+    const agentUseModeVal = await u
+      .db("o_setting")
+      .where("key", "agentUseMode")
+      .first();
     //正常流程
     //高级配置
     if (agentUseModeVal?.value == "1") {
-      const agentDeployData = await u.db("o_agentDeploy").where("key", value).first();
-      if (!agentDeployData?.modelName) throw new Error(`高级配置模式下，未找到对应的模型配置 ${value}`);
+      const agentDeployData = await u
+        .db("o_agentDeploy")
+        .where("key", value)
+        .first();
+      if (!agentDeployData?.modelName)
+        throw new Error(`高级配置模式下，未找到对应的模型配置 ${value}`);
       return agentDeployData;
     }
     //简易配置
     if (agentUseModeVal?.value == "0") {
       const [mainly] = value!.split(/:(.+)/);
-      const mainlyData = await u.db("o_agentDeploy").where("key", mainly).first();
-      if (!mainlyData?.modelName) throw new Error(`简易配置模式下，未找到部署配置 ${value}`);
+      const mainlyData = await u
+        .db("o_agentDeploy")
+        .where("key", mainly)
+        .first();
+      if (!mainlyData?.modelName)
+        throw new Error(`简易配置模式下，未找到部署配置 ${value}`);
       return mainlyData;
     }
 
     //未查到 agentUseModelVal 维持原流程
-    const agentDeployData = await u.db("o_agentDeploy").where("key", value).first();
+    const agentDeployData = await u
+      .db("o_agentDeploy")
+      .where("key", value)
+      .first();
 
     if (!agentDeployData?.modelName) {
       const [mainly] = agentDeployData!.key!.split(/:(.+)/);
-      const mainlyData = await u.db("o_agentDeploy").where("key", mainly).first();
+      const mainlyData = await u
+        .db("o_agentDeploy")
+        .where("key", mainly)
+        .first();
       if (!mainlyData?.modelName) throw new Error(`未找到部署配置 ${value}`);
       return mainlyData;
     }
@@ -114,8 +157,14 @@ async function getVendorTemplateFn(
   fnName: "textRequest",
   modelName: `${string}:${string}`,
 ): Promise<(think?: boolean, thinkLevel?: 0 | 1 | 2 | 3) => any>;
-async function getVendorTemplateFn(fnName: Exclude<FnName, "textRequest">, modelName: `${string}:${string}`): Promise<(input: any) => any>;
-async function getVendorTemplateFn(fnName: FnName, modelName: `${string}:${string}`): Promise<any> {
+async function getVendorTemplateFn(
+  fnName: Exclude<FnName, "textRequest">,
+  modelName: `${string}:${string}`,
+): Promise<(input: any) => any>;
+async function getVendorTemplateFn(
+  fnName: FnName,
+  modelName: `${string}:${string}`,
+): Promise<any> {
   const [id, name] = modelName.split(/:(.+)/);
   const vendorConfigData = await u.db("o_vendorConfig").where("id", id).first();
   if (!vendorConfigData) throw new Error(`未找到供应商配置 id=${id}`);
@@ -126,7 +175,10 @@ async function getVendorTemplateFn(fnName: FnName, modelName: `${string}:${strin
   const jsCode = transform(code, { transforms: ["typescript"] }).code;
   const running = u.vm(jsCode);
   if (running.vendor) {
-    Object.assign(running.vendor.inputValues, JSON.parse(vendorConfigData.inputValues ?? "{}"));
+    Object.assign(
+      running.vendor.inputValues,
+      JSON.parse(vendorConfigData.inputValues ?? "{}"),
+    );
     running.vendor.models = modelList;
   }
   const fn = running[fnName];
@@ -145,11 +197,18 @@ async function withTaskRecord<T>(
   describe: string,
   relatedObjects: string,
   projectId: number,
-  fn: (modelName: `${string}:${string}`, think: Boolean, thinkLevel: 0 | 1 | 2 | 3) => Promise<T>,
+  fn: (
+    modelName: `${string}:${string}`,
+    think: Boolean,
+    thinkLevel: 0 | 1 | 2 | 3,
+  ) => Promise<T>,
 ): Promise<T> {
   const modelName = await resolveModelName(modelKey);
   const [_, model] = modelName.split(/:(.+)/);
-  const taskRecord = await u.task(projectId, taskClass, model, { describe: describe, content: relatedObjects });
+  const taskRecord = await u.task(projectId, taskClass, model, {
+    describe: describe,
+    content: relatedObjects,
+  });
   try {
     const result = await fn(modelName, false, 0);
 
@@ -161,7 +220,11 @@ async function withTaskRecord<T>(
   }
 }
 
-async function urlToBase64(url: string, retries = 3, delay = 1000): Promise<string> {
+async function urlToBase64(
+  url: string,
+  retries = 3,
+  delay = 1000,
+): Promise<string> {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       const res = await axios.get(url, { responseType: "arraybuffer" });
@@ -178,42 +241,71 @@ class AiText {
   private AiType: AiType | `${string}:${string}`;
   private think?: boolean;
   private thinkLevel: 0 | 1 | 2 | 3;
-  constructor(AiType: AiType | `${string}:${string}`, think?: boolean, thinkLevel: 0 | 1 | 2 | 3 = 0) {
+  constructor(
+    AiType: AiType | `${string}:${string}`,
+    think?: boolean,
+    thinkLevel: 0 | 1 | 2 | 3 = 0,
+  ) {
     this.AiType = AiType;
     this.think = think;
     this.thinkLevel = thinkLevel;
   }
   private async resolveModel(middleware?: any | any[]) {
-    const switchAiDevTool = await u.db("o_setting").where("key", "switchAiDevTool").first();
+    const switchAiDevTool = await u
+      .db("o_setting")
+      .where("key", "switchAiDevTool")
+      .first();
     const modelName = await resolveModelName(this.AiType);
     const sdkFn = await getVendorTemplateFn("textRequest", modelName);
     const baseModel = await sdkFn(this.think, this.thinkLevel);
     const mws = [
       ...(switchAiDevTool?.value === "1" ? [devToolsMiddleware()] : []),
-      ...(middleware ? (Array.isArray(middleware) ? middleware : [middleware]) : []),
+      ...(middleware
+        ? Array.isArray(middleware)
+          ? middleware
+          : [middleware]
+        : []),
     ];
-    return mws.length > 0 ? wrapLanguageModel({ model: baseModel, middleware: mws.length === 1 ? mws[0] : mws }) : baseModel;
+    return mws.length > 0
+      ? wrapLanguageModel({
+          model: baseModel,
+          middleware: mws.length === 1 ? mws[0] : mws,
+        })
+      : baseModel;
   }
   async invoke(input: Omit<Parameters<typeof generateText>[0], "model">) {
     const config = await getModelConfig(this.AiType);
 
     return generateText({
-      ...(input.tools && { stopWhen: stepCountIs(Object.keys(input.tools).length * 50) }),
+      ...(input.tools && {
+        stopWhen: stepCountIs(Object.keys(input.tools).length * 50),
+      }),
       ...input,
       model: await this.resolveModel(),
       ...(config?.temperature && { temperature: config.temperature }),
-      ...(config?.maxOutputTokens && { maxOutputTokens: config.maxOutputTokens }),
+      ...(config?.maxOutputTokens && {
+        maxOutputTokens: config.maxOutputTokens,
+      }),
     } as Parameters<typeof generateText>[0]);
   }
   async stream(input: Omit<Parameters<typeof streamText>[0], "model">) {
     const config = await getModelConfig(this.AiType);
 
     return streamText({
-      ...(input.tools && { stopWhen: stepCountIs(Object.keys(input.tools).length * 50) }),
+      ...(input.tools && {
+        stopWhen: stepCountIs(Object.keys(input.tools).length * 50),
+      }),
       ...input,
-      model: await this.resolveModel(extractReasoningMiddleware({ tagName: "reasoning_content", separator: "\n" })),
+      model: await this.resolveModel(
+        extractReasoningMiddleware({
+          tagName: "reasoning_content",
+          separator: "\n",
+        }),
+      ),
       ...(config?.temperature && { temperature: config.temperature }),
-      ...(config?.maxOutputTokens && { maxOutputTokens: config.maxOutputTokens }),
+      ...(config?.maxOutputTokens && {
+        maxOutputTokens: config.maxOutputTokens,
+      }),
     } as Parameters<typeof streamText>[0]);
   }
 }
@@ -227,7 +319,10 @@ function referenceList2imageBase642(id: string, input: any) {
   return input;
 }
 
-export type ReferenceList = { type: "image"; base64: string } | { type: "audio"; base64: string } | { type: "video"; base64: string };
+export type ReferenceList =
+  | { type: "image"; base64: string }
+  | { type: "audio"; base64: string }
+  | { type: "video"; base64: string };
 
 interface ImageConfig {
   prompt: string;
@@ -255,11 +350,19 @@ class AiImage {
       const fn = await getVendorTemplateFn("imageRequest", mn);
       await referenceList2imageBase642(mn.split(/:(.+)/)[0], input);
       this.result = await fn(input);
-      if (this.result.startsWith("http")) this.result = await urlToBase64(this.result);
+      if (this.result.startsWith("http"))
+        this.result = await urlToBase64(this.result);
       return this;
     };
     if (taskRecord) {
-      await withTaskRecord(this.key, taskRecord.taskClass, taskRecord.describe, taskRecord.relatedObjects, taskRecord.projectId, exec);
+      await withTaskRecord(
+        this.key,
+        taskRecord.taskClass,
+        taskRecord.describe,
+        taskRecord.relatedObjects,
+        taskRecord.projectId,
+        exec,
+      );
       return this;
     }
     await exec(modelName);
@@ -277,7 +380,11 @@ type VideoMode =
   | "endFrameOptional" //首尾帧（尾帧可选）
   | "startFrameOptional" //首尾帧（首帧可选）
   | "text" //文本
-  | (`videoReference:${number}` | `imageReference:${number}` | `audioReference:${number}`)[]; //多参考（数字代表限制数量）
+  | (
+      | `videoReference:${number}`
+      | `imageReference:${number}`
+      | `audioReference:${number}`
+    )[]; //多参考（数字代表限制数量）
 
 interface VideoConfig {
   duration: number;
@@ -304,10 +411,18 @@ class AiVideo {
 
         this.result = await fn(input);
 
-        if (this.result.startsWith("http")) this.result = await urlToBase64(this.result);
+        if (this.result.startsWith("http"))
+          this.result = await urlToBase64(this.result);
       };
       if (taskRecord) {
-        await withTaskRecord(this.key, taskRecord.taskClass, taskRecord.describe, taskRecord.relatedObjects, taskRecord.projectId, exec);
+        await withTaskRecord(
+          this.key,
+          taskRecord.taskClass,
+          taskRecord.describe,
+          taskRecord.relatedObjects,
+          taskRecord.projectId,
+          exec,
+        );
         return this;
       }
       await exec(modelName);
@@ -332,15 +447,35 @@ class AiAudio {
     const exec = async (mn: `${string}:${string}`) => {
       try {
         const fn = await getVendorTemplateFn("ttsRequest", mn);
-        await referenceList2imageBase642(mn.split(/:(.+)/)[0], input);
-        this.result = await fn(input);
+        // ttsRequest 期望收到 TTSConfig（含 text/voice/speechRate），
+        // 但 AiAudio 接收 VideoConfig（含 prompt/duration），需要做字段映射
+        const ttsInput = {
+          ...input,
+          text: input.prompt, // VideoConfig.prompt → TTS text
+          speechRate: input.duration ?? 0, // VideoConfig.duration → 时长参考
+          voice: "",
+          pitchRate: 0,
+          volume: 1,
+        };
+        await referenceList2imageBase642(mn.split(/:(.+)/)[0], ttsInput);
+        this.result = await fn(ttsInput);
 
-        if (this.result.startsWith("http")) this.result = await urlToBase64(this.result);
+        if (this.result.startsWith("http"))
+          this.result = await urlToBase64(this.result);
         return this;
-      } catch (e) {}
+      } catch (e) {
+        logger(`[AiAudio] TTS 请求失败（${mn}）: ${u.error(e).message}`);
+      }
     };
     if (taskRecord) {
-      return withTaskRecord(this.key, taskRecord.taskClass, taskRecord.describe, taskRecord.relatedObjects, taskRecord.projectId, exec);
+      return withTaskRecord(
+        this.key,
+        taskRecord.taskClass,
+        taskRecord.describe,
+        taskRecord.relatedObjects,
+        taskRecord.projectId,
+        exec,
+      );
     }
     return await exec(modelName);
   }
@@ -351,7 +486,11 @@ class AiAudio {
 }
 
 export default {
-  Text: (AiType: AiType | `${string}:${string}`, think?: boolean, thinkLevel?: 0 | 1 | 2 | 3) => new AiText(AiType, think, thinkLevel),
+  Text: (
+    AiType: AiType | `${string}:${string}`,
+    think?: boolean,
+    thinkLevel?: 0 | 1 | 2 | 3,
+  ) => new AiText(AiType, think, thinkLevel),
   Image: (key: `${string}:${string}`) => new AiImage(key),
   Video: (key: `${string}:${string}`) => new AiVideo(key),
   Audio: (key: `${string}:${string}`) => new AiAudio(key),
