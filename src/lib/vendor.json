@@ -14,5 +14,7 @@
   "wan2_2_i2v.ts": "",
   "wan2_2_flf2v.ts": "",
   "z_image_i2i.ts": "",
-  "z_image_t2i.ts": ""
+  "z_image_t2i.ts": "",
+  "audio_ace.ts": "",
+  "qwen3_tts.ts": ""
 }
