@@ -1,0 +1,282 @@
+{
+  "72": {
+    "inputs": {
+      "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+      "type": "wan",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "加载CLIP"
+    }
+  },
+  "73": {
+    "inputs": {
+      "shift": 5,
+      "model": [
+        "97",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingSD3",
+    "_meta": {
+      "title": "采样算法（SD3）"
+    }
+  },
+  "74": {
+    "inputs": {
+      "shift": 5,
+      "model": [
+        "98",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingSD3",
+    "_meta": {
+      "title": "采样算法（SD3）"
+    }
+  },
+  "76": {
+    "inputs": {
+      "unet_name": "Wan2_2-I2V-A14B-HIGH_fp8_e4m3fn_scaled_KJ.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "UNet加载器"
+    }
+  },
+  "77": {
+    "inputs": {
+      "unet_name": "Wan2_2-I2V-A14B-LOW_fp8_e4m3fn_scaled_KJ.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "UNet加载器"
+    }
+  },
+  "78": {
+    "inputs": {
+      "text": "色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走",
+      "clip": [
+        "72",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Negative Prompt)"
+    }
+  },
+  "79": {
+    "inputs": {
+      "vae_name": "wan_2.1_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "加载VAE"
+    }
+  },
+  "80": {
+    "inputs": {
+      "image": "ComfyUI_00157_.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    }
+  },
+  "81": {
+    "inputs": {
+      "width": 832,
+      "height": 480,
+      "length": 113,
+      "batch_size": 1,
+      "positive": [
+        "90",
+        0
+      ],
+      "negative": [
+        "78",
+        0
+      ],
+      "vae": [
+        "79",
+        0
+      ],
+      "start_image": [
+        "80",
+        0
+      ],
+      "end_image": [
+        "89",
+        0
+      ]
+    },
+    "class_type": "WanFirstLastFrameToVideo",
+    "_meta": {
+      "title": "Wan首尾帧视频"
+    }
+  },
+  "83": {
+    "inputs": {
+      "filename_prefix": "video/ComfyUI",
+      "format": "auto",
+      "codec": "auto",
+      "video": [
+        "86",
+        0
+      ]
+    },
+    "class_type": "SaveVideo",
+    "_meta": {
+      "title": "保存视频"
+    }
+  },
+  "84": {
+    "inputs": {
+      "add_noise": "enable",
+      "noise_seed": 62807569373136,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "start_at_step": 0,
+      "end_at_step": 2,
+      "return_with_leftover_noise": "enable",
+      "model": [
+        "73",
+        0
+      ],
+      "positive": [
+        "81",
+        0
+      ],
+      "negative": [
+        "81",
+        1
+      ],
+      "latent_image": [
+        "81",
+        2
+      ]
+    },
+    "class_type": "KSamplerAdvanced",
+    "_meta": {
+      "title": "K采样器（高级）"
+    }
+  },
+  "85": {
+    "inputs": {
+      "samples": [
+        "87",
+        0
+      ],
+      "vae": [
+        "79",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE解码"
+    }
+  },
+  "86": {
+    "inputs": {
+      "fps": 16,
+      "images": [
+        "85",
+        0
+      ]
+    },
+    "class_type": "CreateVideo",
+    "_meta": {
+      "title": "创建视频"
+    }
+  },
+  "87": {
+    "inputs": {
+      "add_noise": "disable",
+      "noise_seed": 0,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "start_at_step": 2,
+      "end_at_step": 4,
+      "return_with_leftover_noise": "disable",
+      "model": [
+        "74",
+        0
+      ],
+      "positive": [
+        "81",
+        0
+      ],
+      "negative": [
+        "81",
+        1
+      ],
+      "latent_image": [
+        "84",
+        0
+      ]
+    },
+    "class_type": "KSamplerAdvanced",
+    "_meta": {
+      "title": "K采样器（高级）"
+    }
+  },
+  "89": {
+    "inputs": {
+      "image": "ComfyUI_00158_.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    }
+  },
+  "90": {
+    "inputs": {
+      "text": "镜头从地面蔓延的黑烟开始极其缓慢地向上摇摄，速度均匀，依次经过无名僧人瘦长的身体，先看到他衣摆处不断消散的黑烟，然后是他空荡荡的僧袍，最后停在他伸出的枯手和黑指甲上，幽蓝烛光在背景微微跳动，黑烟持续缓慢流动，7秒内完成上摇",
+      "clip": [
+        "72",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "97": {
+    "inputs": {
+      "lora_name": "wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors",
+      "strength_model": 1,
+      "model": [
+        "76",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRA加载器（仅模型）"
+    }
+  },
+  "98": {
+    "inputs": {
+      "lora_name": "wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors",
+      "strength_model": 1,
+      "model": [
+        "77",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRA加载器（仅模型）"
+    }
+  }
+}

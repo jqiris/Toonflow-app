@@ -40,7 +40,11 @@ const db = knex({
   if (process.env.NODE_ENV == "dev") initKnexType(db);
 })();
 
-const dbClient = Object.assign(<TName extends TableName>(table: TName) => db<RowType<TName>, RowType<TName>[]>(table), db);
+const dbClient = Object.assign(
+  <TName extends TableName>(table: TName) =>
+    db<RowType<TName>, RowType<TName>[]>(table),
+  db,
+);
 dbClient.schema = db.schema;
 export default dbClient;
 
@@ -49,8 +53,12 @@ export { db };
 async function initKnexType(knexDb: any) {
   const { Client } = await import("@rmp135/sql-ts");
   const outFile = "src/types/database.d.ts";
+  // 显式指定 template 路径，避免 bundle 后 import.meta.url 丢失导致路径错误
+  const templatePath =
+    require.resolve("@rmp135/sql-ts/dist/template.handlebars");
   const dbClient = Client.fromConfig({
     interfaceNameFormat: "${table}",
+    template: templatePath,
     typeMap: {
       number: ["bigint"],
       string: ["text", "varchar", "char"],
@@ -62,7 +70,9 @@ async function initKnexType(knexDb: any) {
   // 清除上次的注释头
   let declBody = declarations.replace(/^\/\*[\s\S]*?\*\/\s*/, "");
   declBody = declBody.replace(/(\n\s*)\/\*([^*][\s\S]*?)\*\//g, "$1/**$2*/");
-  const tableInterfaces = dbObject.schemas.flatMap((schema) => schema.tables.map((table) => table.interfaceName));
+  const tableInterfaces = dbObject.schemas.flatMap((schema) =>
+    schema.tables.map((table) => table.interfaceName),
+  );
   const aggregateTypes = `
 export interface DB {
 ${tableInterfaces.map((name) => `  ${JSON.stringify(name)}: ${name};`).join("\n")}
@@ -75,7 +85,8 @@ ${tableInterfaces.map((name) => `  ${JSON.stringify(name)}: ${name};`).join("\n"
   });
   const hash = crypto.createHash("md5").update(hashSource).digest("hex");
   // 文件内容
-  const content = `// @db-hash ${hash}\n${customHeader}\n\n` + declBody + aggregateTypes;
+  const content =
+    `// @db-hash ${hash}\n${customHeader}\n\n` + declBody + aggregateTypes;
   let needWrite = true;
   try {
     const current = await readFile(outFile, "utf8");
