@@ -262,7 +262,10 @@ const imageRequest = async (config: ImageConfig, model: ImageModel): Promise<str
 
   logger(`[Z-Image I2I] 提示词长度: ${config.prompt.length}`);
 
-  // 5. 提交到 ComfyUI API
+  // 5. 设置随机种子
+  workflow["13"]["inputs"]["seed"] = generateSeed();
+
+  // 6. 提交到 ComfyUI API
   const submitResp = await fetch(`${baseUrl}/prompt`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -277,7 +280,7 @@ const imageRequest = async (config: ImageConfig, model: ImageModel): Promise<str
 
   logger(`[Z-Image I2I] 任务已提交，ID: ${promptId}`);
 
-  // 6. 轮询结果
+  // 7. 轮询结果
   const result = await pollTask(async () => {
     const historyResp = await fetch(`${baseUrl}/history`);
     const history = await historyResp.json();
@@ -297,7 +300,7 @@ const imageRequest = async (config: ImageConfig, model: ImageModel): Promise<str
   if (result.error) throw new Error(`Z-Image I2I 生成失败: ${result.error}`);
   if (!result.data) throw new Error("未找到生成的图片");
 
-  // 7. 下载图片并转为 Base64
+  // 8. 下载图片并转为 Base64
   const fileInfo = result.data;
   const downloadUrl = `${baseUrl}/view?filename=${encodeURIComponent(fileInfo.filename)}&subfolder=${encodeURIComponent(fileInfo.subfolder || "")}&type=${fileInfo.type}`;
   logger(`[Z-Image I2I] 下载图片: ${downloadUrl}`);

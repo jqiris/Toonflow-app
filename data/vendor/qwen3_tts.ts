@@ -141,7 +141,7 @@ const ttsRequest = async (
   workflow["1"]["inputs"]["model_choice"] = modelSize;
 
   // 5. 生成随机种子，每次合成获得不同效果
-  workflow["1"]["inputs"]["seed"] = Math.floor(Math.random() * 2147483647);
+  workflow["1"]["inputs"]["seed"] = generateSeed();
 
   logger(
     `[Qwen3 TTS] 语音指令: "${voiceInstruct || "默认"}", 模型: ${modelSize}`,

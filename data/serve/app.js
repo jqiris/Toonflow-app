@@ -84417,6 +84417,7 @@ var init_initDB = __esm({
             table.text("directorManual");
             table.text("mode");
             table.text("videoRatio");
+            table.integer("concurrentCount").defaultTo(1);
             table.integer("createTime");
             table.integer("userId");
             table.primary(["id"]);
@@ -85691,6 +85692,18 @@ A medium tracking shot follows the woman from behind as she ascends and approach
               },
               {
                 id: "vidu",
+                inputValues: "{}",
+                models: "[]",
+                enable: 0
+              },
+              {
+                id: "qwen3_tts",
+                inputValues: "{}",
+                models: "[]",
+                enable: 0
+              },
+              {
+                id: "audio_ace",
                 inputValues: "{}",
                 models: "[]",
                 enable: 0
@@ -109740,7 +109753,8 @@ var init_vendor = __esm({
       "z_image_i2i.ts": "",
       "z_image_t2i.ts": "",
       "audio_ace.ts": "",
-      "qwen3_tts.ts": ""
+      "qwen3_tts.ts": "",
+      "qwen_image_edit_multi.ts": ""
     };
   }
 });
@@ -227403,6 +227417,7 @@ function runCode(code, vendor) {
     urlToBase64,
     mergeImages,
     pollTask,
+    generateSeed: () => Math.floor(Math.random() * 9007199254740991) + 1,
     fetch,
     exports: exports2,
     axios: axios_default,
@@ -240681,10 +240696,11 @@ var init_saveAssets = __esm({
         base64: external_exports.string().optional().nullable(),
         type: external_exports.enum(["role", "scene", "tool"]),
         prompt: external_exports.string().optional().nullable(),
+        describe: external_exports.string().optional().nullable(),
         imageId: external_exports.number().optional().nullable()
       }),
       async (req, res) => {
-        const { id, base64: base644, type, prompt, projectId, imageId } = req.body;
+        const { id, base64: base644, type, prompt, describe: describe4, projectId, imageId } = req.body;
         if (base644) {
           const matches = base644.match(/^data:image\/\w+;base64,(.+)$/);
           const realBase64 = matches ? matches[1] : base644;
@@ -240696,15 +240712,19 @@ var init_saveAssets = __esm({
             type,
             state: "\u5DF2\u5B8C\u6210"
           });
-          await utils_default.db("o_assets").where("id", id).update({
+          const updates = {
             prompt: prompt ?? "",
             imageId: idData
-          });
+          };
+          if (describe4 !== void 0) updates.describe = describe4;
+          await utils_default.db("o_assets").where("id", id).update(updates);
         } else {
-          await utils_default.db("o_assets").where("id", id).update({
+          const updates = {
             prompt: prompt ?? "",
             imageId
-          });
+          };
+          if (describe4 !== void 0) updates.describe = describe4;
+          await utils_default.db("o_assets").where("id", id).update(updates);
         }
         res.status(200).send(success3({ message: "\u4FDD\u5B58\u8D44\u4EA7\u56FE\u7247\u6210\u529F" }));
       }
@@ -241153,7 +241173,7 @@ var init_batchGenerateImageAssets = __esm({
     };
     batchGenerateImageAssets_default = router22.post("/", validateFields(requestSchema), async (req, res) => {
       const { projectId, model, resolution, concurrentCount, items } = req.body;
-      const project = await utils_default.db("o_project").where("id", projectId).select("artStyle", "type", "intro").first();
+      const project = await utils_default.db("o_project").where("id", projectId).select("artStyle", "type", "intro", "concurrentCount").first();
       if (!project) return res.status(500).send(error53("\u9879\u76EE\u4E3A\u7A7A"));
       const totalNovelId = [];
       for (const item of items) {
@@ -241165,7 +241185,8 @@ var init_batchGenerateImageAssets = __esm({
         await utils_default.db("o_assets").where("id", item.id).update({ imageId });
         totalNovelId.push(imageId);
       }
-      const limit = pLimit(concurrentCount ?? 1);
+      const maxConcurrent = concurrentCount ?? project?.concurrentCount ?? 1;
+      const limit = pLimit(maxConcurrent);
       const tasks = items.map(
         (item, index) => limit(async () => {
           const imageId = totalNovelId[index];
@@ -241295,6 +241316,14 @@ var init_batchPolishAssetsPrompt = __esm({
             }
             const systemPrompt = visualManual;
             try {
+              const clothingInstruction = item.type === "role" ? `
+      **\u670D\u9970\u4F18\u5148\u7EA7\u89C4\u5219\uFF08\u91CD\u8981\uFF09\uFF1A**
+      \u8BF7\u4E25\u683C\u4F9D\u636E\u4E0A\u65B9\u300C\u89D2\u8272\u63CF\u8FF0\u300D\u4E2D\u7684\u670D\u9970\u63CF\u5199\u751F\u6210\u63D0\u793A\u8BCD\u7684\u670D\u88C5\u90E8\u5206\u3002
+      \u5982\u679C\u89D2\u8272\u63CF\u8FF0\u6307\u5B9A\u4E86\u5177\u4F53\u670D\u9970\uFF08\u9F99\u888D/\u51E4\u888D/\u4ED9\u8863/\u5B98\u670D/\u94E0\u7532/\u5211\u670D\u7B49\uFF09\uFF0C
+      \u5FC5\u987B\u5728\u63D0\u793A\u8BCD\u4E2D\u51C6\u786E\u53CD\u6620\u5176\u6B3E\u5F0F\u3001\u989C\u8272\u3001\u56FE\u6848\u548C\u6750\u8D28\u7279\u5F81\uFF0C
+      \u4E0D\u5F97\u964D\u7EA7\u4E3A\u7D20\u8272\u57FA\u7840\u670D\u88C5\u6216\u65E0\u82B1\u7EB9\u88C5\u9970\u3002
+      \u5982\u679C\u89D2\u8272\u63CF\u8FF0\u672A\u6307\u5B9A\u670D\u9970\uFF0C\u518D\u6309\u9ED8\u8BA4\u89C4\u8303\u751F\u6210\u3002
+` : "";
               const { _output } = await utils_default.Ai.Text("universalAi").invoke({
                 system: systemPrompt + "\n" + otherTextPrompt,
                 messages: [
@@ -241304,7 +241333,7 @@ var init_batchPolishAssetsPrompt = __esm({
                     **\u57FA\u7840\u53C2\u6570\uFF1A**
       **${config3.nameLabel}\u8BBE\u5B9A\uFF1A**
       - ${config3.nameLabel}\u540D\u79F0:${item.name},
-      - ${config3.nameLabel}\u63CF\u8FF0:${item.describe},`
+      - ${config3.nameLabel}\u63CF\u8FF0:${item.describe},${clothingInstruction}`
                   }
                 ]
               });
@@ -241526,6 +241555,14 @@ var init_polishAssetsPrompt = __esm({
         if (!visualManual) return res.status(500).send(error53("\u89C6\u89C9\u624B\u518C\u672A\u5B9A\u4E49"));
         const systemPrompt = visualManual;
         try {
+          const clothingInstruction = type === "role" ? `
+      **\u670D\u9970\u4F18\u5148\u7EA7\u89C4\u5219\uFF08\u91CD\u8981\uFF09\uFF1A**
+      \u8BF7\u4E25\u683C\u4F9D\u636E\u4E0A\u65B9\u300C\u89D2\u8272\u63CF\u8FF0\u300D\u4E2D\u7684\u670D\u9970\u63CF\u5199\u751F\u6210\u63D0\u793A\u8BCD\u7684\u670D\u88C5\u90E8\u5206\u3002
+      \u5982\u679C\u89D2\u8272\u63CF\u8FF0\u6307\u5B9A\u4E86\u5177\u4F53\u670D\u9970\uFF08\u9F99\u888D/\u51E4\u888D/\u4ED9\u8863/\u5B98\u670D/\u94E0\u7532/\u5211\u670D\u7B49\uFF09\uFF0C
+      \u5FC5\u987B\u5728\u63D0\u793A\u8BCD\u4E2D\u51C6\u786E\u53CD\u6620\u5176\u6B3E\u5F0F\u3001\u989C\u8272\u3001\u56FE\u6848\u548C\u6750\u8D28\u7279\u5F81\uFF0C
+      \u4E0D\u5F97\u964D\u7EA7\u4E3A\u7D20\u8272\u57FA\u7840\u670D\u88C5\u6216\u65E0\u82B1\u7EB9\u88C5\u9970\u3002
+      \u5982\u679C\u89D2\u8272\u63CF\u8FF0\u672A\u6307\u5B9A\u670D\u9970\uFF0C\u518D\u6309\u9ED8\u8BA4\u89C4\u8303\u751F\u6210\u3002
+` : "";
           const { _output } = await utils_default.Ai.Text("universalAi").invoke({
             system: systemPrompt,
             messages: [
@@ -241534,7 +241571,7 @@ var init_polishAssetsPrompt = __esm({
                 content: `**\u57FA\u7840\u53C2\u6570\uFF1A**
       **${config3.nameLabel}\u8BBE\u5B9A\uFF1A**
       - ${config3.nameLabel}\u540D\u79F0:${name28},
-      - ${config3.nameLabel}\u63CF\u8FF0:${describe4},`
+      - ${config3.nameLabel}\u63CF\u8FF0:${describe4},${clothingInstruction}`
               }
             ]
           });
@@ -241973,7 +242010,7 @@ var init_getModelList = __esm({
     getModelList_default = router37.post(
       "/",
       validateFields({
-        type: external_exports.enum(["text", "image", "video", "all"])
+        type: external_exports.enum(["text", "image", "video", "tts", "all"])
       }),
       async (req, res) => {
         const { type } = req.body;
@@ -241986,7 +242023,7 @@ var init_getModelList = __esm({
           dataList.map(async (data, index) => {
             const vendorData2 = await utils_default.vendor.getVendor(data.id);
             const models = modelList[index];
-            const filtered = type === "all" ? models.filter((item) => item.type !== "video") : models.filter((item) => item.type === type);
+            const filtered = type === "all" ? models.filter((item) => item.type !== "video" && item.type !== "tts") : models.filter((item) => item.type === type);
             return filtered.map((item) => ({
               id: data.id,
               label: item.name,
@@ -242459,8 +242496,8 @@ var init_batchGenerateAssetsImage = __esm({
         concurrentCount: external_exports.number().min(1).optional()
       }),
       async (req, res) => {
-        const { assetIds, projectId, scriptId, concurrentCount = 5 } = req.body;
-        const projectSettingData = await utils_default.db("o_project").where("id", projectId).select("imageModel", "imageQuality", "artStyle").first();
+        const { assetIds, projectId, scriptId, concurrentCount } = req.body;
+        const projectSettingData = await utils_default.db("o_project").where("id", projectId).select("imageModel", "imageQuality", "artStyle", "concurrentCount").first();
         const assetsDataArr = await utils_default.db("o_assets").whereIn("id", assetIds).select("id", "describe", "name", "type", "assetsId");
         const parentIds = assetsDataArr.map((item) => item.assetsId).filter((id) => id !== null);
         const parentAssetsData = await utils_default.db("o_assets").leftJoin("o_image", "o_assets.imageId", "o_image.id").whereIn("o_assets.id", parentIds).select("o_assets.id", "o_image.filePath", "o_assets.describe");
@@ -242553,8 +242590,9 @@ var init_batchGenerateAssetsImage = __esm({
             };
           }
         };
-        for (let i = 0; i < assetsDataArr.length; i += concurrentCount) {
-          const batch = assetsDataArr.slice(i, i + concurrentCount);
+        const maxConcurrent = concurrentCount ?? projectSettingData?.concurrentCount ?? 1;
+        for (let i = 0; i < assetsDataArr.length; i += maxConcurrent) {
+          const batch = assetsDataArr.slice(i, i + maxConcurrent);
           const batchResults = await Promise.all(batch.map(generateSingleAsset));
           imageData.push(...batchResults);
         }
@@ -243271,28 +243309,43 @@ var init_batchAddStoryboardInfo = __esm({
       async (req, res) => {
         const { data, scriptId, projectId } = req.body;
         if (!data.length) return res.status(400).send({ success: false, message: "\u6570\u636E\u4E0D\u80FD\u4E3A\u7A7A" });
-        for (const item of data) {
-          const [id] = await utils_default.db("o_storyboard").insert({
-            prompt: item.prompt,
-            duration: String(item.duration),
-            state: item.state,
-            scriptId,
-            projectId,
-            track: item.track,
-            videoDesc: item.videoDesc,
-            shouldGenerateImage: item.shouldGenerateImage,
-            createTime: Date.now()
-          });
-          if (item.associateAssetsIds?.length) {
-            await utils_default.db("o_assets2Storyboard").insert(
-              item.associateAssetsIds.map((assetId) => ({
-                assetId,
-                storyboardId: id
-              }))
-            );
+        const allAssetIds = [...new Set(data.flatMap((item) => item.associateAssetsIds ?? []))];
+        const validAssetIdSet = /* @__PURE__ */ new Set();
+        if (allAssetIds.length > 0) {
+          const existingAssets = await utils_default.db("o_assets").whereIn("id", allAssetIds).select("id");
+          for (const a of existingAssets) validAssetIdSet.add(a.id);
+          if (validAssetIdSet.size < allAssetIds.length) {
+            const missing = allAssetIds.filter((id) => !validAssetIdSet.has(id));
+            console.warn(`[batchAddStoryboardInfo] \u4EE5\u4E0B\u8D44\u4EA7ID\u4E0D\u5B58\u5728\uFF0C\u5DF2\u8FC7\u6EE4: ${missing.join(", ")}`);
           }
-          item.id = id;
         }
+        await utils_default.db.transaction(async (trx) => {
+          for (const item of data) {
+            const [id] = await trx("o_storyboard").insert({
+              prompt: item.prompt,
+              duration: String(item.duration),
+              state: item.state,
+              scriptId,
+              projectId,
+              track: item.track,
+              videoDesc: item.videoDesc,
+              shouldGenerateImage: item.shouldGenerateImage,
+              createTime: Date.now()
+            });
+            if (item.associateAssetsIds?.length) {
+              const validIds = [...new Set(item.associateAssetsIds)].filter((aid) => validAssetIdSet.has(aid));
+              if (validIds.length) {
+                await trx("o_assets2Storyboard").insert(
+                  validIds.map((assetId) => ({
+                    assetId,
+                    storyboardId: id
+                  }))
+                );
+              }
+            }
+            item.id = id;
+          }
+        });
         const lastStoryboard = await utils_default.db("o_storyboard").where("scriptId", scriptId);
         if (!lastStoryboard || !lastStoryboard.length) return res.status(400).send(error53("\u672A\u67E5\u5230\u5206\u955C\u6570\u636E"));
         const storyboardGroupByTrack = {};
@@ -243425,7 +243478,7 @@ var init_batchGenerateImage = __esm({
           storyboardIds,
           projectId,
           scriptId,
-          concurrentCount = 5,
+          concurrentCount,
           compulsory = false
         } = req.body;
         if (!storyboardIds || storyboardIds.length === 0) return res.status(400).send(error53("storyboardIds\u4E0D\u80FD\u4E3A\u7A7A"));
@@ -243439,7 +243492,7 @@ var init_batchGenerateImage = __esm({
           await utils_default.db("o_storyboard").whereIn("id", storyIds).where("scriptId", scriptId).where("shouldGenerateImage", 0).update({ state: "\u672A\u751F\u6210" });
           await utils_default.db("o_storyboard").whereIn("id", storyIds).where("scriptId", scriptId).where("shouldGenerateImage", 1).update({ state: "\u751F\u6210\u4E2D" });
         }
-        const projectSettingData = await utils_default.db("o_project").where("id", projectId).select("imageModel", "imageQuality", "artStyle", "videoRatio").first();
+        const projectSettingData = await utils_default.db("o_project").where("id", projectId).select("imageModel", "imageQuality", "artStyle", "videoRatio", "concurrentCount").first();
         const assets2StoryboardRows = await utils_default.db("o_assets2Storyboard").whereIn("storyboardId", storyIds).orderBy("rowid").select("storyboardId", "assetId");
         const allAssetIds = [...new Set(assets2StoryboardRows.map((r) => r.assetId))];
         const assetImageMap = {};
@@ -243499,7 +243552,7 @@ var init_batchGenerateImage = __esm({
               state: "\u5DF2\u5B8C\u6210"
             });
           } catch (e) {
-            utils_default.db("o_storyboard").where("id", item.id).update({
+            await utils_default.db("o_storyboard").where("id", item.id).update({
               filePath: "",
               reason: utils_default.error(e).message,
               state: "\u751F\u6210\u5931\u8D25"
@@ -243512,8 +243565,9 @@ var init_batchGenerateImage = __esm({
         } else {
           generateList = storyboardData.filter((item) => item.shouldGenerateImage !== 0);
         }
-        for (let i = 0; i < generateList.length; i += concurrentCount) {
-          const batch = generateList.slice(i, i + concurrentCount);
+        const maxConcurrent = concurrentCount ?? projectSettingData?.concurrentCount ?? 1;
+        for (let i = 0; i < generateList.length; i += maxConcurrent) {
+          const batch = generateList.slice(i, i + maxConcurrent);
           await Promise.all(batch.map(generateTask));
         }
       }
@@ -245028,10 +245082,11 @@ var init_addProject = __esm({
         imageModel: external_exports.string(),
         videoModel: external_exports.string(),
         imageQuality: external_exports.string(),
-        mode: external_exports.string()
+        mode: external_exports.string(),
+        concurrentCount: external_exports.number().int().min(1).optional()
       }),
       async (req, res) => {
-        const { projectType, name: name28, intro, type, directorManual, artStyle, videoRatio, imageModel, videoModel, imageQuality, mode } = req.body;
+        const { projectType, name: name28, intro, type, directorManual, artStyle, videoRatio, imageModel, videoModel, imageQuality, mode, concurrentCount } = req.body;
         await utils_default.db("o_project").insert({
           id: Date.now(),
           projectType,
@@ -245046,7 +245101,8 @@ var init_addProject = __esm({
           videoModel,
           createTime: Date.now(),
           imageQuality,
-          mode
+          mode,
+          concurrentCount: concurrentCount ?? 1
         });
         res.status(200).send(success3({ message: "\u65B0\u589E\u9879\u76EE\u6210\u529F" }));
       }
@@ -245285,6 +245341,7 @@ var init_delProject = __esm({
         await utils_default.db("memories").where("isolationKey", "like", `${id}:%`).delete();
         try {
           await utils_default.oss.deleteDirectory(`${id}/`);
+          await utils_default.oss.deleteDirectory(`smallImage/${id}/`);
           console.log(`\u9879\u76EE ${id} \u7684OSS\u6587\u4EF6\u5939\u5220\u9664\u6210\u529F`);
         } catch (error75) {
           console.log(`\u9879\u76EE ${id} \u6CA1\u6709\u5BF9\u5E94\u7684OSS\u6587\u4EF6\u5939\uFF0C\u8DF3\u8FC7\u5220\u9664`);
@@ -245412,10 +245469,11 @@ var init_editProject = __esm({
         videoModel: external_exports.string(),
         projectType: external_exports.string(),
         imageQuality: external_exports.string(),
-        mode: external_exports.string()
+        mode: external_exports.string(),
+        concurrentCount: external_exports.number().int().min(1).optional()
       }),
       async (req, res) => {
-        const { id, name: name28, intro, type, artStyle, videoRatio, directorManual, imageModel, videoModel, imageQuality, projectType, mode } = req.body;
+        const { id, name: name28, intro, type, artStyle, videoRatio, directorManual, imageModel, videoModel, imageQuality, projectType, mode, concurrentCount } = req.body;
         await utils_default.db("o_project").where("id", id).update({
           name: name28,
           intro,
@@ -245427,7 +245485,8 @@ var init_editProject = __esm({
           videoModel,
           imageQuality,
           projectType,
-          mode
+          mode,
+          concurrentCount
         });
         res.status(200).send(success3({ message: "\u7F16\u8F91\u9879\u76EE\u6210\u529F" }));
       }
@@ -256248,7 +256307,7 @@ var init_extractAssets = __esm({
           const scriptAssetRows = [];
           for (const asset of newAssets) {
             const assetId = nameToId.get(asset.name);
-            if (assetId) {
+            if (assetId && Array.isArray(asset.scriptIds)) {
               for (const sid of asset.scriptIds) {
                 scriptAssetRows.push({ scriptId: sid, assetId });
               }
@@ -256256,7 +256315,7 @@ var init_extractAssets = __esm({
           }
           for (const ref of existingRefs) {
             const assetId = nameToId.get(ref.name);
-            if (assetId) {
+            if (assetId && Array.isArray(ref.scriptIds)) {
               for (const sid of ref.scriptIds) {
                 scriptAssetRows.push({ scriptId: sid, assetId });
               }
@@ -259625,6 +259684,17 @@ var flowDataKeyLabels = Object.fromEntries(
 var tools_default = (toolCpnfig) => {
   const { resTool, toolsNames, msg } = toolCpnfig;
   const { socket } = resTool;
+  function emitWithTimeout(event, data, timeoutMs = 3e4) {
+    return new Promise((resolve3, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error(`Socket emit "${event}" timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+      socket.emit(event, data, (res) => {
+        clearTimeout(timer);
+        resolve3(res);
+      });
+    });
+  }
   const tools = {
     get_flowData: tool({
       description: "\u83B7\u53D6\u5DE5\u4F5C\u533A\u6570\u636E",
@@ -259636,7 +259706,7 @@ var tools_default = (toolCpnfig) => {
       execute: async ({ key }) => {
         const thinking = msg.thinking(`\u6B63\u5728\u83B7\u53D6${flowDataKeyLabels[key]}\u5DE5\u4F5C\u533A\u6570\u636E...`);
         console.log("[tools] get_flowData", key);
-        const flowData = await new Promise((resolve3) => socket.emit("getFlowData", { key }, (res) => resolve3(res)));
+        const flowData = await emitWithTimeout("getFlowData", { key });
         thinking.appendText(`\u83B7\u53D6\u5230${flowDataKeyLabels[key]}:
 ` + JSON.stringify(flowData[key], null, 2));
         thinking.updateTitle(`\u83B7\u53D6${flowDataKeyLabels[key]}\u5B8C\u6210`);
@@ -259677,13 +259747,15 @@ var tools_default = (toolCpnfig) => {
           thinking.appendText(`\u5DF2\u66F4\u65B0\u884D\u751F\u8D44\u4EA7\uFF0CID: ${deriveAsset.id}
 `);
         } else {
-          const [insertedId] = await utils_default.db("o_assets").insert(data);
-          data.id = insertedId;
-          await utils_default.db("o_scriptAssets").insert({ scriptId, assetId: insertedId });
-          thinking.appendText(`\u5DF2\u65B0\u589E\u884D\u751F\u8D44\u4EA7\uFF0CID: ${insertedId}
+          await utils_default.db.transaction(async (trx) => {
+            const [insertedId] = await trx("o_assets").insert(data);
+            data.id = insertedId;
+            await trx("o_scriptAssets").insert({ scriptId, assetId: insertedId });
+          });
+          thinking.appendText(`\u5DF2\u65B0\u589E\u884D\u751F\u8D44\u4EA7\uFF0CID: ${data.id}
 `);
         }
-        const res = await new Promise((resolve3) => socket.emit("addDeriveAsset", data, (res2) => resolve3(res2)));
+        const res = await emitWithTimeout("addDeriveAsset", data);
         thinking.updateTitle("\u8D44\u4EA7\u64CD\u4F5C\u5B8C\u6210");
         thinking.complete();
         return res ?? "\u64CD\u4F5C\u6210\u529F";
@@ -259700,11 +259772,13 @@ var tools_default = (toolCpnfig) => {
       execute: async ({ assetsId, id }) => {
         const thinking = msg.thinking("\u6B63\u5728\u64CD\u4F5C\u8D44\u4EA7...");
         const { scriptId } = resTool.data;
-        await utils_default.db("o_assets").where("id", id).del();
-        await utils_default.db("o_scriptAssets").where({ scriptId, assetId: id }).del();
+        await utils_default.db.transaction(async (trx) => {
+          await trx("o_assets").where("id", id).del();
+          await trx("o_scriptAssets").where({ scriptId, assetId: id }).del();
+        });
         thinking.appendText(`\u5DF2\u5220\u9664\u884D\u751F\u8D44\u4EA7\uFF0CID: ${id}
 `);
-        const res = await new Promise((resolve3) => socket.emit("delDeriveAsset", { assetsId, id }, (res2) => resolve3(res2)));
+        const res = await emitWithTimeout("delDeriveAsset", { assetsId, id });
         thinking.updateTitle("\u8D44\u4EA7\u64CD\u4F5C\u5B8C\u6210");
         thinking.complete();
         return res ?? "\u5220\u9664\u6210\u529F";
@@ -259719,17 +259793,19 @@ var tools_default = (toolCpnfig) => {
       ),
       execute: async ({ ids }) => {
         const thinking = msg.thinking("\u6B63\u5728\u751F\u6210\u884D\u751F\u8D44\u4EA7...");
-        new Promise((resolve3) => socket.emit("generateDeriveAsset", { ids }, (res) => resolve3(res))).then((res) => {
+        try {
+          const res = await emitWithTimeout("generateDeriveAsset", { ids });
           thinking.appendText(`\u5DF2\u751F\u6210\u884D\u751F\u8D44\u4EA7\uFF0CID: ${JSON.stringify(res, null, 2)}
 `);
-          thinking.updateTitle("\u884D\u751F\u8D44\u4EA7\u5F00\u59CB\u5B8C\u6210");
+          thinking.updateTitle("\u884D\u751F\u8D44\u4EA7\u751F\u6210\u5B8C\u6210");
           thinking.complete();
-        }).catch((e) => {
+          return "\u884D\u751F\u8D44\u4EA7\u56FE\u7247\u751F\u6210\u4EFB\u52A1\u5DF2\u63D0\u4EA4";
+        } catch (e) {
           thinking.appendText("\u884D\u751F\u8D44\u4EA7\u751F\u6210\u5931\u8D25:\n" + utils_default.error(e).message);
           thinking.updateTitle("\u884D\u751F\u8D44\u4EA7\u751F\u6210\u5931\u8D25");
           thinking.complete();
-        });
-        return "\u5F00\u59CB\u751F\u6210\u884D\u751F\u8D44\u4EA7";
+          return `\u884D\u751F\u8D44\u4EA7\u751F\u6210\u5931\u8D25: ${utils_default.error(e).message}`;
+        }
       }
     }),
     generate_storyboard: tool({
@@ -259741,16 +259817,18 @@ var tools_default = (toolCpnfig) => {
       ),
       execute: async ({ ids }) => {
         const thinking = msg.thinking("\u6B63\u5728\u751F\u6210\u5206\u955C...");
-        new Promise((resolve3) => socket.emit("generateStoryboard", { ids }, (res) => resolve3(res))).then((res) => {
+        try {
+          const res = await emitWithTimeout("generateStoryboard", { ids });
           thinking.appendText("\u751F\u6210\u7684\u5206\u955C\u6570\u636E:\n" + JSON.stringify(res, null, 2));
           thinking.updateTitle("\u5206\u955C\u751F\u6210\u5B8C\u6210");
           thinking.complete();
-        }).catch((e) => {
+          return "\u5206\u955C\u56FE\u7247\u751F\u6210\u4EFB\u52A1\u5DF2\u63D0\u4EA4";
+        } catch (e) {
           thinking.appendText("\u5206\u955C\u751F\u6210\u5931\u8D25:\n" + utils_default.error(e).message);
           thinking.updateTitle("\u5206\u955C\u751F\u6210\u5931\u8D25");
           thinking.complete();
-        });
-        return "\u5F00\u59CB\u751F\u6210\u5206\u955C";
+          return `\u5206\u955C\u751F\u6210\u5931\u8D25: ${utils_default.error(e).message}`;
+        }
       }
     })
   };
@@ -259859,7 +259937,7 @@ async function createSubAgent(parentCtx) {
     return fullResponse;
   }
   const promptInput = external_exports.object({
-    prompt: external_exports.string().describe("\u4EA4\u7ED9\u5B50Agent\u7684\u4EFB\u52A1\u7B80\u7EA6\u63CF\u8FF0\uFF0C100\u5B57\u4EE5\u5185")
+    prompt: external_exports.string().describe("\u4EA4\u7ED9\u5B50Agent\u7684\u4EFB\u52A1\u7B80\u7EA6\u63CF\u8FF0\uFF0C500\u5B57\u4EE5\u5185")
   }).toJSONSchema();
   const projectInfo = await utils_default.db("o_project").where("id", resTool.data.projectId).first();
   if (!projectInfo) throw new Error(`\u9879\u76EE\u4E0D\u5B58\u5728\uFF0CID: ${resTool.data.projectId}`);

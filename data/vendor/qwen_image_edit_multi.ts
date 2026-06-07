@@ -373,10 +373,6 @@ const WORKFLOW_JSON = {
 // 辅助函数
 // ============================================================
 
-const generateSeed = (): number => {
-  return Math.floor(Math.random() * 9007199254740991) + 1;
-};
-
 /**
  * 根据 size 和 aspectRatio 计算输出分辨率
  */

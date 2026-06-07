@@ -242,7 +242,7 @@ const ttsRequest = async (
   workflow["94"]["inputs"]["tags"] = config.text;
 
   // 3. 生成随机种子，每次生成获得不同音乐
-  const seed = Math.floor(Math.random() * 2147483647);
+  const seed = generateSeed();
   workflow["109"]["inputs"]["value"] = seed;
   workflow["94"]["inputs"]["seed"] = ["109", 0];
   workflow["3"]["inputs"]["seed"] = ["109", 0];

@@ -32,6 +32,7 @@ export default function runCode(code: string, vendor?: Record<string, any>) {
     urlToBase64,
     mergeImages,
     pollTask,
+    generateSeed: (): number => Math.floor(Math.random() * 9007199254740991) + 1,
     fetch: fetch,
     exports,
     axios,

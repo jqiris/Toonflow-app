@@ -336,7 +336,11 @@ const videoRequest = async (config: VideoConfig, model: VideoModel): Promise<str
 
   logger(`[Wan2.2 T2V] 分辨率: ${width}x${height}, 帧数: ${frameCount}`);
 
-  // 5. 提交到 ComfyUI API
+  // 5. 设置随机种子
+  workflow["14"]["inputs"]["noise_seed"] = generateSeed();
+  workflow["15"]["inputs"]["noise_seed"] = generateSeed();
+
+  // 6. 提交到 ComfyUI API
   const submitResp = await fetch(`${baseUrl}/prompt`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -351,7 +355,7 @@ const videoRequest = async (config: VideoConfig, model: VideoModel): Promise<str
 
   logger(`[Wan2.2 T2V] 任务已提交，ID: ${promptId}`);
 
-  // 6. 轮询结果
+  // 7. 轮询结果
   const result = await pollTask(async () => {
     const historyResp = await fetch(`${baseUrl}/history`);
     const history = await historyResp.json();
@@ -371,7 +375,7 @@ const videoRequest = async (config: VideoConfig, model: VideoModel): Promise<str
   if (result.error) throw new Error(`Wan2.2 T2V 生成失败: ${result.error}`);
   if (!result.data) throw new Error("未找到生成的视频");
 
-  // 7. 下载视频并转为 Base64
+  // 8. 下载视频并转为 Base64
   const fileInfo = result.data;
   const downloadUrl = `${baseUrl}/view?filename=${encodeURIComponent(fileInfo.filename)}&subfolder=${encodeURIComponent(fileInfo.subfolder || "")}&type=${fileInfo.type}`;
   logger(`[Wan2.2 T2V] 下载视频: ${downloadUrl}`);
