@@ -46,6 +46,16 @@ const dbClient = Object.assign(
   db,
 );
 dbClient.schema = db.schema;
+// Object.assign 仅复制可枚举属性，但 knex 实例的部分方法（如 transaction, raw）
+// 被设为不可枚举。此处显式复制所有遗漏的函数属性。
+for (const key of Object.getOwnPropertyNames(db)) {
+  if (!(key in dbClient)) {
+    const fn = (db as any)[key];
+    if (typeof fn === "function") {
+      (dbClient as any)[key] = fn.bind(db);
+    }
+  }
+}
 export default dbClient;
 
 export { db };

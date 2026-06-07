@@ -7,9 +7,11 @@
 | 操作 | 调用 |
 |------|------|
 | 读取工作区 | `get_planData` |
+| 写入工作区 | `set_planData` |
 | 读取事件 | `get_novel_events(ids:number[])` |
 | 读取原文 | `get_novel_text` |
 | 读取剧本内容 | `get_script_content(ids:string[])` |
+| 保存剧本 | `save_script` |
 ## 执行流程
 
 1. 调用 `get_planData` 获取骨架与改编策略；若存在上一集剧本id，调用 `get_script_content(ids)` 获取最后一集剧本内容，用于衔接剧情与角色状态,调用 `get_novel_text` 获取对应章节原文，调用 `get_novel_events(ids)` 获取事件表

@@ -31,6 +31,17 @@ export default async (knex: Knex): Promise<void> => {
       });
     }
   };
+
+  const addIndex = async (table: string, columns: string[], indexName?: string, unique: boolean = false) => {
+    if (!(await knex.schema.hasTable(table))) return;
+    const name = indexName ?? `idx_${table}_${columns.join("_")}`;
+    try {
+      await knex.raw(`CREATE ${unique ? "UNIQUE " : ""}INDEX IF NOT EXISTS ?? ON ?? (${columns.map(() => "??").join(", ")})`, [name, table, ...columns]);
+    } catch {
+      // index may already exist in older SQLite
+    }
+  };
+
   //矫正因软件异常退出导致的状态不一致问题
   await db("o_novel").where("eventState", 0).update({
     eventState: -1,
@@ -56,6 +67,9 @@ export default async (knex: Knex): Promise<void> => {
     state: "生成失败",
     errorReason: "软件退出导致失败",
   });
+
+  // o_script 唯一索引（防止同一项目下同名的剧本重复）
+  await addIndex("o_script", ["projectId", "name"], undefined, true);
 
   // 添加新字段
   await addColumn("o_prompt", "useData", "text");

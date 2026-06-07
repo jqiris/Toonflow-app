@@ -109806,6 +109806,14 @@ var init_fixDB = __esm({
           });
         }
       };
+      const addIndex = async (table, columns, indexName, unique = false) => {
+        if (!await knex2.schema.hasTable(table)) return;
+        const name28 = indexName ?? `idx_${table}_${columns.join("_")}`;
+        try {
+          await knex2.raw(`CREATE ${unique ? "UNIQUE " : ""}INDEX IF NOT EXISTS ?? ON ?? (${columns.map(() => "??").join(", ")})`, [name28, table, ...columns]);
+        } catch {
+        }
+      };
       await db_default("o_novel").where("eventState", 0).update({
         eventState: -1,
         errorReason: "\u8F6F\u4EF6\u9000\u51FA\u5BFC\u81F4\u5931\u8D25"
@@ -109830,6 +109838,7 @@ var init_fixDB = __esm({
         state: "\u751F\u6210\u5931\u8D25",
         errorReason: "\u8F6F\u4EF6\u9000\u51FA\u5BFC\u81F4\u5931\u8D25"
       });
+      await addIndex("o_script", ["projectId", "name"], void 0, true);
       await addColumn("o_prompt", "useData", "text");
       await addColumn("o_agentDeploy", "type", "string");
       await addColumn("o_agentDeploy", "temperature", "integer");
@@ -110731,6 +110740,14 @@ var init_db = __esm({
       db
     );
     dbClient.schema = db.schema;
+    for (const key of Object.getOwnPropertyNames(db)) {
+      if (!(key in dbClient)) {
+        const fn = db[key];
+        if (typeof fn === "function") {
+          dbClient[key] = fn.bind(db);
+        }
+      }
+    }
     db_default = dbClient;
   }
 });
@@ -256659,7 +256676,8 @@ var init_setPlanData = __esm({
         agentType: external_exports.enum(["scriptAgent"]),
         data: external_exports.object({
           storySkeleton: external_exports.string(),
-          adaptationStrategy: external_exports.string()
+          adaptationStrategy: external_exports.string(),
+          script: external_exports.array(external_exports.object({ name: external_exports.string(), content: external_exports.string() })).optional()
         })
       }),
       async (req, res) => {
@@ -256667,7 +256685,7 @@ var init_setPlanData = __esm({
         await utils_default.db("o_agentWorkData").where({ projectId, key: agentType }).update({
           data: JSON.stringify(data)
         });
-        const script = data.script;
+        const script = data.script ?? [];
         await Promise.all(
           script.map(async (s) => {
             const row = await utils_default.db("o_script").where({ projectId, name: s.name }).first();
@@ -260993,6 +261011,60 @@ var tools_default2 = (toolCpnfig) => {
         thinking.updateTitle(`\u83B7\u53D6\u811A\u672C\u5185\u5BB9\u5B8C\u6210`);
         thinking.complete();
         return text2 ?? "\u65E0\u6570\u636E";
+      }
+    }),
+    save_script: tool({
+      description: "\u4FDD\u5B58\u5267\u672C\u5230\u6570\u636E\u5E93\uFF08\u63D2\u5165\u6216\u66F4\u65B0\uFF0C\u6309 name \u53BB\u91CD\uFF09",
+      inputSchema: jsonSchema(
+        external_exports.object({
+          name: external_exports.string().describe("\u5267\u672C\u540D\u79F0\uFF0C\u5982 '\u5999\u5584\u4F20\u8BF4 EP01\uFF1A\u7236\u75C5\u5973\u5FE7'"),
+          content: external_exports.string().describe("\u5B8C\u6574\u5267\u672C\u5185\u5BB9")
+        }).toJSONSchema()
+      ),
+      execute: async ({ name: name28, content }) => {
+        name28 = name28.trim();
+        console.log("[tools] save_script", name28);
+        const thinking = msg.thinking(`\u6B63\u5728\u4FDD\u5B58\u5267\u672C\u300A${name28}\u300B...`);
+        const projectId = resTool.data.projectId;
+        const existing = await utils_default.db("o_script").where({ projectId, name: name28 }).first();
+        if (existing) {
+          await utils_default.db("o_script").where({ id: existing.id }).update({ content });
+        } else {
+          await utils_default.db("o_script").insert({ projectId, name: name28, content });
+        }
+        thinking.appendText(`\u5267\u672C\u300A${name28}\u300B\u5DF2\u4FDD\u5B58`);
+        thinking.updateTitle(`\u4FDD\u5B58\u5267\u672C\u5B8C\u6210`);
+        thinking.complete();
+        return `\u5267\u672C\u300A${name28}\u300B\u5DF2\u4FDD\u5B58`;
+      }
+    }),
+    set_planData: tool({
+      description: "\u4FDD\u5B58\u5DE5\u4F5C\u533A\u6570\u636E\u5230\u6570\u636E\u5E93\uFF08storySkeleton / adaptationStrategy\uFF09",
+      inputSchema: jsonSchema(
+        external_exports.object({
+          key: keySchema2.describe("\u6570\u636Ekey"),
+          value: external_exports.string().describe("\u6570\u636E\u5185\u5BB9")
+        }).toJSONSchema()
+      ),
+      execute: async ({ key, value }) => {
+        console.log("[tools] set_planData", key);
+        const thinking = msg.thinking(`\u6B63\u5728\u4FDD\u5B58${planDataKeyLabels[key]}...`);
+        const projectId = resTool.data.projectId;
+        const row = await utils_default.db("o_agentWorkData").where({ projectId, key: "scriptAgent" }).first();
+        let data = {};
+        if (row?.data) {
+          try {
+            data = JSON.parse(row.data);
+          } catch {
+            data = {};
+          }
+        }
+        data[key] = value;
+        await utils_default.db("o_agentWorkData").where({ projectId, key: "scriptAgent" }).update({ data: JSON.stringify(data) });
+        thinking.appendText(`${planDataKeyLabels[key]}\u5DF2\u4FDD\u5B58`);
+        thinking.updateTitle(`\u4FDD\u5B58${planDataKeyLabels[key]}\u5B8C\u6210`);
+        thinking.complete();
+        return `${planDataKeyLabels[key]}\u5DF2\u4FDD\u5B58`;
       }
     })
   };

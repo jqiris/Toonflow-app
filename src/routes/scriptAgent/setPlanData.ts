@@ -13,6 +13,7 @@ export default router.post(
     data: z.object({
       storySkeleton: z.string(),
       adaptationStrategy: z.string(),
+      script: z.array(z.object({ name: z.string(), content: z.string() })).optional(),
     }),
   }),
   async (req, res) => {
@@ -23,7 +24,7 @@ export default router.post(
       .update({
         data: JSON.stringify(data),
       });
-    const script = data.script;
+    const script = data.script ?? [];
 
     await Promise.all(
       script.map(async (s: any) => {

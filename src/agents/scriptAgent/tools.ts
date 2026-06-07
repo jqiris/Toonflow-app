@@ -115,6 +115,60 @@ export default (toolCpnfig: ToolConfig) => {
         return text ?? "无数据";
       },
     }),
+    save_script: tool({
+      description: "保存剧本到数据库（插入或更新，按 name 去重）",
+      inputSchema: jsonSchema<{ name: string; content: string }>(
+        z.object({
+          name: z.string().describe("剧本名称，如 '妙善传说 EP01：父病女忧'"),
+          content: z.string().describe("完整剧本内容"),
+        }).toJSONSchema(),
+      ),
+      execute: async ({ name, content }) => {
+        name = name.trim();
+        console.log("[tools] save_script", name);
+        const thinking = msg.thinking(`正在保存剧本《${name}》...`);
+        const projectId = resTool.data.projectId;
+        const existing = await u.db("o_script").where({ projectId, name }).first();
+        if (existing) {
+          await u.db("o_script").where({ id: existing.id }).update({ content });
+        } else {
+          await u.db("o_script").insert({ projectId, name, content });
+        }
+        thinking.appendText(`剧本《${name}》已保存`);
+        thinking.updateTitle(`保存剧本完成`);
+        thinking.complete();
+        return `剧本《${name}》已保存`;
+      },
+    }),
+    set_planData: tool({
+      description: "保存工作区数据到数据库（storySkeleton / adaptationStrategy）",
+      inputSchema: jsonSchema<{ key: keyof planData; value: string }>(
+        z.object({
+          key: keySchema.describe("数据key"),
+          value: z.string().describe("数据内容"),
+        }).toJSONSchema(),
+      ),
+      execute: async ({ key, value }) => {
+        console.log("[tools] set_planData", key);
+        const thinking = msg.thinking(`正在保存${planDataKeyLabels[key]}...`);
+        const projectId = resTool.data.projectId;
+        const row = await u.db("o_agentWorkData").where({ projectId, key: "scriptAgent" }).first();
+        let data: Record<string, any> = {};
+        if (row?.data) {
+          try {
+            data = JSON.parse(row.data);
+          } catch {
+            data = {};
+          }
+        }
+        data[key] = value;
+        await u.db("o_agentWorkData").where({ projectId, key: "scriptAgent" }).update({ data: JSON.stringify(data) });
+        thinking.appendText(`${planDataKeyLabels[key]}已保存`);
+        thinking.updateTitle(`保存${planDataKeyLabels[key]}完成`);
+        thinking.complete();
+        return `${planDataKeyLabels[key]}已保存`;
+      },
+    }),
   };
   return toolsNames ? Object.fromEntries(Object.entries(tools).filter(([n]) => toolsNames.includes(n))) : tools;
 };

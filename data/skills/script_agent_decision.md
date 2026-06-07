@@ -96,7 +96,7 @@
 输入：事件表（通过 get_novel_events(ids:number[]) 获取）
 处理：三幕分割、按项目配置分集、删减决策、钩子设计
 输出：planData.storySkeleton
-工具：get_planData → set_planData_storySkeleton
+工具：get_planData → set_planData
 质量门：集数×单集时长符合配置、章节全覆盖、情绪曲线合理
 前置条件：事件提取已完成
 ```
@@ -107,7 +107,7 @@
 输入：事件表（get_novel_events） + planData.storySkeleton
 处理：提炼改编原则、确定删减依据、世界观呈现策略
 输出：planData.adaptationStrategy
-工具：get_planData → set_planData_adaptationStrategy
+工具：get_planData → set_planData
 质量门：原则与骨架一致、服务于故事核
 前置条件：阶段1（故事骨架）通过审核
 ```
@@ -118,7 +118,7 @@
 输入：事件表（get_novel_events） + planData.storySkeleton + planData.adaptationStrategy
 处理：逐集编写，每次调用执行层处理一集
 输出：SQLite 中的剧本记录
-工具：get_novel_events + get_planData + get_novel_text → insert_script_to_sqlite
+工具：get_novel_events + get_planData + get_novel_text + save_script
 前置条件：阶段2（改编策略）通过审核
 ```
 

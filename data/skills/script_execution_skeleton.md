@@ -7,6 +7,7 @@
 | 操作 | 调用 |
 |------|------|
 | 读取工作区 | `get_planData` |
+| 写入工作区 | `set_planData` |
 | 读取事件 | `get_novel_events(ids:number[])` |
 
 ## 执行流程
