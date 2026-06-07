@@ -66,6 +66,19 @@ interface ToolConfig {
 export default (toolCpnfig: ToolConfig) => {
   const { resTool, toolsNames, msg } = toolCpnfig;
   const { socket } = resTool;
+
+  function emitWithTimeout(event: string, data: any, timeoutMs = 30000): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error(`Socket emit "${event}" timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+      socket.emit(event, data, (res: any) => {
+        clearTimeout(timer);
+        resolve(res);
+      });
+    });
+  }
+
   const tools: Record<string, Tool> = {
     get_flowData: tool({
       description: "获取工作区数据",
@@ -79,7 +92,7 @@ export default (toolCpnfig: ToolConfig) => {
       execute: async ({ key }) => {
         const thinking = msg.thinking(`正在获取${flowDataKeyLabels[key]}工作区数据...`);
         console.log("[tools] get_flowData", key);
-        const flowData: FlowData = await new Promise((resolve) => socket.emit("getFlowData", { key }, (res: any) => resolve(res)));
+        const flowData: FlowData = await emitWithTimeout("getFlowData", { key });
         thinking.appendText(`获取到${flowDataKeyLabels[key]}:\n` + JSON.stringify(flowData[key], null, 2));
         thinking.updateTitle(`获取${flowDataKeyLabels[key]}完成`);
         thinking.complete();
@@ -128,7 +141,7 @@ export default (toolCpnfig: ToolConfig) => {
           await u.db("o_scriptAssets").insert({ scriptId, assetId: insertedId });
           thinking.appendText(`已新增衍生资产，ID: ${insertedId}\n`);
         }
-        const res = await new Promise((resolve) => socket.emit("addDeriveAsset", data, (res: any) => resolve(res)));
+        const res = await emitWithTimeout("addDeriveAsset", data);
         thinking.updateTitle("资产操作完成");
         thinking.complete();
         return res ?? "操作成功";
@@ -150,7 +163,7 @@ export default (toolCpnfig: ToolConfig) => {
         await u.db("o_assets").where("id", id).del();
         await u.db("o_scriptAssets").where({ scriptId, assetId: id }).del();
         thinking.appendText(`已删除衍生资产，ID: ${id}\n`);
-        const res = await new Promise((resolve) => socket.emit("delDeriveAsset", { assetsId, id }, (res: any) => resolve(res)));
+        const res = await emitWithTimeout("delDeriveAsset", { assetsId, id });
         thinking.updateTitle("资产操作完成");
         thinking.complete();
         return res ?? "删除成功";
