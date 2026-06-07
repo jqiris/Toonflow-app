@@ -129,7 +129,7 @@ const WORKFLOW_JSON = {
   "14": {
     "inputs": {
       "add_noise": "enable",
-      "noise_seed": 88515284508698,
+      "noise_seed": 0,
       "steps": 4,
       "cfg": 1,
       "sampler_name": "euler",
@@ -162,7 +162,7 @@ const WORKFLOW_JSON = {
   "15": {
     "inputs": {
       "add_noise": "disable",
-      "noise_seed": 74007387175922,
+      "noise_seed": 0,
       "steps": 4,
       "cfg": 1,
       "sampler_name": "euler",

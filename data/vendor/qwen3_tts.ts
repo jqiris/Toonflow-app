@@ -64,7 +64,7 @@ const WORKFLOW_JSON = {
       device: "auto",
       precision: "bf16",
       language: "Auto",
-      seed: 578804842370408,
+      seed: 0,
       max_new_tokens: 2048,
       top_p: 0.8,
       top_k: 20,

@@ -103,7 +103,7 @@ const WORKFLOW_JSON = {
   },
   "13": {
     "inputs": {
-      "seed": 970611104406471,
+      "seed": 0,
       "steps": 18,
       "cfg": 3,
       "sampler_name": "euler",
