@@ -16,9 +16,9 @@ export default router.post(
     concurrentCount: z.number().min(1).optional(),
   }),
   async (req, res) => {
-    const { assetIds, projectId, scriptId, concurrentCount = 5 } = req.body;
+    const { assetIds, projectId, scriptId, concurrentCount } = req.body;
 
-    const projectSettingData = await u.db("o_project").where("id", projectId).select("imageModel", "imageQuality", "artStyle").first();
+    const projectSettingData = await u.db("o_project").where("id", projectId).select("imageModel", "imageQuality", "artStyle", "concurrentCount").first();
 
     const assetsDataArr = await u.db("o_assets").whereIn("id", assetIds).select("id", "describe", "name", "type", "assetsId");
     const parentIds = assetsDataArr.map((item) => item.assetsId).filter((id) => id !== null);
@@ -124,9 +124,10 @@ export default router.post(
       }
     };
 
-    // 按 concurrentCount 分批并发执行
-    for (let i = 0; i < assetsDataArr.length; i += concurrentCount) {
-      const batch = assetsDataArr.slice(i, i + concurrentCount);
+    // 按 concurrentCount 分批并发执行（请求参数 > 项目配置 > 默认1）
+    const maxConcurrent = concurrentCount ?? projectSettingData?.concurrentCount ?? 1;
+    for (let i = 0; i < assetsDataArr.length; i += maxConcurrent) {
+      const batch = assetsDataArr.slice(i, i + maxConcurrent);
       const batchResults = await Promise.all(batch.map(generateSingleAsset));
       imageData.push(...batchResults);
     }

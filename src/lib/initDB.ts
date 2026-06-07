@@ -45,6 +45,7 @@ export default async (
         table.text("directorManual");
         table.text("mode");
         table.text("videoRatio");
+        table.integer("concurrentCount").defaultTo(1);
         table.integer("createTime");
         table.integer("userId");
         table.primary(["id"]);

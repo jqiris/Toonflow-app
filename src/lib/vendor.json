@@ -16,5 +16,6 @@
   "z_image_i2i.ts": "",
   "z_image_t2i.ts": "",
   "audio_ace.ts": "",
-  "qwen3_tts.ts": ""
+  "qwen3_tts.ts": "",
+  "qwen_image_edit_multi.ts": ""
 }

@@ -20,9 +20,10 @@ export default router.post(
     videoModel: z.string(),
     imageQuality: z.string(),
     mode: z.string(),
+    concurrentCount: z.number().int().min(1).optional(),
   }),
   async (req, res) => {
-    const { projectType, name, intro, type, directorManual, artStyle, videoRatio, imageModel, videoModel, imageQuality, mode } = req.body;
+    const { projectType, name, intro, type, directorManual, artStyle, videoRatio, imageModel, videoModel, imageQuality, mode, concurrentCount } = req.body;
 
     await u.db("o_project").insert({
       id: Date.now(),
@@ -39,6 +40,7 @@ export default router.post(
       createTime: Date.now(),
       imageQuality,
       mode,
+      concurrentCount: concurrentCount ?? 1,
     });
 
     res.status(200).send(success({ message: "新增项目成功" }));

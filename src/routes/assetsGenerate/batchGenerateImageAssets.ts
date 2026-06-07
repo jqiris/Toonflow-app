@@ -77,7 +77,7 @@ export default router.post("/", validateFields(requestSchema), async (req, res) 
   const { projectId, model, resolution, concurrentCount, items } = req.body;
 
   // 1. 查询项目
-  const project = await u.db("o_project").where("id", projectId).select("artStyle", "type", "intro").first();
+  const project = await u.db("o_project").where("id", projectId).select("artStyle", "type", "intro", "concurrentCount").first();
   if (!project) return res.status(500).send(error("项目为空"));
 
   // 2. 逐条插入 o_image 占位记录，收集 imageId 列表
@@ -93,7 +93,8 @@ export default router.post("/", validateFields(requestSchema), async (req, res) 
   }
 
   // 3. 后台异步并发生成，不阻塞响应
-  const limit = pLimit(concurrentCount ?? 1);
+  const maxConcurrent = concurrentCount ?? project?.concurrentCount ?? 1;
+  const limit = pLimit(maxConcurrent);
 
   const tasks = items.map((item: { id: number; type: string; name: string; prompt: string; base64: string | null | undefined }, index: number) =>
     limit(async () => {

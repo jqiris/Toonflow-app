@@ -1,4 +1,4 @@
-// @db-hash 1674c3fa6699c6c7fc88d5b3c83ec28e
+// @db-hash 95327f90de5a6e5b2cdca1e7110b190b
 //该文件由脚本自动生成，请勿手动修改
 
 export interface memories {
@@ -113,6 +113,7 @@ export interface o_novel {
 }
 export interface o_project {
   'artStyle'?: string | null;
+  'concurrentCount'?: number | null;
   'createTime'?: number | null;
   'directorManual'?: string | null;
   'id'?: number | null;

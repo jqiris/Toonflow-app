@@ -23,13 +23,13 @@ export default router.post(
       storyboardIds,
       projectId,
       scriptId,
-      concurrentCount = 5,
+      concurrentCount,
       compulsory = false,
     }: {
       storyboardIds: number[];
       projectId: number;
       scriptId: number;
-      concurrentCount: number;
+      concurrentCount?: number;
       compulsory: boolean;
     } = req.body;
     if (!storyboardIds || storyboardIds.length === 0) return res.status(400).send(error("storyboardIds不能为空"));
@@ -46,7 +46,7 @@ export default router.post(
       await u.db("o_storyboard").whereIn("id", storyIds).where("scriptId", scriptId).where("shouldGenerateImage", 1).update({ state: "生成中" });
     }
 
-    const projectSettingData = await u.db("o_project").where("id", projectId).select("imageModel", "imageQuality", "artStyle", "videoRatio").first();
+    const projectSettingData = await u.db("o_project").where("id", projectId).select("imageModel", "imageQuality", "artStyle", "videoRatio", "concurrentCount").first();
 
     // 按 rowid 顺序查出每个 storyboard 关联的 assetId 有序列表
     const assets2StoryboardRows = await u
@@ -126,15 +126,16 @@ export default router.post(
           });
       }
     };
-    // 按 concurrentCount 控制并发数，分批执行；跳过 shouldGenerateImage === 0 的分镜
+    // 按 concurrentCount 控制并发数（请求参数 > 项目配置 > 默认1），分批执行；跳过 shouldGenerateImage === 0 的分镜
     let generateList = [];
     if (compulsory) {
       generateList = storyboardData;
     } else {
       generateList = storyboardData.filter((item) => item.shouldGenerateImage !== 0);
     }
-    for (let i = 0; i < generateList.length; i += concurrentCount) {
-      const batch = generateList.slice(i, i + concurrentCount);
+    const maxConcurrent = concurrentCount ?? projectSettingData?.concurrentCount ?? 1;
+    for (let i = 0; i < generateList.length; i += maxConcurrent) {
+      const batch = generateList.slice(i, i + maxConcurrent);
       await Promise.all(batch.map(generateTask));
     }
   },
