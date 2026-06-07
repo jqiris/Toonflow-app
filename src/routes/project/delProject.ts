@@ -53,6 +53,7 @@ export default router.post(
 
     try {
       await u.oss.deleteDirectory(`${id}/`);
+      await u.oss.deleteDirectory(`smallImage/${id}/`);
       console.log(`项目 ${id} 的OSS文件夹删除成功`);
     } catch (error: any) {
       console.log(`项目 ${id} 没有对应的OSS文件夹，跳过删除`);

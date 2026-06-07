@@ -62,6 +62,12 @@ export default router.post(
     if (!visualManual) return res.status(500).send(error("视觉手册未定义"));
     const systemPrompt = visualManual;
     try {
+      // 角色类型追加服饰优先级指令，确保AI依据描述中的服饰生成，不使用默认基础服装
+      const clothingInstruction =
+        type === "role"
+          ? `\n      **服饰优先级规则（重要）：**\n      请严格依据上方「角色描述」中的服饰描写生成提示词的服装部分。\n      如果角色描述指定了具体服饰（龙袍/凤袍/仙衣/官服/铠甲/刑服等），\n      必须在提示词中准确反映其款式、颜色、图案和材质特征，\n      不得降级为素色基础服装或无花纹装饰。\n      如果角色描述未指定服饰，再按默认规范生成。\n`
+          : "";
+
       const { _output } = (await u.Ai.Text("universalAi").invoke({
         system: systemPrompt,
         messages: [
@@ -70,7 +76,7 @@ export default router.post(
             content: `**基础参数：**
       **${config.nameLabel}设定：**
       - ${config.nameLabel}名称:${name},
-      - ${config.nameLabel}描述:${describe},`,
+      - ${config.nameLabel}描述:${describe},${clothingInstruction}`,
           },
         ],
       })) as any;

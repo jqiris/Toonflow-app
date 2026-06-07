@@ -114,7 +114,7 @@ export default router.post(
       // 新资产的关联
       for (const asset of newAssets) {
         const assetId = nameToId.get(asset.name);
-        if (assetId) {
+        if (assetId && Array.isArray(asset.scriptIds)) {
           for (const sid of asset.scriptIds) {
             scriptAssetRows.push({ scriptId: sid, assetId });
           }
@@ -124,7 +124,7 @@ export default router.post(
       // 已有资产的关联
       for (const ref of existingRefs) {
         const assetId = nameToId.get(ref.name);
-        if (assetId) {
+        if (assetId && Array.isArray(ref.scriptIds)) {
           for (const sid of ref.scriptIds) {
             scriptAssetRows.push({ scriptId: sid, assetId });
           }

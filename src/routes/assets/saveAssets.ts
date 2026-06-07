@@ -16,10 +16,11 @@ export default router.post(
     base64: z.string().optional().nullable(),
     type: z.enum(["role", "scene", "tool"]),
     prompt: z.string().optional().nullable(),
+    describe: z.string().optional().nullable(),
     imageId: z.number().optional().nullable(),
   }),
   async (req, res) => {
-    const { id, base64, type, prompt, projectId, imageId } = req.body;
+    const { id, base64, type, prompt, describe, projectId, imageId } = req.body;
     if (base64) {
       //自定义上传选择的图片
       const matches = base64.match(/^data:image\/\w+;base64,(.+)$/);
@@ -36,21 +37,19 @@ export default router.post(
         state: "已完成",
       });
       // 更新资产表图片为新图片
-      await u
-        .db("o_assets")
-        .where("id", id)
-        .update({
-          prompt: prompt ?? "",
-          imageId: idData,
-        });
+      const updates: Record<string, any> = {
+        prompt: prompt ?? "",
+        imageId: idData,
+      };
+      if (describe !== undefined) updates.describe = describe;
+      await u.db("o_assets").where("id", id).update(updates);
     } else {
-      await u
-        .db("o_assets")
-        .where("id", id)
-        .update({
-          prompt: prompt ?? "",
-          imageId: imageId,
-        });
+      const updates: Record<string, any> = {
+        prompt: prompt ?? "",
+        imageId: imageId,
+      };
+      if (describe !== undefined) updates.describe = describe;
+      await u.db("o_assets").where("id", id).update(updates);
     }
     res.status(200).send(success({ message: "保存资产图片成功" }));
   },
