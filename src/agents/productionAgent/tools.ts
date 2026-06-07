@@ -3,6 +3,7 @@ import { z } from "zod";
 import _ from "lodash";
 import ResTool from "@/socket/resTool";
 import u from "@/utils";
+import { batchGenerateDerivativeAssets } from "@/routes/production/assets/batchGenerateAssetsImage";
 
 const deriveAssetSchema = z.object({
   id: z.number().describe("衍生资产ID,如果新增则为空"),
@@ -185,11 +186,12 @@ export default (toolCpnfig: ToolConfig) => {
       execute: async ({ ids }) => {
         const thinking = msg.thinking("正在生成衍生资产...");
         try {
-          const res = await emitWithTimeout("generateDeriveAsset", { ids });
-          thinking.appendText(`已生成衍生资产，ID: ${JSON.stringify(res, null, 2)}\n`);
+          const { projectId, scriptId } = resTool.data;
+          await batchGenerateDerivativeAssets(ids, projectId, scriptId);
+          thinking.appendText(`已提交衍生资产图片生成任务，共 ${ids.length} 项\n`);
           thinking.updateTitle("衍生资产生成完成");
           thinking.complete();
-          return "衍生资产图片生成任务已提交";
+          return `衍生资产图片生成任务已提交，共 ${ids.length} 项`;
         } catch (e) {
           thinking.appendText("衍生资产生成失败:\n" + u.error(e).message);
           thinking.updateTitle("衍生资产生成失败");
