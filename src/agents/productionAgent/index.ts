@@ -139,7 +139,7 @@ async function createSubAgent(parentCtx: AgentContext) {
 
   const promptInput = z
     .object({
-      prompt: z.string().describe("交给子Agent的任务简约描述，100字以内"),
+      prompt: z.string().describe("交给子Agent的任务简约描述，500字以内"),
     })
     .toJSONSchema();
 

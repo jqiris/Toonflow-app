@@ -25,31 +25,48 @@ export default router.post(
   async (req, res) => {
     const { data, scriptId, projectId } = req.body;
     if (!data.length) return res.status(400).send({ success: false, message: "数据不能为空" });
-    for (const item of data) {
-      const [id] = await u.db("o_storyboard").insert({
-        prompt: item.prompt,
-        duration: String(item.duration),
-        state: item.state,
-        scriptId,
-        projectId,
-        track: item.track,
-        videoDesc: item.videoDesc,
-        shouldGenerateImage: item.shouldGenerateImage,
-        createTime: Date.now(),
-      });
-      if (item.associateAssetsIds?.length) {
-        await u.db("o_assets2Storyboard").insert(
-          item.associateAssetsIds.map((assetId: number) => ({
-            assetId,
-            storyboardId: id,
-          })),
-        );
+
+    const allAssetIds = [...new Set(data.flatMap((item: any) => item.associateAssetsIds ?? []))] as number[];
+    const validAssetIdSet = new Set<number>();
+    if (allAssetIds.length > 0) {
+      const existingAssets: any[] = await u.db("o_assets").whereIn("id", allAssetIds as readonly (string | number)[]).select("id");
+      for (const a of existingAssets) validAssetIdSet.add(a.id);
+      if (validAssetIdSet.size < allAssetIds.length) {
+        const missing = allAssetIds.filter((id) => !validAssetIdSet.has(id));
+        console.warn(`[batchAddStoryboardInfo] 以下资产ID不存在，已过滤: ${missing.join(", ")}`);
       }
-      item.id = id;
     }
+
+    await u.db.transaction(async (trx) => {
+      for (const item of data) {
+        const [id] = await trx("o_storyboard").insert({
+          prompt: item.prompt,
+          duration: String(item.duration),
+          state: item.state,
+          scriptId,
+          projectId,
+          track: item.track,
+          videoDesc: item.videoDesc,
+          shouldGenerateImage: item.shouldGenerateImage,
+          createTime: Date.now(),
+        });
+        if (item.associateAssetsIds?.length) {
+          const validIds = [...new Set(item.associateAssetsIds as number[])].filter((aid: number) => validAssetIdSet.has(aid));
+          if (validIds.length) {
+            await trx("o_assets2Storyboard").insert(
+              validIds.map((assetId) => ({
+                assetId,
+                storyboardId: id,
+              })),
+            );
+          }
+        }
+        item.id = id;
+      }
+    });
+
     const lastStoryboard = await u.db("o_storyboard").where("scriptId", scriptId);
     if (!lastStoryboard || !lastStoryboard.length) return res.status(400).send(error("未查到分镜数据"));
-    //根据track分组
     const storyboardGroupByTrack: Record<string, number[]> = {};
     lastStoryboard.forEach((item: any) => {
       if (!storyboardGroupByTrack[item.track]) {
@@ -58,7 +75,6 @@ export default router.post(
       storyboardGroupByTrack[item.track].push(item.id);
     });
 
-    //循环：先查询数据库中是否已存在相同track名称的trackId，有则复用，没有则新建
     for (const track in storyboardGroupByTrack) {
       const storyboardIds = storyboardGroupByTrack[track] ?? [];
 
@@ -67,16 +83,13 @@ export default router.post(
         .filter((item: any) => item.track == track)
         .reduce((sum: number, item: any) => sum + Number(item.duration), 0);
 
-      // 查找该scriptId下是否已有相同track名称且已分配trackId的分镜记录
       const existingStoryboard = await u.db("o_storyboard").where({ scriptId, track }).whereNotNull("trackId").first();
 
       let trackId: number;
       if (existingStoryboard?.trackId) {
-        // 已存在相同track名称的trackId，直接复用，并更新duration
         trackId = existingStoryboard.trackId;
         await u.db("o_videoTrack").where("id", trackId).update({ duration: trackDuration });
       } else {
-        // 不存在，新建videoTrack
         const newTrackId = Date.now()
         await u.db("o_videoTrack").insert({
           id: newTrackId,
