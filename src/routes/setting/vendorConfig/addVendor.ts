@@ -56,6 +56,11 @@ const vendorConfigSchema = z.object({
                 .string()
                 .regex(/^(videoReference|imageReference|audioReference):\d+$/),
             ),
+            z
+              .string()
+              .regex(
+                /^(videoReference|imageReference|audioReference):\d+$/,
+              ),
           ]),
         ),
         audio: z.union([z.literal("optional"), z.boolean()]),

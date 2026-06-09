@@ -109756,7 +109756,8 @@ var init_vendor = __esm({
       "audio_ace.ts": "",
       "qwen3_tts.ts": "",
       "qwen_image_edit_multi.ts": "",
-      "ltx2_3_flf2v.ts": ""
+      "ltx2_3_flf2v.ts": "",
+      "ltx2_3_multi2v.ts": ""
     };
   }
 });
@@ -257831,6 +257832,9 @@ var init_addVendor = __esm({
                 ]),
                 external_exports.array(
                   external_exports.string().regex(/^(videoReference|imageReference|audioReference):\d+$/)
+                ),
+                external_exports.string().regex(
+                  /^(videoReference|imageReference|audioReference):\d+$/
                 )
               ])
             ),
@@ -257961,6 +257965,9 @@ var init_addVendorModel = __esm({
                 ]),
                 external_exports.array(
                   external_exports.string().regex(/^(videoReference|imageReference|audioReference):\d+$/)
+                ),
+                external_exports.string().regex(
+                  /^(videoReference|imageReference|audioReference):\d+$/
                 )
               ])
             ),
@@ -258174,20 +258181,21 @@ var init_modelTest = __esm({
       validateFields({
         modelName: external_exports.string(),
         type: external_exports.enum(["text", "video", "image"]),
-        id: external_exports.string()
+        id: external_exports.string(),
+        prompt: external_exports.string().optional(),
+        imageBase64: external_exports.string().optional()
       }),
       async (req, res) => {
-        const { modelName, type, id } = req.body;
+        const { modelName, type, id, prompt, imageBase64 } = req.body;
         try {
           const requestFn = {
             text: { fnName: "textRequest" },
             image: {
               fnName: "imageRequest",
               modelData: {
-                prompt: "\u4E00\u5F2016:9\u6BD4\u4F8B\u7684\u56FE\u7247\uFF0C\u5B8C\u7F8E\u7B49\u5206\u4E3A2x2\u56DB\u5BAB\u683C\u5E03\u5C40\uFF0C\u5404\u533A\u57DF\u65E0\u7F1D\u8854\u63A5\uFF1A\n\u5DE6\u4E0A\u5BAB\u683C\uFF1A\u4E00\u53EA\u53EF\u7231\u7684\u732B\uFF0C\u6BDB\u53D1\u84EC\u677E\uFF0C\u773C\u775B\u660E\u4EAE\uFF0C\u59FF\u6001\u4FCF\u76AE\n\u53F3\u4E0A\u5BAB\u683C\uFF1A\u4E00\u53EA\u53CB\u5584\u7684\u72D7\uFF0C\u91D1\u6BDB\u72AC\uFF0C\u8868\u60C5\u6109\u60A6\uFF0C\u6447\u7740\u5C3E\u5DF4\n\u5DE6\u4E0B\u5BAB\u683C\uFF1A\u4E00\u5934\u5065\u58EE\u7684\u725B\uFF0C\u7530\u56ED\u80CC\u666F\uFF0C\u76EE\u5149\u6E29\u548C\uFF0C\u76AE\u6BDB\u5149\u6CFD\n\u53F3\u4E0B\u5BAB\u683C\uFF1A\u4E00\u5339\u9A8F\u9A6C\uFF0C\u59FF\u6001\u4F18\u96C5\uFF0C\u9B03\u6BDB\u98D8\u9038\uFF0C\u808C\u8089\u5065\u7F8E\n\u98CE\u683C\u8981\u6C42\uFF1A\u56DB\u4E2A\u5BAB\u683C\u98CE\u683C\u7EDF\u4E00\uFF0C\u8272\u5F69\u9C9C\u8273\u9971\u548C\uFF0C\u9AD8\u6E05\u753B\u8D28\uFF0C\u7EC6\u8282\u6E05\u6670\u9510\u5229\uFF0C\u4E13\u4E1A\u63D2\u753B\u98CE\u683C\uFF0C\u7EBF\u6761\u5E72\u51C0\uFF0C\u7EDF\u4E00\u7684\u5DE6\u4E0A\u65B9\u5149\u6E90\uFF0C\u67D4\u548C\u9634\u5F71\uFF0C\u548C\u8C10\u914D\u8272\uFF0C\u5361\u901A/\u534A\u5199\u5B9E\u98CE\u683C\uFF0C\u5BAB\u683C\u95F4\u7528\u767D\u8272\u6216\u6D45\u7070\u7EC6\u7EBF\u5206\u9694",
+                prompt: prompt || "\u4E00\u5F2016:9\u6BD4\u4F8B\u7684\u56FE\u7247\uFF0C\u5B8C\u7F8E\u7B49\u5206\u4E3A2x2\u56DB\u5BAB\u683C\u5E03\u5C40\uFF0C\u5404\u533A\u57DF\u65E0\u7F1D\u8854\u63A5\uFF1A\n\u5DE6\u4E0A\u5BAB\u683C\uFF1A\u4E00\u53EA\u53EF\u7231\u7684\u732B\uFF0C\u6BDB\u53D1\u84EC\u677E\uFF0C\u773C\u775B\u660E\u4EAE\uFF0C\u59FF\u6001\u4FCF\u76AE\n\u53F3\u4E0A\u5BAB\u683C\uFF1A\u4E00\u53EA\u53CB\u5584\u7684\u72D7\uFF0C\u91D1\u6BDB\u72AC\uFF0C\u8868\u60C5\u6109\u60A6\uFF0C\u6447\u7740\u5C3E\u5DF4\n\u5DE6\u4E0B\u5BAB\u683C\uFF1A\u4E00\u5934\u5065\u58EE\u7684\u725B\uFF0C\u7530\u56ED\u80CC\u666F\uFF0C\u76EE\u5149\u6E29\u548C\uFF0C\u76AE\u6BDB\u5149\u6CFD\n\u53F3\u4E0B\u5BAB\u683C\uFF1A\u4E00\u5339\u9A8F\u9A6C\uFF0C\u59FF\u6001\u4F18\u96C5\uFF0C\u9B03\u6BDB\u98D8\u9038\uFF0C\u808C\u8089\u5065\u7F8E\n\u98CE\u683C\u8981\u6C42\uFF1A\u56DB\u4E2A\u5BAB\u683C\u98CE\u683C\u7EDF\u4E00\uFF0C\u8272\u5F69\u9C9C\u8273\u9971\u548C\uFF0C\u9AD8\u6E05\u753B\u8D28\uFF0C\u7EC6\u8282\u6E05\u6670\u9510\u5229\uFF0C\u4E13\u4E1A\u63D2\u753B\u98CE\u683C\uFF0C\u7EBF\u6761\u5E72\u51C0\uFF0C\u7EDF\u4E00\u7684\u5DE6\u4E0A\u65B9\u5149\u6E90\uFF0C\u67D4\u548C\u9634\u5F71\uFF0C\u548C\u8C10\u914D\u8272\uFF0C\u5361\u901A/\u534A\u5199\u5B9E\u98CE\u683C\uFF0C\u5BAB\u683C\u95F4\u7528\u767D\u8272\u6216\u6D45\u7070\u7EC6\u7EBF\u5206\u9694",
                 //图片提示词
-                referenceList: [],
-                //输入的图片提示词
+                referenceList: imageBase64 ? [{ imageUrl: imageBase64 }] : [],
                 size: "1K",
                 // 图片尺寸
                 aspectRatio: "16:9"
@@ -258507,6 +258515,9 @@ var init_updateCode = __esm({
                 ]),
                 external_exports.array(
                   external_exports.string().regex(/^(videoReference|imageReference|audioReference):\d+$/)
+                ),
+                external_exports.string().regex(
+                  /^(videoReference|imageReference|audioReference):\d+$/
                 )
               ])
             ),
@@ -258647,6 +258658,9 @@ var init_upVendorModel = __esm({
                 ]),
                 external_exports.array(
                   external_exports.string().regex(/^(videoReference|imageReference|audioReference):\d+$/)
+                ),
+                external_exports.string().regex(
+                  /^(videoReference|imageReference|audioReference):\d+$/
                 )
               ])
             ),
