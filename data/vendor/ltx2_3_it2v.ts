@@ -550,7 +550,7 @@ const WORKFLOW_JSON = {
   "4990": {
     "inputs": {
       "resize_type": "scale longer dimension",
-      "resize_type.longer_size": 1024,
+      "resize_type.longer_size": 1536,
       "scale_method": "lanczos",
       "input": [
         "2004",
@@ -743,4 +743,4 @@ exports.ttsRequest = ttsRequest;
 exports.checkForUpdates = checkForUpdates;
 exports.updateVendor = updateVendor;
 
-export {};
+export { };

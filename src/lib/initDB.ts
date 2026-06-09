@@ -36,6 +36,7 @@ export default async (
         table.integer("id");
         table.string("projectType");
         table.string("imageModel");
+        table.string("derivativeImageModel");
         table.string("imageQuality");
         table.string("videoModel");
         table.text("name");

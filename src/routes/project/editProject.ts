@@ -17,6 +17,7 @@ export default router.post(
     directorManual: z.string(),
     videoRatio: z.string(),
     imageModel: z.string(),
+    derivativeImageModel: z.string(),
     videoModel: z.string(),
     projectType: z.string(),
     imageQuality: z.string(),
@@ -24,7 +25,7 @@ export default router.post(
     concurrentCount: z.number().int().min(1).optional(),
   }),
   async (req, res) => {
-    const { id, name, intro, type, artStyle, videoRatio, directorManual, imageModel, videoModel, imageQuality, projectType, mode, concurrentCount } = req.body;
+    const { id, name, intro, type, artStyle, videoRatio, directorManual, imageModel, derivativeImageModel, videoModel, imageQuality, projectType, mode, concurrentCount } = req.body;
 
     await u.db("o_project").where("id", id).update({
       name,
@@ -34,6 +35,7 @@ export default router.post(
       videoRatio,
       directorManual,
       imageModel,
+      derivativeImageModel,
       videoModel,
       imageQuality,
       projectType,

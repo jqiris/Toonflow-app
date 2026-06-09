@@ -84408,6 +84408,7 @@ var init_initDB = __esm({
             table.integer("id");
             table.string("projectType");
             table.string("imageModel");
+            table.string("derivativeImageModel");
             table.string("imageQuality");
             table.string("videoModel");
             table.text("name");
@@ -109754,7 +109755,8 @@ var init_vendor = __esm({
       "z_image_t2i.ts": "",
       "audio_ace.ts": "",
       "qwen3_tts.ts": "",
-      "qwen_image_edit_multi.ts": ""
+      "qwen_image_edit_multi.ts": "",
+      "ltx2_3_flf2v.ts": ""
     };
   }
 });
@@ -109846,6 +109848,7 @@ var init_fixDB = __esm({
       await addColumn("o_assets", "audioBindState", "integer");
       await addColumn("o_modelPrompt", "fileName", "string");
       await addColumn("o_modelPrompt", "path", "string");
+      await addColumn("o_project", "derivativeImageModel", "string");
       const vendorDataSelect = await utils_default.db("o_vendorConfig").whereIn("id", ["deepseek", "atlascloud"]).select("*");
       if (!vendorDataSelect.find((i) => i.id == "deepseek")) {
         await utils_default.db("o_vendorConfig").insert({
@@ -240010,7 +240013,7 @@ var init_middleware = __esm({
 
 // src/routes/production/assets/batchGenerateAssetsImage.ts
 async function batchGenerateDerivativeAssets(assetIds, projectId, scriptId, concurrentCount) {
-  const projectSettingData = await utils_default.db("o_project").where("id", projectId).select("imageModel", "imageQuality", "artStyle", "concurrentCount").first();
+  const projectSettingData = await utils_default.db("o_project").where("id", projectId).select("imageModel", "derivativeImageModel", "imageQuality", "artStyle", "concurrentCount").first();
   if (!projectSettingData) throw new Error(`\u9879\u76EE\u4E0D\u5B58\u5728: ${projectId}`);
   const assetsDataArr = await utils_default.db("o_assets").whereIn("id", assetIds).select("id", "describe", "name", "type", "assetsId");
   if (assetsDataArr.length === 0) throw new Error(`\u672A\u627E\u5230\u8D44\u4EA7\uFF0CIDs: ${JSON.stringify(assetIds)}`);
@@ -240039,7 +240042,7 @@ async function batchGenerateDerivativeAssets(assetIds, projectId, scriptId, conc
       type: item.type,
       state: "\u751F\u6210\u4E2D",
       resolution: projectSettingData.imageQuality,
-      model: projectSettingData.imageModel
+      model: projectSettingData.derivativeImageModel || projectSettingData.imageModel
     });
     imageIdMap[item.id] = imageId;
     await utils_default.db("o_assets").where("id", item.id).update({ imageId });
@@ -240080,7 +240083,7 @@ async function generateSingleAsset(item, projectSettingData, imageIdMap, imageUr
       size: projectSettingData.imageQuality,
       aspectRatio: "16:9"
     };
-    const imageCls = await utils_default.Ai.Image(projectSettingData.imageModel).run(
+    const imageCls = await utils_default.Ai.Image(projectSettingData.derivativeImageModel || projectSettingData.imageModel).run(
       {
         referenceList: imageBase64 ? [{ type: "image", base64: imageBase64 }] : [],
         ...repeloadObj
@@ -242792,7 +242795,10 @@ var init_getImageDefaultModle = __esm({
       }),
       async (req, res) => {
         const { projectId } = req.body;
-        const imageFlowData = await utils_default.db("o_project").where("id", projectId).select("imageModel", "imageQuality").first();
+        const imageFlowData = await utils_default.db("o_project").where("id", projectId).select("imageModel", "derivativeImageModel", "imageQuality").first();
+        if (imageFlowData) {
+          imageFlowData.imageModel = imageFlowData.derivativeImageModel || imageFlowData.imageModel;
+        }
         return res.status(200).send(success3(imageFlowData));
       }
     );
@@ -243503,7 +243509,7 @@ var init_batchGenerateImage = __esm({
           await utils_default.db("o_storyboard").whereIn("id", storyIds).where("scriptId", scriptId).where("shouldGenerateImage", 0).update({ state: "\u672A\u751F\u6210" });
           await utils_default.db("o_storyboard").whereIn("id", storyIds).where("scriptId", scriptId).where("shouldGenerateImage", 1).update({ state: "\u751F\u6210\u4E2D" });
         }
-        const projectSettingData = await utils_default.db("o_project").where("id", projectId).select("imageModel", "imageQuality", "artStyle", "videoRatio", "concurrentCount").first();
+        const projectSettingData = await utils_default.db("o_project").where("id", projectId).select("imageModel", "derivativeImageModel", "imageQuality", "artStyle", "videoRatio", "concurrentCount").first();
         const assets2StoryboardRows = await utils_default.db("o_assets2Storyboard").whereIn("storyboardId", storyIds).orderBy("rowid").select("storyboardId", "assetId");
         const allAssetIds = [...new Set(assets2StoryboardRows.map((r) => r.assetId))];
         const assetImageMap = {};
@@ -243544,7 +243550,7 @@ var init_batchGenerateImage = __esm({
             aspectRatio: projectSettingData?.videoRatio
           };
           try {
-            const imageCls = await utils_default.Ai.Image(projectSettingData?.imageModel).run(
+            const imageCls = await utils_default.Ai.Image(projectSettingData?.derivativeImageModel || projectSettingData?.imageModel).run(
               {
                 referenceList: await getAssetsImageBase64(assetRecord[item.id] || []),
                 ...repeloadObj
@@ -245091,13 +245097,14 @@ var init_addProject = __esm({
         directorManual: external_exports.string(),
         videoRatio: external_exports.string(),
         imageModel: external_exports.string(),
+        derivativeImageModel: external_exports.string(),
         videoModel: external_exports.string(),
         imageQuality: external_exports.string(),
         mode: external_exports.string(),
         concurrentCount: external_exports.number().int().min(1).optional()
       }),
       async (req, res) => {
-        const { projectType, name: name28, intro, type, directorManual, artStyle, videoRatio, imageModel, videoModel, imageQuality, mode, concurrentCount } = req.body;
+        const { projectType, name: name28, intro, type, directorManual, artStyle, videoRatio, imageModel, derivativeImageModel, videoModel, imageQuality, mode, concurrentCount } = req.body;
         await utils_default.db("o_project").insert({
           id: Date.now(),
           projectType,
@@ -245109,6 +245116,7 @@ var init_addProject = __esm({
           directorManual,
           userId: 1,
           imageModel,
+          derivativeImageModel,
           videoModel,
           createTime: Date.now(),
           imageQuality,
@@ -245477,6 +245485,7 @@ var init_editProject = __esm({
         directorManual: external_exports.string(),
         videoRatio: external_exports.string(),
         imageModel: external_exports.string(),
+        derivativeImageModel: external_exports.string(),
         videoModel: external_exports.string(),
         projectType: external_exports.string(),
         imageQuality: external_exports.string(),
@@ -245484,7 +245493,7 @@ var init_editProject = __esm({
         concurrentCount: external_exports.number().int().min(1).optional()
       }),
       async (req, res) => {
-        const { id, name: name28, intro, type, artStyle, videoRatio, directorManual, imageModel, videoModel, imageQuality, projectType, mode, concurrentCount } = req.body;
+        const { id, name: name28, intro, type, artStyle, videoRatio, directorManual, imageModel, derivativeImageModel, videoModel, imageQuality, projectType, mode, concurrentCount } = req.body;
         await utils_default.db("o_project").where("id", id).update({
           name: name28,
           intro,
@@ -245493,6 +245502,7 @@ var init_editProject = __esm({
           videoRatio,
           directorManual,
           imageModel,
+          derivativeImageModel,
           videoModel,
           imageQuality,
           projectType,

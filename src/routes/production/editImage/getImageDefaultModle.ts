@@ -12,7 +12,10 @@ export default router.post(
   }),
   async (req, res) => {
     const { projectId } = req.body;
-    const imageFlowData = await u.db("o_project").where("id", projectId).select("imageModel", "imageQuality").first();
+    const imageFlowData = await u.db("o_project").where("id", projectId).select("imageModel", "derivativeImageModel", "imageQuality").first();
+    if (imageFlowData) {
+      imageFlowData.imageModel = imageFlowData.derivativeImageModel || imageFlowData.imageModel;
+    }
     return res.status(200).send(success(imageFlowData));
   },
 );

@@ -1,11 +1,12 @@
 /**
  * Toonflow AI供应商 - Qwen Image Edit 多图参考（本地 ComfyUI）
- * @version 1.0
+ * @version 1.1
  *
  * 基于 Qwen-Image-Edit-2511 模型，支持最多3张参考图片的 AI 编辑工作流。
  * 需要 ComfyUI 环境已配置 Qwen-Image-Edit 模型及所需插件：
  * - ComfyUI-easy-use（提供 easy loadImageBase64 节点）
  * - Qwen-Image-Edit 自定义节点（TextEncodeQwenImageEditPlus, FluxKontextMultiReferenceLatentMethod 等）
+ * - ResizeImageMaskNode 节点（参考图缩放）
  */
 
 // ============================================================
@@ -137,10 +138,10 @@ declare const exports: {
 
 const vendor: VendorConfig = {
   id: "qwen_image_edit_multi",
-  version: "1.0",
+  version: "1.1",
   author: "Toonflow",
   name: "Qwen Image Edit 多图参考（本地 ComfyUI）",
-  description: "基于本地 ComfyUI 的 Qwen-Image-Edit-2511 多图参考工作流，支持最多 3 张参考图片的 AI 编辑。需要 ComfyUI 环境已配置 Qwen-Image-Edit 模型及自定义节点（TextEncodeQwenImageEditPlus, FluxKontextMultiReferenceLatentMethod 等）。",
+  description: "基于本地 ComfyUI 的 Qwen-Image-Edit-2511 多图参考工作流，支持最多 3 张参考图片的 AI 编辑。参考图会自动缩放至指定长边尺寸。需要 ComfyUI 环境已配置 Qwen-Image-Edit 模型及自定义节点（TextEncodeQwenImageEditPlus, FluxKontextMultiReferenceLatentMethod, ResizeImageMaskNode 等）。",
   icon: "",
   inputs: [
     { key: "baseUrl", label: "ComfyUI 地址", type: "text", required: true, placeholder: "http://localhost:8188" },
@@ -149,6 +150,7 @@ const vendor: VendorConfig = {
     { key: "vaeModel", label: "VAE 模型名", type: "text", required: false, placeholder: "qwen_image_vae.safetensors" },
     { key: "unetFp8", label: "UNet FP8 模型名", type: "text", required: false, placeholder: "Qwen-Image-Edit-2511-FP8_e4m3fn.safetensors" },
     { key: "loraModel", label: "LoRA 模型名", type: "text", required: false, placeholder: "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors" },
+    { key: "resizeLongerSize", label: "参考图缩放长边尺寸", type: "text", required: false, placeholder: "1536" },
   ],
   inputValues: {
     baseUrl: "http://localhost:8188",
@@ -157,6 +159,7 @@ const vendor: VendorConfig = {
     vaeModel: "qwen_image_vae.safetensors",
     unetFp8: "Qwen-Image-Edit-2511-FP8_e4m3fn.safetensors",
     loraModel: "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+    resizeLongerSize: "1536",
   },
   models: [{
     name: "Qwen Image Edit 多图参考",
@@ -206,9 +209,9 @@ const WORKFLOW_JSON = {
       "prompt": "",
       "clip": ["3", 0],
       "vae": ["4", 0],
-      "image1": ["13", 0],
-      "image2": ["23", 0],
-      "image3": ["31", 0]
+      "image1": ["34", 0],
+      "image2": ["35", 0],
+      "image3": ["36", 0]
     },
     "class_type": "TextEncodeQwenImageEditPlus",
     "_meta": {
@@ -220,9 +223,9 @@ const WORKFLOW_JSON = {
       "prompt": "",
       "clip": ["3", 0],
       "vae": ["4", 0],
-      "image1": ["13", 0],
-      "image2": ["23", 0],
-      "image3": ["31", 0]
+      "image1": ["34", 0],
+      "image2": ["35", 0],
+      "image3": ["36", 0]
     },
     "class_type": "TextEncodeQwenImageEditPlus",
     "_meta": {
@@ -366,6 +369,42 @@ const WORKFLOW_JSON = {
     "_meta": {
       "title": "加载图像"
     }
+  },
+  "34": {
+    "inputs": {
+      "resize_type": "scale longer dimension",
+      "resize_type.longer_size": 1536,
+      "scale_method": "lanczos",
+      "input": ["13", 0]
+    },
+    "class_type": "ResizeImageMaskNode",
+    "_meta": {
+      "title": "调整图像/掩码大小"
+    }
+  },
+  "35": {
+    "inputs": {
+      "resize_type": "scale longer dimension",
+      "resize_type.longer_size": 1536,
+      "scale_method": "lanczos",
+      "input": ["23", 0]
+    },
+    "class_type": "ResizeImageMaskNode",
+    "_meta": {
+      "title": "调整图像/掩码大小"
+    }
+  },
+  "36": {
+    "inputs": {
+      "resize_type": "scale longer dimension",
+      "resize_type.longer_size": 1536,
+      "scale_method": "lanczos",
+      "input": ["31", 0]
+    },
+    "class_type": "ResizeImageMaskNode",
+    "_meta": {
+      "title": "调整图像/掩码大小"
+    }
   }
 };
 
@@ -486,9 +525,15 @@ const imageRequest = async (config: ImageConfig, model: ImageModel): Promise<str
   workflow["27"]["inputs"]["width"] = width;
   workflow["27"]["inputs"]["height"] = height;
 
-  logger(`[Qwen Image Edit Multi] 分辨率: ${width}x${height}, 提示词长度: ${config.prompt.length}`);
+  // 8. 设置参考图缩放尺寸
+  const resizeLongerSize = parseInt(vendor.inputValues.resizeLongerSize || "1536", 10);
+  workflow["34"]["inputs"]["resize_type.longer_size"] = resizeLongerSize;
+  workflow["35"]["inputs"]["resize_type.longer_size"] = resizeLongerSize;
+  workflow["36"]["inputs"]["resize_type.longer_size"] = resizeLongerSize;
 
-  // 8. 提交到 ComfyUI API
+  logger(`[Qwen Image Edit Multi] 分辨率: ${width}x${height}, 参考图缩放长边: ${resizeLongerSize}, 提示词长度: ${config.prompt.length}`);
+
+  // 9. 提交到 ComfyUI API
   const submitResp = await fetch(`${baseUrl}/prompt`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -503,7 +548,7 @@ const imageRequest = async (config: ImageConfig, model: ImageModel): Promise<str
 
   logger(`[Qwen Image Edit Multi] 任务已提交，ID: ${promptId}`);
 
-  // 9. 轮询结果
+  // 10. 轮询结果
   const result = await pollTask(async () => {
     const historyResp = await fetch(`${baseUrl}/history`);
     const history = await historyResp.json();
@@ -523,7 +568,7 @@ const imageRequest = async (config: ImageConfig, model: ImageModel): Promise<str
   if (result.error) throw new Error(`Qwen Image Edit Multi 生成失败: ${result.error}`);
   if (!result.data) throw new Error("未找到生成的图片");
 
-  // 10. 下载图片并转为 Base64
+  // 11. 下载图片并转为 Base64
   const fileInfo = result.data;
   const downloadUrl = `${baseUrl}/view?filename=${encodeURIComponent(fileInfo.filename)}&subfolder=${encodeURIComponent(fileInfo.subfolder || "")}&type=${fileInfo.type}`;
   logger(`[Qwen Image Edit Multi] 下载图片: ${downloadUrl}`);
@@ -538,7 +583,7 @@ const ttsRequest = async (config: TTSConfig, model: TTSModel): Promise<string> =
   return "";
 };
 
-const checkForUpdates = async () => ({ hasUpdate: false, latestVersion: "1.0", notice: "" });
+const checkForUpdates = async () => ({ hasUpdate: false, latestVersion: "1.1", notice: "" });
 const updateVendor = async () => { return ""; };
 
 // ============================================================

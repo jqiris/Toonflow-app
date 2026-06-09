@@ -30,7 +30,7 @@
   },
   "5": {
     "inputs": {
-      "prompt": "将图2和图3人物放到图1中，放到合适的位置",
+      "prompt": "在图1中合适位置放置图2和图3的人物",
       "clip": [
         "3",
         0
@@ -40,15 +40,15 @@
         0
       ],
       "image1": [
-        "13",
+        "34",
         0
       ],
       "image2": [
-        "23",
+        "35",
         0
       ],
       "image3": [
-        "31",
+        "36",
         0
       ]
     },
@@ -69,15 +69,15 @@
         0
       ],
       "image1": [
-        "13",
+        "34",
         0
       ],
       "image2": [
-        "23",
+        "35",
         0
       ],
       "image3": [
-        "31",
+        "36",
         0
       ]
     },
@@ -104,7 +104,7 @@
   },
   "10": {
     "inputs": {
-      "seed": 301704384726849,
+      "seed": 924984844049146,
       "steps": 4,
       "cfg": 1,
       "sampler_name": "euler",
@@ -214,12 +214,12 @@
           {
             "name": "A",
             "selected": true,
-            "url": "/api/view?filename=rgthree.compare._temp_qxili_00001_.png&type=temp&subfolder=&rand=0.7202634548779878"
+            "url": "/api/view?filename=rgthree.compare._temp_vdnxt_00005_.png&type=temp&subfolder=&rand=0.2505347614992457"
           },
           {
             "name": "B",
             "selected": true,
-            "url": "/api/view?filename=rgthree.compare._temp_qxili_00002_.png&type=temp&subfolder=&rand=0.16333947441546703"
+            "url": "/api/view?filename=rgthree.compare._temp_vdnxt_00006_.png&type=temp&subfolder=&rand=0.55536272749395"
           }
         ]
       },
@@ -288,6 +288,51 @@
     "class_type": "LoadImage",
     "_meta": {
       "title": "加载图像"
+    }
+  },
+  "34": {
+    "inputs": {
+      "resize_type": "scale longer dimension",
+      "resize_type.longer_size": 1536,
+      "scale_method": "lanczos",
+      "input": [
+        "13",
+        0
+      ]
+    },
+    "class_type": "ResizeImageMaskNode",
+    "_meta": {
+      "title": "调整图像/掩码大小"
+    }
+  },
+  "35": {
+    "inputs": {
+      "resize_type": "scale longer dimension",
+      "resize_type.longer_size": 1536,
+      "scale_method": "lanczos",
+      "input": [
+        "23",
+        0
+      ]
+    },
+    "class_type": "ResizeImageMaskNode",
+    "_meta": {
+      "title": "调整图像/掩码大小"
+    }
+  },
+  "36": {
+    "inputs": {
+      "resize_type": "scale longer dimension",
+      "resize_type.longer_size": 1536,
+      "scale_method": "lanczos",
+      "input": [
+        "31",
+        0
+      ]
+    },
+    "class_type": "ResizeImageMaskNode",
+    "_meta": {
+      "title": "调整图像/掩码大小"
     }
   }
 }

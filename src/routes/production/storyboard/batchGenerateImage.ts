@@ -46,7 +46,7 @@ export default router.post(
       await u.db("o_storyboard").whereIn("id", storyIds).where("scriptId", scriptId).where("shouldGenerateImage", 1).update({ state: "生成中" });
     }
 
-    const projectSettingData = await u.db("o_project").where("id", projectId).select("imageModel", "imageQuality", "artStyle", "videoRatio", "concurrentCount").first();
+    const projectSettingData = await u.db("o_project").where("id", projectId).select("imageModel", "derivativeImageModel", "imageQuality", "artStyle", "videoRatio", "concurrentCount").first();
 
     // 按 rowid 顺序查出每个 storyboard 关联的 assetId 有序列表
     const assets2StoryboardRows = await u
@@ -98,7 +98,7 @@ export default router.post(
         aspectRatio: projectSettingData?.videoRatio as `${number}:${number}`,
       };
       try {
-        const imageCls = await u.Ai.Image(projectSettingData?.imageModel as `${string}:${string}`).run(
+        const imageCls = await u.Ai.Image((projectSettingData?.derivativeImageModel || projectSettingData?.imageModel) as `${string}:${string}`).run(
           {
             referenceList: await getAssetsImageBase64(assetRecord[item.id!] || []),
             ...repeloadObj,

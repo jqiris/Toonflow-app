@@ -16,7 +16,7 @@ export async function batchGenerateDerivativeAssets(
   scriptId: number,
   concurrentCount?: number,
 ): Promise<void> {
-  const projectSettingData = await u.db("o_project").where("id", projectId).select("imageModel", "imageQuality", "artStyle", "concurrentCount").first();
+  const projectSettingData = await u.db("o_project").where("id", projectId).select("imageModel", "derivativeImageModel", "imageQuality", "artStyle", "concurrentCount").first();
   if (!projectSettingData) throw new Error(`项目不存在: ${projectId}`);
 
   const assetsDataArr = await u.db("o_assets").whereIn("id", assetIds).select("id", "describe", "name", "type", "assetsId");
@@ -54,7 +54,7 @@ export async function batchGenerateDerivativeAssets(
       type: item.type,
       state: "生成中",
       resolution: projectSettingData.imageQuality,
-      model: projectSettingData.imageModel,
+      model: projectSettingData.derivativeImageModel || projectSettingData.imageModel,
     });
     imageIdMap[item.id!] = imageId;
     await u.db("o_assets").where("id", item.id).update({ imageId });
@@ -109,7 +109,7 @@ async function generateSingleAsset(
       size: projectSettingData.imageQuality as "1K" | "2K" | "4K",
       aspectRatio: "16:9" as `${number}:${number}`,
     };
-    const imageCls = await u.Ai.Image(projectSettingData.imageModel as `${string}:${string}`).run(
+    const imageCls = await u.Ai.Image((projectSettingData.derivativeImageModel || projectSettingData.imageModel) as `${string}:${string}`).run(
       {
         referenceList: imageBase64 ? [{ type: "image", base64: imageBase64 }] : [],
         ...repeloadObj,
