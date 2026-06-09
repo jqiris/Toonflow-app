@@ -12,6 +12,7 @@ import { createXai } from "@ai-sdk/xai";
 import { createMinimax } from "vercel-minimax-ai-provider";
 import FormData from "form-data";
 import jsonwebtoken from "jsonwebtoken";
+import crypto from "crypto";
 import u from "@/utils";
 export default function runCode(code: string, vendor?: Record<string, any>) {
   code = code.replace(/export\s*\{\s*\};?/g, ""); // 去掉 export {} 以免沙盒环境报错
@@ -39,6 +40,7 @@ export default function runCode(code: string, vendor?: Record<string, any>) {
     FormData,
     logger,
     jsonwebtoken,
+    crypto,
   };
   if (vendor !== undefined) {
     sandbox.vendor = vendor;

@@ -23064,14 +23064,14 @@ var require_etag = __commonJS({
   "node_modules/etag/index.js"(exports2, module2) {
     "use strict";
     module2.exports = etag;
-    var crypto5 = require("crypto");
+    var crypto6 = require("crypto");
     var Stats = require("fs").Stats;
     var toString3 = Object.prototype.toString;
     function entitytag(entity) {
       if (entity.length === 0) {
         return '"0-2jmj7l5rSw0yVb/vlWAYkK/YBwk"';
       }
-      var hash3 = crypto5.createHash("sha1").update(entity, "utf8").digest("base64").substring(0, 27);
+      var hash3 = crypto6.createHash("sha1").update(entity, "utf8").digest("base64").substring(0, 27);
       var len = typeof entity === "string" ? Buffer.byteLength(entity, "utf8") : entity.length;
       return '"' + len.toString(16) + "-" + hash3 + '"';
     }
@@ -26551,17 +26551,17 @@ var require_content_disposition = __commonJS({
 var require_cookie_signature = __commonJS({
   "node_modules/cookie-signature/index.js"(exports2) {
     "use strict";
-    var crypto5 = require("crypto");
+    var crypto6 = require("crypto");
     exports2.sign = function(val, secret) {
       if ("string" != typeof val) throw new TypeError("Cookie value must be provided as a string.");
       if (null == secret) throw new TypeError("Secret key must be provided.");
-      return val + "." + crypto5.createHmac("sha256", secret).update(val).digest("base64").replace(/\=+$/, "");
+      return val + "." + crypto6.createHmac("sha256", secret).update(val).digest("base64").replace(/\=+$/, "");
     };
     exports2.unsign = function(input, secret) {
       if ("string" != typeof input) throw new TypeError("Signed cookie string must be provided.");
       if (null == secret) throw new TypeError("Secret key must be provided.");
       var tentativeValue = input.slice(0, input.lastIndexOf(".")), expectedInput = exports2.sign(tentativeValue, secret), expectedBuffer = Buffer.from(expectedInput), inputBuffer = Buffer.from(input);
-      return expectedBuffer.length === inputBuffer.length && crypto5.timingSafeEqual(expectedBuffer, inputBuffer) ? tentativeValue : false;
+      return expectedBuffer.length === inputBuffer.length && crypto6.timingSafeEqual(expectedBuffer, inputBuffer) ? tentativeValue : false;
     };
   }
 });
@@ -37115,7 +37115,7 @@ var require_accepts2 = __commonJS({
 var require_base64id = __commonJS({
   "node_modules/base64id/lib/base64id.js"(exports2, module2) {
     "use strict";
-    var crypto5 = require("crypto");
+    var crypto6 = require("crypto");
     var Base64Id = function() {
     };
     Base64Id.prototype.getRandomBytes = function(bytes) {
@@ -37123,12 +37123,12 @@ var require_base64id = __commonJS({
       var self2 = this;
       bytes = bytes || 12;
       if (bytes > BUFFER_SIZE) {
-        return crypto5.randomBytes(bytes);
+        return crypto6.randomBytes(bytes);
       }
       var bytesInBuffer = parseInt(BUFFER_SIZE / bytes);
       var threshold = parseInt(bytesInBuffer * 0.85);
       if (!threshold) {
-        return crypto5.randomBytes(bytes);
+        return crypto6.randomBytes(bytes);
       }
       if (this.bytesBufferIndex == null) {
         this.bytesBufferIndex = -1;
@@ -37140,14 +37140,14 @@ var require_base64id = __commonJS({
       if (this.bytesBufferIndex == -1 || this.bytesBufferIndex > threshold) {
         if (!this.isGeneratingBytes) {
           this.isGeneratingBytes = true;
-          crypto5.randomBytes(BUFFER_SIZE, function(err, bytes2) {
+          crypto6.randomBytes(BUFFER_SIZE, function(err, bytes2) {
             self2.bytesBuffer = bytes2;
             self2.bytesBufferIndex = 0;
             self2.isGeneratingBytes = false;
           });
         }
         if (this.bytesBufferIndex == -1) {
-          return crypto5.randomBytes(bytes);
+          return crypto6.randomBytes(bytes);
         }
       }
       var result = this.bytesBuffer.slice(bytes * this.bytesBufferIndex, bytes * (this.bytesBufferIndex + 1));
@@ -37161,7 +37161,7 @@ var require_base64id = __commonJS({
       }
       this.sequenceNumber = this.sequenceNumber + 1 | 0;
       rand.writeInt32BE(this.sequenceNumber, 11);
-      if (crypto5.randomBytes) {
+      if (crypto6.randomBytes) {
         this.getRandomBytes(12).copy(rand);
       } else {
         [0, 4, 8].forEach(function(i) {
@@ -81587,7 +81587,7 @@ var require_utils10 = __commonJS({
         }
       }
       generateCombinedName(logger3, postfix, name28, subNames) {
-        const crypto5 = require("crypto");
+        const crypto6 = require("crypto");
         if (!Array.isArray(subNames)) subNames = subNames ? [subNames] : [];
         const table = name28.replace(/\.|-/g, "_");
         const subNamesPart = subNames.join("_");
@@ -81596,7 +81596,7 @@ var require_utils10 = __commonJS({
           logger3.warn(
             `Automatically generated name "${result}" exceeds ${this.limit} character limit for Oracle Database ${this.oracleVersion}. Using base64 encoded sha1 of that name instead.`
           );
-          result = crypto5.createHash("sha1").update(result).digest("base64").replace("=", "");
+          result = crypto6.createHash("sha1").update(result).digest("base64").replace("=", "");
         }
         return result;
       }
@@ -121101,7 +121101,7 @@ var require_form_data = __commonJS({
     var parseUrl2 = require("url").parse;
     var fs33 = require("fs");
     var Stream = require("stream").Stream;
-    var crypto5 = require("crypto");
+    var crypto6 = require("crypto");
     var mime = require_mime_types3();
     var asynckit = require_asynckit();
     var setToStringTag = require_es_set_tostringtag();
@@ -121307,7 +121307,7 @@ var require_form_data = __commonJS({
       return Buffer.concat([dataBuffer, Buffer.from(this._lastBoundary())]);
     };
     FormData4.prototype._generateBoundary = function() {
-      this._boundary = "--------------------------" + crypto5.randomBytes(12).toString("hex");
+      this._boundary = "--------------------------" + crypto6.randomBytes(12).toString("hex");
     };
     FormData4.prototype.getLengthSync = function() {
       var knownLength = this._overheadLength + this._valueLength;
@@ -223895,14 +223895,14 @@ var require_jwa = __commonJS({
   "node_modules/jwa/index.js"(exports2, module2) {
     "use strict";
     var Buffer2 = require_safe_buffer2().Buffer;
-    var crypto5 = require("crypto");
+    var crypto6 = require("crypto");
     var formatEcdsa = require_ecdsa_sig_formatter();
     var util5 = require("util");
     var MSG_INVALID_ALGORITHM = '"%s" is not a valid algorithm.\n  Supported algorithms are:\n  "HS256", "HS384", "HS512", "RS256", "RS384", "RS512", "PS256", "PS384", "PS512", "ES256", "ES384", "ES512" and "none".';
     var MSG_INVALID_SECRET = "secret must be a string or buffer";
     var MSG_INVALID_VERIFIER_KEY = "key must be a string or a buffer";
     var MSG_INVALID_SIGNER_KEY = "key must be a string, a buffer or an object";
-    var supportsKeyObjects = typeof crypto5.createPublicKey === "function";
+    var supportsKeyObjects = typeof crypto6.createPublicKey === "function";
     if (supportsKeyObjects) {
       MSG_INVALID_VERIFIER_KEY += " or a KeyObject";
       MSG_INVALID_SECRET += "or a KeyObject";
@@ -223992,17 +223992,17 @@ var require_jwa = __commonJS({
       return function sign(thing, secret) {
         checkIsSecretKey(secret);
         thing = normalizeInput(thing);
-        var hmac = crypto5.createHmac("sha" + bits, secret);
+        var hmac = crypto6.createHmac("sha" + bits, secret);
         var sig = (hmac.update(thing), hmac.digest("base64"));
         return fromBase64(sig);
       };
     }
     var bufferEqual;
-    var timingSafeEqual = "timingSafeEqual" in crypto5 ? function timingSafeEqual2(a, b) {
+    var timingSafeEqual = "timingSafeEqual" in crypto6 ? function timingSafeEqual2(a, b) {
       if (a.byteLength !== b.byteLength) {
         return false;
       }
-      return crypto5.timingSafeEqual(a, b);
+      return crypto6.timingSafeEqual(a, b);
     } : function timingSafeEqual2(a, b) {
       if (!bufferEqual) {
         bufferEqual = require_buffer_equal_constant_time();
@@ -224019,7 +224019,7 @@ var require_jwa = __commonJS({
       return function sign(thing, privateKey) {
         checkIsPrivateKey(privateKey);
         thing = normalizeInput(thing);
-        var signer = crypto5.createSign("RSA-SHA" + bits);
+        var signer = crypto6.createSign("RSA-SHA" + bits);
         var sig = (signer.update(thing), signer.sign(privateKey, "base64"));
         return fromBase64(sig);
       };
@@ -224029,7 +224029,7 @@ var require_jwa = __commonJS({
         checkIsPublicKey(publicKey);
         thing = normalizeInput(thing);
         signature = toBase64(signature);
-        var verifier = crypto5.createVerify("RSA-SHA" + bits);
+        var verifier = crypto6.createVerify("RSA-SHA" + bits);
         verifier.update(thing);
         return verifier.verify(publicKey, signature, "base64");
       };
@@ -224038,11 +224038,11 @@ var require_jwa = __commonJS({
       return function sign(thing, privateKey) {
         checkIsPrivateKey(privateKey);
         thing = normalizeInput(thing);
-        var signer = crypto5.createSign("RSA-SHA" + bits);
+        var signer = crypto6.createSign("RSA-SHA" + bits);
         var sig = (signer.update(thing), signer.sign({
           key: privateKey,
-          padding: crypto5.constants.RSA_PKCS1_PSS_PADDING,
-          saltLength: crypto5.constants.RSA_PSS_SALTLEN_DIGEST
+          padding: crypto6.constants.RSA_PKCS1_PSS_PADDING,
+          saltLength: crypto6.constants.RSA_PSS_SALTLEN_DIGEST
         }, "base64"));
         return fromBase64(sig);
       };
@@ -224052,12 +224052,12 @@ var require_jwa = __commonJS({
         checkIsPublicKey(publicKey);
         thing = normalizeInput(thing);
         signature = toBase64(signature);
-        var verifier = crypto5.createVerify("RSA-SHA" + bits);
+        var verifier = crypto6.createVerify("RSA-SHA" + bits);
         verifier.update(thing);
         return verifier.verify({
           key: publicKey,
-          padding: crypto5.constants.RSA_PKCS1_PSS_PADDING,
-          saltLength: crypto5.constants.RSA_PSS_SALTLEN_DIGEST
+          padding: crypto6.constants.RSA_PKCS1_PSS_PADDING,
+          saltLength: crypto6.constants.RSA_PSS_SALTLEN_DIGEST
         }, signature, "base64");
       };
     }
@@ -227443,7 +227443,8 @@ function runCode(code, vendor) {
     axios: axios_default,
     FormData: import_form_data2.default,
     logger,
-    jsonwebtoken: import_jsonwebtoken.default
+    jsonwebtoken: import_jsonwebtoken.default,
+    crypto: import_crypto4.default
   };
   if (vendor !== void 0) {
     sandbox.vendor = vendor;
@@ -227568,7 +227569,7 @@ async function compressToSize(imageBuffer, maxBytes, originalWidth, originalHeig
     }
   }
 }
-var import_vm2, import_sharp2, import_qwen_ai_provider_v5, import_form_data2, import_jsonwebtoken;
+var import_vm2, import_sharp2, import_qwen_ai_provider_v5, import_form_data2, import_jsonwebtoken, import_crypto4;
 var init_vm = __esm({
   "src/utils/vm.ts"() {
     "use strict";
@@ -227586,6 +227587,7 @@ var init_vm = __esm({
     init_dist18();
     import_form_data2 = __toESM(require_form_data());
     import_jsonwebtoken = __toESM(require_jsonwebtoken());
+    import_crypto4 = __toESM(require("crypto"));
     init_utils3();
   }
 });
