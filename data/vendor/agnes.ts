@@ -562,6 +562,11 @@ const videoRequest = async (config: VideoConfig, model: VideoModel): Promise<str
     }
 
     if (!queryResponse.ok) {
+      // 429 限流：不视为失败，继续轮询
+      if (queryResponse.status === 429) {
+        logger(`[videoRequest] 查询触发 429 限流，等待下次轮询`);
+        return { completed: false };
+      }
       const errorText = await queryResponse.text();
       return { completed: true, error: `查询视频任务失败，状态码: ${queryResponse.status}, 错误信息: ${errorText}` };
     }
@@ -595,7 +600,7 @@ const videoRequest = async (config: VideoConfig, model: VideoModel): Promise<str
       default:
         return { completed: false };
     }
-  }, 5000, 600000); // 5秒间隔，10分钟超时
+  }, 15000, 600000); // 15秒间隔，10分钟超时（避免触发 Agnes API 429 限流）
 
   if (pollResult.error) throw new Error(typeof pollResult.error === "string" ? pollResult.error : JSON.stringify(pollResult.error));
   return await urlToBase64(pollResult.data!);
