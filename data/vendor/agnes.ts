@@ -163,7 +163,7 @@ const vendor: VendorConfig = {
       name: "Agnes Video V2.0",
       modelName: "agnes-video-v2.0",
       type: "video",
-      mode: ["text", "singleImage", "startEndRequired"],
+      mode: ["text", "singleImage", "multiReference", "startEndRequired", "endFrameOptional", "startFrameOptional"],
       audio: false,
       durationResolutionMap: [{ duration: [5, 10, 15], resolution: ["720p", "1080p"] }],
     },
