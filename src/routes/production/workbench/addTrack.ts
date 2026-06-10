@@ -17,11 +17,14 @@ export default router.post(
     const video = data?.videoModel?.split(":");
     const vemdor = await u.vendor.getModelList(video?.[0]!);
     const trackId = Date.now()
+    const maxSortRow = await u.db("o_videoTrack").where({ projectId, scriptId }).max("sort as maxSort").first();
+    const nextSort = (maxSortRow?.maxSort ?? -1) + 1;
     await u.db("o_videoTrack").insert({
       id: trackId,
       projectId,
       scriptId,
       duration,
+      sort: nextSort,
     });
     res.status(200).send(success(trackId));
   },

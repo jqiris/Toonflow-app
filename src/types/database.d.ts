@@ -1,4 +1,4 @@
-// @db-hash 398c5b26d1b15727953c308bdc5fb9e9
+// @db-hash a8e7b53cfa8d111f84c63e18584535c7
 //该文件由脚本自动生成，请勿手动修改
 
 export interface memories {
@@ -226,6 +226,7 @@ export interface o_videoTrack {
   'reason'?: string | null;
   'scriptId'?: number | null;
   'selectVideoId'?: number | null;
+  'sort'?: number | null;
   'state'?: string | null;
   'videoId'?: number | null;
 }
