@@ -1,11 +1,16 @@
 import express from "express";
 import u from "@/utils";
 import { z } from "zod";
-import { v4 as uuidv4 } from "uuid";
 import { success } from "@/lib/responseFormat";
 import { validateFields } from "@/middleware/middleware";
 import { ReferenceList } from "@/utils/ai";
 const router = express.Router();
+
+function formatTimestamp(): string {
+  const d = new Date();
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+}
 
 type Type = "imageReference" | "startImage" | "endImage" | "videoReference" | "audioReference";
 interface UploadItem {
@@ -52,13 +57,21 @@ export default router.post(
       } catch (e) {}
     }
 
-    // 获取生成视频比例
-    const ratio = await u.db("o_project").select("videoRatio").where("id", projectId).first();
+    // 获取生成视频比例 & 项目名称
+    const [ratio, projectRow] = await Promise.all([
+      u.db("o_project").select("videoRatio").where("id", projectId).first(),
+      u.db("o_project").select("name").where("id", projectId).first(),
+    ]);
+    const projectName = ((projectRow?.name || "project").replace(/[/\\?%*:|"<>]/g, "_"));
 
     // 为每个 track 预处理数据并插入数据库，返回任务列表
     const tasks = await Promise.all(
       (trackData as { uploadData: { id: number; sources: string }[]; trackId: number; prompt: string; duration: number }[]).map(async (track) => {
         const { uploadData, trackId, prompt, duration } = track;
+
+        // 查询轨道序号
+        const trackRow = await u.db("o_videoTrack").select("sort").where("id", trackId).first();
+        const trackNo = (trackRow?.sort ?? 0) + 1;
 
         // 查询出图片数据
         const images = await Promise.all(
@@ -79,7 +92,7 @@ export default router.post(
           }),
         );
 
-        const videoPath = `/${projectId}/video/${uuidv4()}.mp4`;
+        const videoPath = `/${projectId}/video/${projectName}_${trackNo}_${formatTimestamp()}.mp4`;
         const [videoId] = await u.db("o_video").insert({
           filePath: videoPath,
           time: Date.now(),

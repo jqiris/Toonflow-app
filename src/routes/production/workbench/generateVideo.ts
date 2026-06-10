@@ -1,11 +1,16 @@
 import express from "express";
 import u from "@/utils";
 import { z } from "zod";
-import { v4 as uuidv4 } from "uuid";
 import { success } from "@/lib/responseFormat";
 import { validateFields } from "@/middleware/middleware";
 import { ReferenceList } from "@/utils/ai";
 const router = express.Router();
+
+function formatTimestamp(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+}
 
 type Type = "imageReference" | "startImage" | "endImage" | "videoReference" | "audioReference";
 interface UploadItem {
@@ -47,8 +52,11 @@ export default router.post(
       } catch (e) {}
     }
     //获取生成视频比例
-    const ratio = await u.db("o_project").select("videoRatio").where("id", projectId).first();
-    const videoPath = `/${projectId}/video/${uuidv4()}.mp4`; //视频保存路径
+    const projectRow = await u.db("o_project").select("name", "videoRatio").where("id", projectId).first();
+    const projectName = ((projectRow?.name || "project").replace(/[/\\?%*:|"<>]/g, "_"));
+    const track = await u.db("o_videoTrack").select("sort").where("id", trackId).first();
+    const trackNo = (track?.sort ?? 0) + 1;
+    const videoPath = `/${projectId}/video/${projectName}_${trackNo}_${formatTimestamp()}.mp4`;
     //查询出图片数据
     const images = await Promise.all(
       uploadData.map(async (item: UploadItem) => {
@@ -98,7 +106,7 @@ export default router.post(
           referenceList: base64.filter(Boolean) as ReferenceList[],
           mode: modeData.length > 0 ? modeData : mode,
           duration,
-          aspectRatio: (ratio?.videoRatio as "16:9" | "9:16") || "16:9",
+          aspectRatio: (projectRow?.videoRatio as "16:9" | "9:16") || "16:9",
           resolution,
           audio,
         },
