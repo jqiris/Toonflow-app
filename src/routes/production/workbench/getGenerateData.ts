@@ -213,6 +213,7 @@ export default router.post(
           storyboardList.map(async (s) => ({
             ...s,
             src: s.filePath,
+            nineGridSrc: s.nineGridPath ? await u.oss.getSmallImageUrl(s.nineGridPath) : "",
           })),
         ),
         trackList,

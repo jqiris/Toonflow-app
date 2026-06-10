@@ -84,6 +84,8 @@ export default async (knex: Knex): Promise<void> => {
   await addColumn("o_modelPrompt", "path", "string");
   await addColumn("o_project", "derivativeImageModel", "string");
   await addColumn("o_videoTrack", "sort", "integer");
+  await addColumn("o_storyboard", "nineGridPath", "text");
+  await addColumn("o_storyboard", "nineGridEnabled", "integer");
   const vendorDataSelect = await u.db("o_vendorConfig").whereIn("id", ["deepseek", "atlascloud"]).select("*");
   if (!vendorDataSelect.find((i) => i.id == "deepseek")) {
     await u.db("o_vendorConfig").insert({

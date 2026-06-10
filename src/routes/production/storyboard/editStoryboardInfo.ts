@@ -14,11 +14,12 @@ export default router.post(
     videoDesc: z.string(),
   }),
   async (req, res) => {
-    const { id, prompt, videoDesc } = req.body;
-    await u.db("o_storyboard").where({ id }).update({
-      prompt,
-      videoDesc,
-    });
-    res.status(200).send(success({ message: "更新提示词成功" }));
+    const { id, prompt, videoDesc, nineGridEnabled } = req.body;
+    const updateData: Record<string, any> = { prompt, videoDesc };
+    if (nineGridEnabled !== undefined) {
+      updateData.nineGridEnabled = nineGridEnabled ? 1 : 0;
+    }
+    await u.db("o_storyboard").where({ id }).update(updateData);
+    res.status(200).send(success({ message: "更新成功" }));
   },
 );
