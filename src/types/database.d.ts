@@ -97,6 +97,7 @@ export interface o_modelPrompt {
   'id'?: number;
   'model'?: string | null;
   'path'?: string | null;
+  'prompt'?: string | null;
   'vendorId'?: string | null;
 }
 export interface o_novel {
@@ -113,9 +114,7 @@ export interface o_novel {
 }
 export interface o_project {
   'artStyle'?: string | null;
-  'concurrentCount'?: number | null;
   'createTime'?: number | null;
-  'derivativeImageModel'?: string | null;
   'directorManual'?: string | null;
   'id'?: number | null;
   'imageModel'?: string | null;
@@ -226,7 +225,6 @@ export interface o_videoTrack {
   'reason'?: string | null;
   'scriptId'?: number | null;
   'selectVideoId'?: number | null;
-  'sort'?: number | null;
   'state'?: string | null;
   'videoId'?: number | null;
 }

@@ -169,6 +169,8 @@ import route165 from "./routes/task/getTaskApi";
 import route166 from "./routes/task/getTaskCategories";
 import route167 from "./routes/task/taskDetails";
 import route168 from "./routes/test/test";
+import route170 from "./routes/production/workbench/checkVideoPrompt";
+import route171 from "./routes/setting/agentDeploy/updateAgentModel";
 
 export default async (app: Express) => {
   app.use("/api/agents/clearMemory", route1);
@@ -339,4 +341,6 @@ export default async (app: Express) => {
   app.use("/api/task/getTaskCategories", route166);
   app.use("/api/task/taskDetails", route167);
   app.use("/api/test/test", route168);
+  app.use("/api/production/workbench/checkVideoPrompt", route170);
+  app.use("/api/setting/agentDeploy/updateAgentModel", route171);
 }
