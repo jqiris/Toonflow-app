@@ -73,6 +73,10 @@ export default router.post(
             .first();
           return { path: filePath?.filePath, sources: filePath.type };
         }
+        if (item.sources === "nineGrid") {
+          const sb = await u.db("o_storyboard").where("id", item.id).select("nineGridPath").first();
+          return sb?.nineGridPath ? { path: sb.nineGridPath, sources: "storyBoard" } : null;
+        }
       }),
     );
     //把images里面的图片转成base64格式

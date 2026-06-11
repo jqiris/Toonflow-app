@@ -214,6 +214,7 @@ export default router.post(
             ...s,
             src: s.filePath,
             nineGridSrc: s.nineGridPath ? await u.oss.getSmallImageUrl(s.nineGridPath) : "",
+            gridPrompt: s.gridPrompt || "",
           })),
         ),
         trackList,
