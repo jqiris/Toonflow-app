@@ -1,0 +1,30 @@
+{
+  "exported": [
+    {
+      "id": "23ca383b-c7e5-4789-9771-59cbc80b30d3",
+      "name": "vision-reader",
+      "server_type": "stdio",
+      "description": null,
+      "server_url": null,
+      "headers": {},
+      "timeout": null,
+      "command": "npx",
+      "args": [
+        "-y",
+        "@z_ai/mcp-server"
+      ],
+      "cwd": null,
+      "env": {
+        "Z_AI_API_KEY": "bf108f1f565a46c1a82a89a5d3144117.8ZPdwy3ZGQVjnvR7",
+        "Z_AI_MODE": "ZHIPU"
+      },
+      "inherit_env": true,
+      "startup_timeout": 10,
+      "wait_for_log": null,
+      "enabled": true,
+      "created_at": "2026-05-31T10:42:21.210178124+08:00",
+      "updated_at": "2026-05-31T10:42:21.210178124+08:00"
+    }
+  ],
+  "count": 1
+}

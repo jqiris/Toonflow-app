@@ -1,0 +1,93 @@
+{
+  "exported": [
+    {
+      "id": "be2d4481-1b1e-47a2-bd61-868bae9748a9",
+      "name": "zhipu-glm5",
+      "provider": "zai",
+      "model_name": "glm-5",
+      "base_url": null,
+      "api_key": "94b6ffa499af42ac82c84025249fa7e2.zDZkLYUgcyVXuI5P",
+      "is_active": true,
+      "created_at": "2026-03-07T17:17:33.781967800+08:00",
+      "updated_at": "2026-03-14T21:11:02.034974900+08:00"
+    },
+    {
+      "id": "635ed6bb-ecd4-46fd-9a9d-29f5f754a8e1",
+      "name": "zhipu-glm4.7-flashx",
+      "provider": "zai",
+      "model_name": "glm-4.7-flashx",
+      "base_url": null,
+      "api_key": "bf108f1f565a46c1a82a89a5d3144117.8ZPdwy3ZGQVjnvR7",
+      "is_active": true,
+      "created_at": "2026-03-07T17:17:07.001230800+08:00",
+      "updated_at": "2026-03-07T17:17:07.001230800+08:00"
+    },
+    {
+      "id": "24b01b96-998e-452a-af24-3809e18d9b9a",
+      "name": "gemini-3.1-pro-preview",
+      "provider": "gemini",
+      "model_name": "gemini-3.1-pro-preview",
+      "base_url": "https://generativelanguage.googleapis.com/v1beta",
+      "api_key": "AIzaSyBuYULUWgVEs8wEclXAfwmvD1dRd653LWc",
+      "is_active": true,
+      "created_at": "2026-03-01T08:14:08.739248600+00:00",
+      "updated_at": "2026-03-01T08:22:45.982057100+00:00"
+    },
+    {
+      "id": "0ff5dc2f-7cb8-4ee9-a989-e81719592c8a",
+      "name": "zhipu-glm4.7",
+      "provider": "zai-coding",
+      "model_name": "glm-4.7",
+      "base_url": "https://open.bigmodel.cn/api/paas/v4",
+      "api_key": "94b6ffa499af42ac82c84025249fa7e2.zDZkLYUgcyVXuI5P",
+      "is_active": true,
+      "created_at": "2026-02-27T07:42:34.994093200+00:00",
+      "updated_at": "2026-03-13T15:51:19.690699900+08:00"
+    },
+    {
+      "id": "998edd78-d896-4a45-9ea7-d11bee96c9d5",
+      "name": "doubao-glm4.7",
+      "provider": "openai-compatible",
+      "model_name": "glm-4.7",
+      "base_url": "https://ark.cn-beijing.volces.com/api/coding/v3",
+      "api_key": "950c91a3-d339-4a9c-b9a0-9f5009101457",
+      "is_active": true,
+      "created_at": "2026-03-08T17:08:19.117834900+08:00",
+      "updated_at": "2026-03-08T17:08:19.117834900+08:00"
+    },
+    {
+      "id": "1b449f5d-8732-473c-ba09-4d0b54a14c8a",
+      "name": "doubao-kimi-k2.5",
+      "provider": "openai-compatible",
+      "model_name": "kimi-k2.5",
+      "base_url": "https://ark.cn-beijing.volces.com/api/coding/v3",
+      "api_key": "950c91a3-d339-4a9c-b9a0-9f5009101457",
+      "is_active": true,
+      "created_at": "2026-03-08T18:27:01.934565400+08:00",
+      "updated_at": "2026-03-08T18:28:53.959706300+08:00"
+    },
+    {
+      "id": "14a6a06e-f194-4cab-8f2c-337d3c7696eb",
+      "name": "doubao-minimax-m2.5",
+      "provider": "openai-compatible",
+      "model_name": "minimax-m2.5",
+      "base_url": "https://ark.cn-beijing.volces.com/api/coding/v3",
+      "api_key": "950c91a3-d339-4a9c-b9a0-9f5009101457",
+      "is_active": true,
+      "created_at": "2026-03-08T18:38:57.120704300+08:00",
+      "updated_at": "2026-03-08T18:38:57.120704300+08:00"
+    },
+    {
+      "id": "abc28fa2-25eb-4228-b0fb-6fbc43e3bbb3",
+      "name": "doubao-deepseek-v3.2",
+      "provider": "openai-compatible",
+      "model_name": "deepseek-v3.2",
+      "base_url": "https://ark.cn-beijing.volces.com/api/coding/v3",
+      "api_key": "950c91a3-d339-4a9c-b9a0-9f5009101457",
+      "is_active": true,
+      "created_at": "2026-03-08T18:39:46.301847800+08:00",
+      "updated_at": "2026-03-08T18:39:46.301847800+08:00"
+    }
+  ],
+  "count": 8
+}

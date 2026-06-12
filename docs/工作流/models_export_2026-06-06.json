@@ -1,0 +1,16 @@
+{
+  "exported": [
+    {
+      "id": "17cfda1d-6864-4e34-a5f5-9c9b7b4a788d",
+      "name": "qwen3.6-35b-xunfei",
+      "provider": "openai-compatible",
+      "model_name": "astron-code-latest",
+      "base_url": "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2",
+      "api_key": "ea8b4f7dafef8ef56e39be8a3c212532:MzkzMTA0MTI2NjE1NzBhMmUyY2Y2MDIw",
+      "is_active": true,
+      "created_at": "2026-06-06T10:33:40.228718797+08:00",
+      "updated_at": "2026-06-06T10:33:40.228718797+08:00"
+    }
+  ],
+  "count": 1
+}
