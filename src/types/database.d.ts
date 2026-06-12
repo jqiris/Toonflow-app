@@ -1,4 +1,4 @@
-// @db-hash a654ae3230e99771933687b8fd1334fb
+// @db-hash 3e3af95ea40e3ec7f767c9f8a0eec7b4
 //该文件由脚本自动生成，请勿手动修改
 
 export interface memories {
@@ -123,6 +123,7 @@ export interface o_project {
   'intro'?: string | null;
   'mode'?: string | null;
   'name'?: string | null;
+  'nineGridImageModel'?: string | null;
   'projectType'?: string | null;
   'type'?: string | null;
   'userId'?: number | null;

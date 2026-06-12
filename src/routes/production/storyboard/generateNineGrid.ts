@@ -54,10 +54,10 @@ export default router.post(
     const projectSetting = await u
       .db("o_project")
       .where("id", projectId)
-      .select("imageModel", "derivativeImageModel", "imageQuality", "videoRatio")
+      .select("imageModel", "derivativeImageModel", "nineGridImageModel", "imageQuality", "videoRatio")
       .first();
 
-    const imageModel = (projectSetting?.derivativeImageModel || projectSetting?.imageModel) as `${string}:${string}`;
+    const imageModel = (projectSetting?.nineGridImageModel || projectSetting?.derivativeImageModel || projectSetting?.imageModel) as `${string}:${string}`;
     if (!imageModel) return res.status(400).send(error("项目未配置图片模型"));
 
     const aspectRatio = (projectSetting?.videoRatio || "16:9") as `${number}:${number}`;

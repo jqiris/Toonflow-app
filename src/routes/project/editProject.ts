@@ -23,9 +23,10 @@ export default router.post(
     imageQuality: z.string(),
     mode: z.string(),
     concurrentCount: z.number().int().min(1).optional(),
+    nineGridImageModel: z.string().optional(),
   }),
   async (req, res) => {
-    const { id, name, intro, type, artStyle, videoRatio, directorManual, imageModel, derivativeImageModel, videoModel, imageQuality, projectType, mode, concurrentCount } = req.body;
+    const { id, name, intro, type, artStyle, videoRatio, directorManual, imageModel, derivativeImageModel, videoModel, imageQuality, projectType, mode, concurrentCount, nineGridImageModel } = req.body;
 
     await u.db("o_project").where("id", id).update({
       name,
@@ -41,6 +42,7 @@ export default router.post(
       projectType,
       mode,
       concurrentCount,
+      nineGridImageModel: nineGridImageModel || "",
     });
 
     res.status(200).send(success({ message: "编辑项目成功" }));
