@@ -1,4 +1,4 @@
-// @db-hash f5d050145d03a52b5b502043bc559ec0
+// @db-hash ba820c330cd1ea70fb0639b5c70462ac
 //该文件由脚本自动生成，请勿手动修改
 
 export interface memories {
@@ -97,7 +97,6 @@ export interface o_modelPrompt {
   'id'?: number;
   'model'?: string | null;
   'path'?: string | null;
-  'prompt'?: string | null;
   'vendorId'?: string | null;
 }
 export interface o_novel {
@@ -115,6 +114,7 @@ export interface o_novel {
 export interface o_project {
   'artStyle'?: string | null;
   'createTime'?: number | null;
+  'derivativeImageModel'?: string | null;
   'directorManual'?: string | null;
   'id'?: number | null;
   'imageModel'?: string | null;
@@ -122,6 +122,7 @@ export interface o_project {
   'intro'?: string | null;
   'mode'?: string | null;
   'name'?: string | null;
+  'nineGridImageModel'?: string | null;
   'projectType'?: string | null;
   'type'?: string | null;
   'userId'?: number | null;
@@ -173,8 +174,11 @@ export interface o_storyboard {
   'duration'?: string | null;
   'filePath'?: string | null;
   'flowId'?: number | null;
+  'gridPrompt'?: string | null;
   'id'?: number;
   'index'?: number | null;
+  'nineGridEnabled'?: number | null;
+  'nineGridPath'?: string | null;
   'projectId'?: number | null;
   'prompt'?: string | null;
   'reason'?: string | null;
@@ -225,6 +229,7 @@ export interface o_videoTrack {
   'reason'?: string | null;
   'scriptId'?: number | null;
   'selectVideoId'?: number | null;
+  'sort'?: number | null;
   'state'?: string | null;
   'videoId'?: number | null;
 }

@@ -935,6 +935,12 @@ const WORKFLOW_JSON_T2V = {
 };
 
 // ============================================================
+// 辅助函数
+// ============================================================
+
+const generateSeed = () => crypto.randomBytes(4).readUInt32BE();
+
+// ============================================================
 // 适配器函数
 // ============================================================
 
@@ -946,273 +952,224 @@ const imageRequest = async (config: ImageConfig, model: ImageModel): Promise<str
   throw new Error("不支持图片生成");
 };
 
-// 首尾帧生视频（FLF2V）
+// 视频生成（根据 model.modelName 分派到对应工作流）
 const videoRequest = async (config: VideoConfig, model: VideoModel): Promise<string> => {
   const baseUrl = vendor.inputValues.baseUrl || "http://localhost:8188";
   if (!config.prompt) throw new Error("缺少视频生成提示词");
 
-  // 1. 处理参考图（首尾帧）
-  const refs = config.referenceList || [];
-  const firstFrame = refs[0]?.base64 || "";
-  const endFrame = refs[1]?.base64 || "";
-  if (!firstFrame || !endFrame) {
-    throw new Error("首尾帧视频需要提供首帧和尾帧两张参考图片");
-  }
+  const modelName = model.modelName;
 
-  let rawFirstFrame = firstFrame;
-  let rawEndFrame = endFrame;
-  if (rawFirstFrame.includes(",")) rawFirstFrame = rawFirstFrame.split(",")[1];
-  if (rawEndFrame.includes(",")) rawEndFrame = rawEndFrame.split(",")[1];
-
-  logger(`[Wan2.2 FLF2V] 开始生成，首帧 base64 长度: ${rawFirstFrame.length}, 尾帧 base64 长度: ${rawEndFrame.length}`);
-
-  // 2. 深拷贝工作流
-  const workflow = JSON.parse(JSON.stringify(WORKFLOW_JSON_FLF2V));
-
-  // 3. 替换 LoadImage 节点为 easy loadImageBase64
-  // 节点 80 = 首帧，节点 89 = 尾帧
-  workflow["80"] = {
-    class_type: "easy loadImageBase64",
-    inputs: { base64_data: rawFirstFrame, image_output: "Preview", save_prefix: "ComfyUI" }
-  };
-  workflow["89"] = {
-    class_type: "easy loadImageBase64",
-    inputs: { base64_data: rawEndFrame, image_output: "Preview", save_prefix: "ComfyUI" }
-  };
-
-  // 4. 注入提示词
-  workflow["90"]["inputs"]["text"] = config.prompt;
-
-  // 5. 计算并设置帧数（帧率 16fps）
-  const frameRate = 16;
-  const frameCount = Math.max(config.duration * frameRate + 1, 1);
-  workflow["81"]["inputs"]["length"] = frameCount;
-
-  // 6. 设置分辨率
-  let width = 832, height = 480;
-  if (config.resolution === "720p") {
-    width = config.aspectRatio === "16:9" ? 1280 : 720;
-    height = config.aspectRatio === "16:9" ? 720 : 1280;
-  } else if (config.resolution === "1080p") {
-    width = config.aspectRatio === "16:9" ? 1920 : 1080;
-    height = config.aspectRatio === "16:9" ? 1080 : 1920;
-  }
-  workflow["81"]["inputs"]["width"] = width;
-  workflow["81"]["inputs"]["height"] = height;
-
-  logger(`[Wan2.2 FLF2V] 分辨率: ${width}x${height}, 帧数: ${frameCount}`);
-
-  // 7. 设置随机种子
-  workflow["84"]["inputs"]["noise_seed"] = generateSeed();
-  workflow["87"]["inputs"]["noise_seed"] = generateSeed();
-
-  // 8. 提交到 ComfyUI API
-  const submitResp = await fetch(`${baseUrl}/prompt`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt: workflow }),
-  });
-  const submitData = await submitResp.json();
-  const promptId = submitData.prompt_id;
-
-  if (!promptId) {
-    throw new Error(`提交失败：${JSON.stringify(submitData)}`);
-  }
-
-  logger(`[Wan2.2 FLF2V] 任务已提交，ID: ${promptId}`);
-
-  // 9. 轮询结果
-  const result = await pollTask(async () => {
-    const historyResp = await fetch(`${baseUrl}/history`);
-    const history = await historyResp.json();
-    const run = history[promptId];
-    if (!run) return { completed: false };
-    if (run.status?.exec_info?.error) {
-      return { completed: true, error: JSON.stringify(run.status.exec_info.error) };
+  // ---- FLF2V：首尾帧生视频 ----
+  if (modelName === "wan2.2-flf2v") {
+    const refs = config.referenceList || [];
+    const firstFrame = refs[0]?.base64 || "";
+    const endFrame = refs[1]?.base64 || "";
+    if (!firstFrame || !endFrame) {
+      throw new Error("首尾帧视频需要提供首帧和尾帧两张参考图片");
     }
 
-    // 检查 SaveVideo（节点 83）的输出
-    const output = run.outputs?.["83"];
-    const fileInfo = output?.video?.[0] || output?.images?.[0];
-    if (fileInfo) return { completed: true, data: fileInfo };
-    return { completed: false };
-  }, 3000, 600000);
+    let rawFirstFrame = firstFrame;
+    let rawEndFrame = endFrame;
+    if (rawFirstFrame.includes(",")) rawFirstFrame = rawFirstFrame.split(",")[1];
+    if (rawEndFrame.includes(",")) rawEndFrame = rawEndFrame.split(",")[1];
 
-  if (result.error) throw new Error(`Wan2.2 FLF2V 生成失败: ${result.error}`);
-  if (!result.data) throw new Error("未找到生成的视频");
+    logger(`[Wan2.2 FLF2V] 开始生成，首帧 base64 长度: ${rawFirstFrame.length}, 尾帧 base64 长度: ${rawEndFrame.length}`);
 
-  // 10. 下载视频并转为 Base64
-  const fileInfo = result.data;
-  const downloadUrl = `${baseUrl}/view?filename=${encodeURIComponent(fileInfo.filename)}&subfolder=${encodeURIComponent(fileInfo.subfolder || "")}&type=${fileInfo.type}`;
-  logger(`[Wan2.2 FLF2V] 下载视频: ${downloadUrl}`);
-  return await urlToBase64(downloadUrl);
-};
+    const workflow = JSON.parse(JSON.stringify(WORKFLOW_JSON_FLF2V));
 
-// 图生视频（I2V）
-const videoRequest = async (config: VideoConfig, model: VideoModel): Promise<string> => {
-  const baseUrl = vendor.inputValues.baseUrl || "http://localhost:8188";
-  if (!config.prompt) throw new Error("缺少视频生成提示词");
+    workflow["80"] = {
+      class_type: "easy loadImageBase64",
+      inputs: { base64_data: rawFirstFrame, image_output: "Preview", save_prefix: "ComfyUI" }
+    };
+    workflow["89"] = {
+      class_type: "easy loadImageBase64",
+      inputs: { base64_data: rawEndFrame, image_output: "Preview", save_prefix: "ComfyUI" }
+    };
 
-  // 1. 处理参考图
-  let rawBase64 = config.referenceList?.[0]?.base64 || "";
-  if (!rawBase64) throw new Error("图生视频需要提供参考图片");
-  if (rawBase64.includes(",")) rawBase64 = rawBase64.split(",")[1];
+    workflow["90"]["inputs"]["text"] = config.prompt;
 
-  logger(`[Wan2.2 I2V] 开始生成，参考图 base64 长度: ${rawBase64.length}`);
+    const frameRate = 16;
+    const frameCount = Math.max(config.duration * frameRate + 1, 1);
+    workflow["81"]["inputs"]["length"] = frameCount;
 
-  // 2. 深拷贝工作流
-  const workflow = JSON.parse(JSON.stringify(WORKFLOW_JSON_I2V));
-
-  // 3. 替换 LoadImage（节点 30）为 easy loadImageBase64
-  workflow["30"] = {
-    class_type: "easy loadImageBase64",
-    inputs: { base64_data: rawBase64, image_output: "Preview", save_prefix: "ComfyUI" }
-  };
-
-  // 4. 注入提示词
-  workflow["12"]["inputs"]["text"] = config.prompt;
-
-  // 5. 计算并设置帧数（帧率 16fps）
-  const frameRate = 16;
-  const frameCount = Math.max(config.duration * frameRate + 1, 1);
-  workflow["29"]["inputs"]["length"] = frameCount;
-
-  // 6. 设置分辨率
-  let width = 832, height = 480;
-  if (config.resolution === "720p") {
-    width = config.aspectRatio === "16:9" ? 1280 : 720;
-    height = config.aspectRatio === "16:9" ? 720 : 1280;
-  } else if (config.resolution === "1080p") {
-    width = config.aspectRatio === "16:9" ? 1920 : 1080;
-    height = config.aspectRatio === "16:9" ? 1080 : 1920;
-  }
-  workflow["31"]["inputs"]["width"] = width;
-  workflow["31"]["inputs"]["height"] = height;
-
-  logger(`[Wan2.2 I2V] 分辨率: ${width}x${height}, 帧数: ${frameCount}`);
-
-  // 7. 设置随机种子
-  workflow["14"]["inputs"]["noise_seed"] = generateSeed();
-  workflow["15"]["inputs"]["noise_seed"] = generateSeed();
-
-  // 8. 提交到 ComfyUI API
-  const submitResp = await fetch(`${baseUrl}/prompt`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt: workflow }),
-  });
-  const submitData = await submitResp.json();
-  const promptId = submitData.prompt_id;
-
-  if (!promptId) {
-    throw new Error(`提交失败：${JSON.stringify(submitData)}`);
-  }
-
-  logger(`[Wan2.2 I2V] 任务已提交，ID: ${promptId}`);
-
-  // 9. 轮询结果
-  const result = await pollTask(async () => {
-    const historyResp = await fetch(`${baseUrl}/history`);
-    const history = await historyResp.json();
-    const run = history[promptId];
-    if (!run) return { completed: false };
-    if (run.status?.exec_info?.error) {
-      return { completed: true, error: JSON.stringify(run.status.exec_info.error) };
+    let width = 832, height = 480;
+    if (config.resolution === "720p") {
+      width = config.aspectRatio === "16:9" ? 1280 : 720;
+      height = config.aspectRatio === "16:9" ? 720 : 1280;
+    } else if (config.resolution === "1080p") {
+      width = config.aspectRatio === "16:9" ? 1920 : 1080;
+      height = config.aspectRatio === "16:9" ? 1080 : 1920;
     }
+    workflow["81"]["inputs"]["width"] = width;
+    workflow["81"]["inputs"]["height"] = height;
 
-    // 检查 VHS_VideoCombine（节点 26）的输出
-    const output = run.outputs?.["26"];
-    const fileInfo = output?.video?.[0] || output?.gifs?.[0] || output?.images?.[0];
-    if (fileInfo) return { completed: true, data: fileInfo };
-    return { completed: false };
-  }, 3000, 600000);
+    logger(`[Wan2.2 FLF2V] 分辨率: ${width}x${height}, 帧数: ${frameCount}`);
 
-  if (result.error) throw new Error(`Wan2.2 I2V 生成失败: ${result.error}`);
-  if (!result.data) throw new Error("未找到生成的视频");
+    workflow["84"]["inputs"]["noise_seed"] = generateSeed();
+    workflow["87"]["inputs"]["noise_seed"] = generateSeed();
 
-  // 10. 下载视频并转为 Base64
-  const fileInfo = result.data;
-  const downloadUrl = `${baseUrl}/view?filename=${encodeURIComponent(fileInfo.filename)}&subfolder=${encodeURIComponent(fileInfo.subfolder || "")}&type=${fileInfo.type}`;
-  logger(`[Wan2.2 I2V] 下载视频: ${downloadUrl}`);
-  return await urlToBase64(downloadUrl);
-};
+    const submitResp = await fetch(`${baseUrl}/prompt`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: workflow }),
+    });
+    const submitData = await submitResp.json();
+    const promptId = submitData.prompt_id;
+    if (!promptId) throw new Error(`提交失败：${JSON.stringify(submitData)}`);
+    logger(`[Wan2.2 FLF2V] 任务已提交，ID: ${promptId}`);
 
-// 文生视频（T2V）
-const videoRequest = async (config: VideoConfig, model: VideoModel): Promise<string> => {
-  const baseUrl = vendor.inputValues.baseUrl || "http://localhost:8188";
-  if (!config.prompt) throw new Error("缺少视频生成提示词");
+    const result = await pollTask(async () => {
+      const historyResp = await fetch(`${baseUrl}/history`);
+      const history = await historyResp.json();
+      const run = history[promptId];
+      if (!run) return { completed: false };
+      if (run.status?.exec_info?.error) {
+        return { completed: true, error: JSON.stringify(run.status.exec_info.error) };
+      }
+      const output = run.outputs?.["83"];
+      const fileInfo = output?.video?.[0] || output?.images?.[0];
+      if (fileInfo) return { completed: true, data: fileInfo };
+      return { completed: false };
+    }, 3000, 600000);
 
-  logger(`[Wan2.2 T2V] 开始生成视频，提示词长度: ${config.prompt.length}`);
-
-  // 1. 深拷贝工作流
-  const workflow = JSON.parse(JSON.stringify(WORKFLOW_JSON_T2V));
-
-  // 2. 注入提示词（正面）
-  workflow["12"]["inputs"]["text"] = config.prompt;
-
-  // 3. 计算并设置帧数（帧率 20fps）
-  const frameRate = 20;
-  const frameCount = Math.max(config.duration * frameRate + 1, 1);
-  workflow["21"]["inputs"]["length"] = frameCount;
-
-  // 4. 设置分辨率
-  let width = 832, height = 480;
-  if (config.resolution === "720p") {
-    width = config.aspectRatio === "16:9" ? 1280 : 720;
-    height = config.aspectRatio === "16:9" ? 720 : 1280;
-  } else if (config.resolution === "1080p") {
-    width = config.aspectRatio === "16:9" ? 1920 : 1080;
-    height = config.aspectRatio === "16:9" ? 1080 : 1920;
-  }
-  workflow["21"]["inputs"]["width"] = width;
-  workflow["21"]["inputs"]["height"] = height;
-
-  logger(`[Wan2.2 T2V] 分辨率: ${width}x${height}, 帧数: ${frameCount}`);
-
-  // 5. 设置随机种子
-  workflow["14"]["inputs"]["noise_seed"] = generateSeed();
-  workflow["15"]["inputs"]["noise_seed"] = generateSeed();
-
-  // 6. 提交到 ComfyUI API
-  const submitResp = await fetch(`${baseUrl}/prompt`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt: workflow }),
-  });
-  const submitData = await submitResp.json();
-  const promptId = submitData.prompt_id;
-
-  if (!promptId) {
-    throw new Error(`提交失败：${JSON.stringify(submitData)}`);
+    if (result.error) throw new Error(`Wan2.2 FLF2V 生成失败: ${result.error}`);
+    if (!result.data) throw new Error("未找到生成的视频");
+    const fileInfo = result.data;
+    const downloadUrl = `${baseUrl}/view?filename=${encodeURIComponent(fileInfo.filename)}&subfolder=${encodeURIComponent(fileInfo.subfolder || "")}&type=${fileInfo.type}`;
+    logger(`[Wan2.2 FLF2V] 下载视频: ${downloadUrl}`);
+    return await urlToBase64(downloadUrl);
   }
 
-  logger(`[Wan2.2 T2V] 任务已提交，ID: ${promptId}`);
+  // ---- I2V：图生视频 ----
+  if (modelName === "wan2.2-i2v") {
+    let rawBase64 = config.referenceList?.[0]?.base64 || "";
+    if (!rawBase64) throw new Error("图生视频需要提供参考图片");
+    if (rawBase64.includes(",")) rawBase64 = rawBase64.split(",")[1];
 
-  // 7. 轮询结果
-  const result = await pollTask(async () => {
-    const historyResp = await fetch(`${baseUrl}/history`);
-    const history = await historyResp.json();
-    const run = history[promptId];
-    if (!run) return { completed: false };
-    if (run.status?.exec_info?.error) {
-      return { completed: true, error: JSON.stringify(run.status.exec_info.error) };
+    logger(`[Wan2.2 I2V] 开始生成，参考图 base64 长度: ${rawBase64.length}`);
+
+    const workflow = JSON.parse(JSON.stringify(WORKFLOW_JSON_I2V));
+
+    workflow["30"] = {
+      class_type: "easy loadImageBase64",
+      inputs: { base64_data: rawBase64, image_output: "Preview", save_prefix: "ComfyUI" }
+    };
+
+    workflow["12"]["inputs"]["text"] = config.prompt;
+
+    const frameRate = 16;
+    const frameCount = Math.max(config.duration * frameRate + 1, 1);
+    workflow["29"]["inputs"]["length"] = frameCount;
+
+    let width = 832, height = 480;
+    if (config.resolution === "720p") {
+      width = config.aspectRatio === "16:9" ? 1280 : 720;
+      height = config.aspectRatio === "16:9" ? 720 : 1280;
+    } else if (config.resolution === "1080p") {
+      width = config.aspectRatio === "16:9" ? 1920 : 1080;
+      height = config.aspectRatio === "16:9" ? 1080 : 1920;
     }
+    workflow["31"]["inputs"]["width"] = width;
+    workflow["31"]["inputs"]["height"] = height;
 
-    // 检查 VHS_VideoCombine（节点 26）的输出
-    const output = run.outputs?.["26"];
-    const fileInfo = output?.video?.[0] || output?.gifs?.[0] || output?.images?.[0];
-    if (fileInfo) return { completed: true, data: fileInfo };
-    return { completed: false };
-  }, 3000, 600000);
+    logger(`[Wan2.2 I2V] 分辨率: ${width}x${height}, 帧数: ${frameCount}`);
 
-  if (result.error) throw new Error(`Wan2.2 T2V 生成失败: ${result.error}`);
-  if (!result.data) throw new Error("未找到生成的视频");
+    workflow["14"]["inputs"]["noise_seed"] = generateSeed();
+    workflow["15"]["inputs"]["noise_seed"] = generateSeed();
 
-  // 8. 下载视频并转为 Base64
-  const fileInfo = result.data;
-  const downloadUrl = `${baseUrl}/view?filename=${encodeURIComponent(fileInfo.filename)}&subfolder=${encodeURIComponent(fileInfo.subfolder || "")}&type=${fileInfo.type}`;
-  logger(`[Wan2.2 T2V] 下载视频: ${downloadUrl}`);
-  return await urlToBase64(downloadUrl);
+    const submitResp = await fetch(`${baseUrl}/prompt`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: workflow }),
+    });
+    const submitData = await submitResp.json();
+    const promptId = submitData.prompt_id;
+    if (!promptId) throw new Error(`提交失败：${JSON.stringify(submitData)}`);
+    logger(`[Wan2.2 I2V] 任务已提交，ID: ${promptId}`);
+
+    const result = await pollTask(async () => {
+      const historyResp = await fetch(`${baseUrl}/history`);
+      const history = await historyResp.json();
+      const run = history[promptId];
+      if (!run) return { completed: false };
+      if (run.status?.exec_info?.error) {
+        return { completed: true, error: JSON.stringify(run.status.exec_info.error) };
+      }
+      const output = run.outputs?.["26"];
+      const fileInfo = output?.video?.[0] || output?.gifs?.[0] || output?.images?.[0];
+      if (fileInfo) return { completed: true, data: fileInfo };
+      return { completed: false };
+    }, 3000, 600000);
+
+    if (result.error) throw new Error(`Wan2.2 I2V 生成失败: ${result.error}`);
+    if (!result.data) throw new Error("未找到生成的视频");
+    const fileInfo = result.data;
+    const downloadUrl = `${baseUrl}/view?filename=${encodeURIComponent(fileInfo.filename)}&subfolder=${encodeURIComponent(fileInfo.subfolder || "")}&type=${fileInfo.type}`;
+    logger(`[Wan2.2 I2V] 下载视频: ${downloadUrl}`);
+    return await urlToBase64(downloadUrl);
+  }
+
+  // ---- T2V：文生视频 ----
+  if (modelName === "wan2.2-t2v") {
+    logger(`[Wan2.2 T2V] 开始生成视频，提示词长度: ${config.prompt.length}`);
+
+    const workflow = JSON.parse(JSON.stringify(WORKFLOW_JSON_T2V));
+
+    workflow["12"]["inputs"]["text"] = config.prompt;
+
+    const frameRate = 20;
+    const frameCount = Math.max(config.duration * frameRate + 1, 1);
+    workflow["21"]["inputs"]["length"] = frameCount;
+
+    let width = 832, height = 480;
+    if (config.resolution === "720p") {
+      width = config.aspectRatio === "16:9" ? 1280 : 720;
+      height = config.aspectRatio === "16:9" ? 720 : 1280;
+    } else if (config.resolution === "1080p") {
+      width = config.aspectRatio === "16:9" ? 1920 : 1080;
+      height = config.aspectRatio === "16:9" ? 1080 : 1920;
+    }
+    workflow["21"]["inputs"]["width"] = width;
+    workflow["21"]["inputs"]["height"] = height;
+
+    logger(`[Wan2.2 T2V] 分辨率: ${width}x${height}, 帧数: ${frameCount}`);
+
+    workflow["14"]["inputs"]["noise_seed"] = generateSeed();
+    workflow["15"]["inputs"]["noise_seed"] = generateSeed();
+
+    const submitResp = await fetch(`${baseUrl}/prompt`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: workflow }),
+    });
+    const submitData = await submitResp.json();
+    const promptId = submitData.prompt_id;
+    if (!promptId) throw new Error(`提交失败：${JSON.stringify(submitData)}`);
+    logger(`[Wan2.2 T2V] 任务已提交，ID: ${promptId}`);
+
+    const result = await pollTask(async () => {
+      const historyResp = await fetch(`${baseUrl}/history`);
+      const history = await historyResp.json();
+      const run = history[promptId];
+      if (!run) return { completed: false };
+      if (run.status?.exec_info?.error) {
+        return { completed: true, error: JSON.stringify(run.status.exec_info.error) };
+      }
+      const output = run.outputs?.["26"];
+      const fileInfo = output?.video?.[0] || output?.gifs?.[0] || output?.images?.[0];
+      if (fileInfo) return { completed: true, data: fileInfo };
+      return { completed: false };
+    }, 3000, 600000);
+
+    if (result.error) throw new Error(`Wan2.2 T2V 生成失败: ${result.error}`);
+    if (!result.data) throw new Error("未找到生成的视频");
+    const fileInfo = result.data;
+    const downloadUrl = `${baseUrl}/view?filename=${encodeURIComponent(fileInfo.filename)}&subfolder=${encodeURIComponent(fileInfo.subfolder || "")}&type=${fileInfo.type}`;
+    logger(`[Wan2.2 T2V] 下载视频: ${downloadUrl}`);
+    return await urlToBase64(downloadUrl);
+  }
+
+  throw new Error(`未知的视频模型: ${modelName}`);
 };
 
 const ttsRequest = async (config: TTSConfig, model: TTSModel): Promise<string> => {

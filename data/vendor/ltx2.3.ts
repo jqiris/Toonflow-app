@@ -51,7 +51,7 @@ const vendor: VendorConfig = {
       name: "LTX 2.3 Multi2V 22B",
       modelName: "ltx2.3-multi2v",
       type: "video",
-      mode: ["imageReference:6"],
+      mode: [["imageReference:6"]],
       audio: "optional",
       durationResolutionMap: [
       { duration: [3, 5, 8, 10], resolution: ["480p", "720p", "1080p"] }
@@ -2631,6 +2631,12 @@ const WORKFLOW_JSON_MULTI2V = {
 };
 
 // ============================================================
+// 辅助函数
+// ============================================================
+
+const generateSeed = () => crypto.randomBytes(4).readUInt32BE();
+
+// ============================================================
 // 适配器函数
 // ============================================================
 
@@ -2642,341 +2648,276 @@ const imageRequest = async (config: ImageConfig, model: ImageModel): Promise<str
   throw new Error("不支持图片生成");
 };
 
-// 首尾帧生视频（FLF2V）
+// 视频生成（根据 model.modelName 分派到对应工作流）
 const videoRequest = async (config: VideoConfig, model: VideoModel): Promise<string> => {
   const baseUrl = vendor.inputValues.baseUrl || "http://localhost:8188";
   if (!config.prompt) throw new Error("缺少视频生成提示词");
 
-  // 1. 处理参考图（首帧 + 尾帧）
-  const imageRefs = (config.referenceList || []).filter((r) => r.type === "image");
-  if (imageRefs.length < 2) throw new Error("首尾帧生视频需要提供首帧和尾帧两张图片");
+  const modelName = model.modelName;
 
-  let firstFrameBase64 = imageRefs[0].base64 || "";
-  let lastFrameBase64 = imageRefs[1].base64 || "";
-  if (firstFrameBase64.includes(",")) firstFrameBase64 = firstFrameBase64.split(",")[1];
-  if (lastFrameBase64.includes(",")) lastFrameBase64 = lastFrameBase64.split(",")[1];
+  // ---- FLF2V：首尾帧生视频 ----
+  if (modelName === "ltx2.3-flf2v") {
+    const imageRefs = (config.referenceList || []).filter((r) => r.type === "image");
+    if (imageRefs.length < 2) throw new Error("首尾帧生视频需要提供首帧和尾帧两张图片");
 
-  logger(`[LTX 2.3 FLF2V] 开始生成，首帧 base64 长度: ${firstFrameBase64.length}, 尾帧 base64 长度: ${lastFrameBase64.length}`);
+    let firstFrameBase64 = imageRefs[0].base64 || "";
+    let lastFrameBase64 = imageRefs[1].base64 || "";
+    if (firstFrameBase64.includes(",")) firstFrameBase64 = firstFrameBase64.split(",")[1];
+    if (lastFrameBase64.includes(",")) lastFrameBase64 = lastFrameBase64.split(",")[1];
 
-  // 2. 深拷贝工作流
-  const workflow = JSON.parse(JSON.stringify(WORKFLOW_JSON_FLF2V));
+    logger(`[LTX 2.3 FLF2V] 开始生成，首帧 base64 长度: ${firstFrameBase64.length}, 尾帧 base64 长度: ${lastFrameBase64.length}`);
 
-  // 3. 替换首帧 LoadImage（节点 45）为 easy loadImageBase64
-  workflow["45"] = {
-    class_type: "easy loadImageBase64",
-    inputs: { base64_data: firstFrameBase64, image_output: "Preview", save_prefix: "ComfyUI" }
-  };
+    const workflow = JSON.parse(JSON.stringify(WORKFLOW_JSON_FLF2V));
 
-  // 4. 替换尾帧 LoadImage（节点 47）为 easy loadImageBase64
-  workflow["47"] = {
-    class_type: "easy loadImageBase64",
-    inputs: { base64_data: lastFrameBase64, image_output: "Preview", save_prefix: "ComfyUI" }
-  };
+    workflow["45"] = {
+      class_type: "easy loadImageBase64",
+      inputs: { base64_data: firstFrameBase64, image_output: "Preview", save_prefix: "ComfyUI" }
+    };
+    workflow["47"] = {
+      class_type: "easy loadImageBase64",
+      inputs: { base64_data: lastFrameBase64, image_output: "Preview", save_prefix: "ComfyUI" }
+    };
 
-  // 5. 注入提示词（节点 16，CLIPTextEncode 正向提示词）
-  workflow["16"]["inputs"]["text"] = config.prompt;
+    workflow["16"]["inputs"]["text"] = config.prompt;
+    workflow["169"]["inputs"]["value"] = config.duration;
 
-  // 6. 计算并设置视频时长（节点 169，INTConstant LENGTH in seconds）
-  workflow["169"]["inputs"]["value"] = config.duration;
+    const frameRate = 24;
+    workflow["164"]["inputs"]["value"] = frameRate;
 
-  // 7. 设置帧率（节点 164，PrimitiveFloat FPS）
-  const frameRate = 24;
-  workflow["164"]["inputs"]["value"] = frameRate;
+    let width = 960, height = 544;
+    let longerEdge = 1536;
+    if (config.resolution === "480p") {
+      width = config.aspectRatio === "16:9" ? 854 : 480;
+      height = config.aspectRatio === "16:9" ? 480 : 854;
+      longerEdge = 1024;
+    } else if (config.resolution === "720p") {
+      width = config.aspectRatio === "16:9" ? 1280 : 720;
+      height = config.aspectRatio === "16:9" ? 720 : 1280;
+      longerEdge = 1280;
+    } else if (config.resolution === "1080p") {
+      width = config.aspectRatio === "16:9" ? 1920 : 1080;
+      height = config.aspectRatio === "16:9" ? 1080 : 1920;
+      longerEdge = 1920;
+    }
+    workflow["166"]["inputs"]["value"] = width;
+    workflow["167"]["inputs"]["value"] = height;
+    workflow["42"]["inputs"]["longer_edge"] = longerEdge;
+    workflow["49"]["inputs"]["longer_edge"] = longerEdge;
 
-  // 8. 设置分辨率
-  //    节点 166 (INTConstant WIDTH) 和 节点 167 (INTConstant HEIGHT)
-  //    节点 42 (ResizeImagesByLongerEdge) 的 longer_edge 参数
-  let width = 960, height = 544;
-  let longerEdge = 1536;
-  if (config.resolution === "480p") {
-    width = config.aspectRatio === "16:9" ? 854 : 480;
-    height = config.aspectRatio === "16:9" ? 480 : 854;
-    longerEdge = 1024;
-  } else if (config.resolution === "720p") {
-    width = config.aspectRatio === "16:9" ? 1280 : 720;
-    height = config.aspectRatio === "16:9" ? 720 : 1280;
-    longerEdge = 1280;
-  } else if (config.resolution === "1080p") {
-    width = config.aspectRatio === "16:9" ? 1920 : 1080;
-    height = config.aspectRatio === "16:9" ? 1080 : 1920;
-    longerEdge = 1920;
+    logger(`[LTX 2.3 FLF2V] 分辨率: ${width}x${height}, 时长: ${config.duration}s, 帧率: ${frameRate}`);
+
+    workflow["14"]["inputs"]["noise_seed"] = generateSeed();
+    workflow["15"]["inputs"]["noise_seed"] = generateSeed();
+
+    const submitResp = await fetch(`${baseUrl}/prompt`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: workflow }),
+    });
+    const submitData = await submitResp.json();
+    const promptId = submitData.prompt_id;
+    if (!promptId) throw new Error(`提交失败：${JSON.stringify(submitData)}`);
+    logger(`[LTX 2.3 FLF2V] 任务已提交，ID: ${promptId}`);
+
+    const result = await pollTask(async () => {
+      const historyResp = await fetch(`${baseUrl}/history`);
+      const history = await historyResp.json();
+      const run = history[promptId];
+      if (!run) return { completed: false };
+      if (run.status?.exec_info?.error) {
+        return { completed: true, error: JSON.stringify(run.status.exec_info.error) };
+      }
+      const output = run.outputs?.["43"];
+      const fileInfo = output?.video?.[0] || output?.gifs?.[0] || output?.images?.[0];
+      if (fileInfo) return { completed: true, data: fileInfo };
+      return { completed: false };
+    }, 3000, 600000);
+
+    if (result.error) throw new Error(`LTX 2.3 FLF2V 生成失败: ${result.error}`);
+    if (!result.data) throw new Error("未找到生成的视频");
+    const fileInfo = result.data;
+    const downloadUrl = `${baseUrl}/view?filename=${encodeURIComponent(fileInfo.filename)}&subfolder=${encodeURIComponent(fileInfo.subfolder || "")}&type=${fileInfo.type}`;
+    logger(`[LTX 2.3 FLF2V] 下载视频: ${downloadUrl}`);
+    return await urlToBase64(downloadUrl);
   }
-  workflow["166"]["inputs"]["value"] = width;
-  workflow["167"]["inputs"]["value"] = height;
-  workflow["42"]["inputs"]["longer_edge"] = longerEdge;
-  workflow["49"]["inputs"]["longer_edge"] = longerEdge;
 
-  logger(`[LTX 2.3 FLF2V] 分辨率: ${width}x${height}, 时长: ${config.duration}s, 帧率: ${frameRate}`);
+  // ---- I2V：图生视频 ----
+  if (modelName === "ltx2.3-i2v") {
+    let rawBase64 = config.referenceList?.[0]?.base64 || "";
+    if (!rawBase64) throw new Error("图生视频需要提供参考图片");
+    if (rawBase64.includes(",")) rawBase64 = rawBase64.split(",")[1];
 
-  // 9. 设置随机种子
-  workflow["14"]["inputs"]["noise_seed"] = generateSeed();
-  workflow["15"]["inputs"]["noise_seed"] = generateSeed();
+    logger(`[LTX 2.3 I2V] 开始生成，参考图 base64 长度: ${rawBase64.length}`);
 
-  // 10. 提交到 ComfyUI API
-  const submitResp = await fetch(`${baseUrl}/prompt`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt: workflow }),
-  });
-  const submitData = await submitResp.json();
-  const promptId = submitData.prompt_id;
+    const workflow = JSON.parse(JSON.stringify(WORKFLOW_JSON_IT2V));
 
-  if (!promptId) {
-    throw new Error(`提交失败：${JSON.stringify(submitData)}`);
+    workflow["2004"] = {
+      class_type: "easy loadImageBase64",
+      inputs: { base64_data: rawBase64, image_output: "Preview", save_prefix: "ComfyUI" }
+    };
+
+    workflow["2483"]["inputs"]["text"] = config.prompt;
+
+    const frameRate = 24;
+    const frameCount = Math.max(config.duration * frameRate + 1, 1);
+    workflow["4988"]["inputs"]["value"] = frameCount;
+    workflow["4989"]["inputs"]["value"] = frameRate;
+
+    let width = 864, height = 480;
+    let longerSize = 1024;
+    if (config.resolution === "720p") {
+      width = config.aspectRatio === "16:9" ? 1280 : 720;
+      height = config.aspectRatio === "16:9" ? 720 : 1280;
+      longerSize = 1280;
+    } else if (config.resolution === "1080p") {
+      width = config.aspectRatio === "16:9" ? 1920 : 1080;
+      height = config.aspectRatio === "16:9" ? 1080 : 1920;
+      longerSize = 1920;
+    } else if (config.resolution === "480p") {
+      width = config.aspectRatio === "16:9" ? 854 : 480;
+      height = config.aspectRatio === "16:9" ? 480 : 854;
+      longerSize = 1024;
+    }
+    workflow["4990"]["inputs"]["resize_type.longer_size"] = longerSize;
+    workflow["3059"]["inputs"]["width"] = width;
+    workflow["3059"]["inputs"]["height"] = height;
+
+    logger(`[LTX 2.3 I2V] 分辨率: ${width}x${height}, 帧数: ${frameCount}, 帧率: ${frameRate}`);
+
+    workflow["4832"]["inputs"]["noise_seed"] = generateSeed();
+    workflow["4967"]["inputs"]["noise_seed"] = generateSeed();
+
+    const submitResp = await fetch(`${baseUrl}/prompt`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: workflow }),
+    });
+    const submitData = await submitResp.json();
+    const promptId = submitData.prompt_id;
+    if (!promptId) throw new Error(`提交失败：${JSON.stringify(submitData)}`);
+    logger(`[LTX 2.3 I2V] 任务已提交，ID: ${promptId}`);
+
+    const result = await pollTask(async () => {
+      const historyResp = await fetch(`${baseUrl}/history`);
+      const history = await historyResp.json();
+      const run = history[promptId];
+      if (!run) return { completed: false };
+      if (run.status?.exec_info?.error) {
+        return { completed: true, error: JSON.stringify(run.status.exec_info.error) };
+      }
+      const output = run.outputs?.["4852"];
+      const fileInfo = output?.video?.[0] || output?.gifs?.[0] || output?.images?.[0];
+      if (fileInfo) return { completed: true, data: fileInfo };
+      return { completed: false };
+    }, 3000, 600000);
+
+    if (result.error) throw new Error(`LTX 2.3 I2V 生成失败: ${result.error}`);
+    if (!result.data) throw new Error("未找到生成的视频");
+    const fileInfo = result.data;
+    const downloadUrl = `${baseUrl}/view?filename=${encodeURIComponent(fileInfo.filename)}&subfolder=${encodeURIComponent(fileInfo.subfolder || "")}&type=${fileInfo.type}`;
+    logger(`[LTX 2.3 I2V] 下载视频: ${downloadUrl}`);
+    return await urlToBase64(downloadUrl);
   }
 
-  logger(`[LTX 2.3 FLF2V] 任务已提交，ID: ${promptId}`);
+  // ---- Multi2V：多参考图生视频 ----
+  if (modelName === "ltx2.3-multi2v") {
+    const imageRefs = (config.referenceList || []).filter((r) => r.type === "image");
+    if (imageRefs.length === 0) throw new Error("多参考图生视频需要至少一张参考图片");
 
-  // 11. 轮询结果
-  const result = await pollTask(async () => {
-    const historyResp = await fetch(`${baseUrl}/history`);
-    const history = await historyResp.json();
-    const run = history[promptId];
-    if (!run) return { completed: false };
-    if (run.status?.exec_info?.error) {
-      return { completed: true, error: JSON.stringify(run.status.exec_info.error) };
+    const images = imageRefs.map((r) => {
+      let b64 = r.base64 || "";
+      if (b64.includes(",")) b64 = b64.split(",")[1];
+      return b64;
+    });
+
+    logger(`[LTX 2.3 Multi2V] 开始生成，${images.length} 张参考图`);
+
+    const workflow = JSON.parse(JSON.stringify(WORKFLOW_JSON_MULTI2V));
+
+    const makeEasyLoad = (b64: string) => ({
+      class_type: "easy loadImageBase64",
+      inputs: { base64_data: b64, image_output: "Preview", save_prefix: "ComfyUI" }
+    });
+
+    const GUIDE_NODE_IDS = ["45", "56", "47", "248", "254", "257"] as const;
+    const guideCount = images.length;
+
+    workflow["221"]["inputs"]["num_guides"] = String(guideCount);
+
+    for (let i = 0; i < guideCount; i++) {
+      workflow[GUIDE_NODE_IDS[i]] = makeEasyLoad(images[i]);
+    }
+    for (let i = guideCount; i < 6; i++) {
+      delete workflow[GUIDE_NODE_IDS[i]];
+      delete workflow["221"]["inputs"][`num_guides.image_${i + 1}`];
     }
 
-    // 检查 VHS_VideoCombine（节点 43）的输出
-    const output = run.outputs?.["43"];
-    const fileInfo = output?.video?.[0] || output?.gifs?.[0] || output?.images?.[0];
-    if (fileInfo) return { completed: true, data: fileInfo };
-    return { completed: false };
-  }, 3000, 600000);
+    workflow["16"]["inputs"]["text"] = config.prompt;
+    workflow["169"]["inputs"]["value"] = config.duration;
 
-  if (result.error) throw new Error(`LTX 2.3 FLF2V 生成失败: ${result.error}`);
-  if (!result.data) throw new Error("未找到生成的视频");
-
-  // 12. 下载视频并转为 Base64
-  const fileInfo = result.data;
-  const downloadUrl = `${baseUrl}/view?filename=${encodeURIComponent(fileInfo.filename)}&subfolder=${encodeURIComponent(fileInfo.subfolder || "")}&type=${fileInfo.type}`;
-  logger(`[LTX 2.3 FLF2V] 下载视频: ${downloadUrl}`);
-  return await urlToBase64(downloadUrl);
-};
-
-// 图生视频（I2V）
-const videoRequest = async (config: VideoConfig, model: VideoModel): Promise<string> => {
-  const baseUrl = vendor.inputValues.baseUrl || "http://localhost:8188";
-  if (!config.prompt) throw new Error("缺少视频生成提示词");
-
-  // 1. 处理参考图
-  let rawBase64 = config.referenceList?.[0]?.base64 || "";
-  if (!rawBase64) throw new Error("图生视频需要提供参考图片");
-  if (rawBase64.includes(",")) rawBase64 = rawBase64.split(",")[1];
-
-  logger(`[LTX 2.3 I2V] 开始生成，参考图 base64 长度: ${rawBase64.length}`);
-
-  // 2. 深拷贝工作流
-  const workflow = JSON.parse(JSON.stringify(WORKFLOW_JSON_IT2V));
-
-  // 3. 替换 LoadImage（节点 2004）为 easy loadImageBase64
-  workflow["2004"] = {
-    class_type: "easy loadImageBase64",
-    inputs: { base64_data: rawBase64, image_output: "Preview", save_prefix: "ComfyUI" }
-  };
-
-  // 4. 注入提示词（节点 2483）
-  workflow["2483"]["inputs"]["text"] = config.prompt;
-
-  // 5. 计算并设置帧数（节点 4988，帧率 24fps）
-  const frameRate = 24;
-  const frameCount = Math.max(config.duration * frameRate + 1, 1);
-  workflow["4988"]["inputs"]["value"] = frameCount;
-
-  // 6. 设置帧率（节点 4989）
-  workflow["4989"]["inputs"]["value"] = frameRate;
-
-  // 7. 设置分辨率
-  //    节点 4990 (ResizeImageMaskNode) 控制输入图缩放
-  //    节点 3059 (EmptyLTXVLatentVideo) 控制 latent 尺寸
-  let width = 864, height = 480;
-  let longerSize = 1024;
-  if (config.resolution === "720p") {
-    width = config.aspectRatio === "16:9" ? 1280 : 720;
-    height = config.aspectRatio === "16:9" ? 720 : 1280;
-    longerSize = 1280;
-  } else if (config.resolution === "1080p") {
-    width = config.aspectRatio === "16:9" ? 1920 : 1080;
-    height = config.aspectRatio === "16:9" ? 1080 : 1920;
-    longerSize = 1920;
-  } else if (config.resolution === "480p") {
-    width = config.aspectRatio === "16:9" ? 854 : 480;
-    height = config.aspectRatio === "16:9" ? 480 : 854;
-    longerSize = 1024;
-  }
-  workflow["4990"]["inputs"]["resize_type.longer_size"] = longerSize;
-  workflow["3059"]["inputs"]["width"] = width;
-  workflow["3059"]["inputs"]["height"] = height;
-
-  logger(`[LTX 2.3 I2V] 分辨率: ${width}x${height}, 帧数: ${frameCount}, 帧率: ${frameRate}`);
-
-  // 8. 设置随机种子
-  workflow["4832"]["inputs"]["noise_seed"] = generateSeed();
-  workflow["4967"]["inputs"]["noise_seed"] = generateSeed();
-
-  // 9. 提交到 ComfyUI API
-  const submitResp = await fetch(`${baseUrl}/prompt`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt: workflow }),
-  });
-  const submitData = await submitResp.json();
-  const promptId = submitData.prompt_id;
-
-  if (!promptId) {
-    throw new Error(`提交失败：${JSON.stringify(submitData)}`);
-  }
-
-  logger(`[LTX 2.3 I2V] 任务已提交，ID: ${promptId}`);
-
-  // 10. 轮询结果
-  const result = await pollTask(async () => {
-    const historyResp = await fetch(`${baseUrl}/history`);
-    const history = await historyResp.json();
-    const run = history[promptId];
-    if (!run) return { completed: false };
-    if (run.status?.exec_info?.error) {
-      return { completed: true, error: JSON.stringify(run.status.exec_info.error) };
+    let width = 960, height = 544;
+    let longerEdge = 1536;
+    if (config.resolution === "480p") {
+      width = config.aspectRatio === "16:9" ? 854 : 480;
+      height = config.aspectRatio === "16:9" ? 480 : 854;
+      longerEdge = 1024;
+    } else if (config.resolution === "720p") {
+      width = config.aspectRatio === "16:9" ? 1280 : 720;
+      height = config.aspectRatio === "16:9" ? 720 : 1280;
+      longerEdge = 1280;
+    } else if (config.resolution === "1080p") {
+      width = config.aspectRatio === "16:9" ? 1920 : 1080;
+      height = config.aspectRatio === "16:9" ? 1080 : 1920;
+      longerEdge = 1920;
     }
+    workflow["166"]["inputs"]["value"] = width;
+    workflow["167"]["inputs"]["value"] = height;
 
-    // 检查 SaveVideo（节点 4852）的输出
-    const output = run.outputs?.["4852"];
-    const fileInfo = output?.video?.[0] || output?.gifs?.[0] || output?.images?.[0];
-    if (fileInfo) return { completed: true, data: fileInfo };
-    return { completed: false };
-  }, 3000, 600000);
+    workflow["42"]["inputs"]["longer_edge"] = longerEdge;
+    workflow["58"]["inputs"]["longer_edge"] = longerEdge;
+    workflow["49"]["inputs"]["longer_edge"] = longerEdge;
+    workflow["250"]["inputs"]["longer_edge"] = longerEdge;
+    workflow["267"]["inputs"]["longer_edge"] = longerEdge;
+    workflow["270"]["inputs"]["longer_edge"] = longerEdge;
 
-  if (result.error) throw new Error(`LTX 2.3 I2V 生成失败: ${result.error}`);
-  if (!result.data) throw new Error("未找到生成的视频");
+    logger(`[LTX 2.3 Multi2V] 分辨率: ${width}x${height}, 时长: ${config.duration}s, 参考图: ${images.length}张`);
 
-  // 11. 下载视频并转为 Base64
-  const fileInfo = result.data;
-  const downloadUrl = `${baseUrl}/view?filename=${encodeURIComponent(fileInfo.filename)}&subfolder=${encodeURIComponent(fileInfo.subfolder || "")}&type=${fileInfo.type}`;
-  logger(`[LTX 2.3 I2V] 下载视频: ${downloadUrl}`);
-  return await urlToBase64(downloadUrl);
-};
+    workflow["14"]["inputs"]["noise_seed"] = generateSeed();
+    workflow["15"]["inputs"]["noise_seed"] = generateSeed();
 
-// 多参考图生视频（Multi2V）
-const videoRequest = async (config: VideoConfig, model: VideoModel): Promise<string> => {
-  const baseUrl = vendor.inputValues.baseUrl || "http://localhost:8188";
-  if (!config.prompt) throw new Error("缺少视频生成提示词");
+    const submitResp = await fetch(`${baseUrl}/prompt`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: workflow }),
+    });
+    const submitData = await submitResp.json();
+    const promptId = submitData.prompt_id;
+    if (!promptId) throw new Error(`提交失败：${JSON.stringify(submitData)}`);
+    logger(`[LTX 2.3 Multi2V] 任务已提交，ID: ${promptId}`);
 
-  // 1. 处理参考图 - 支持最多 6 张引导图
-  const imageRefs = (config.referenceList || []).filter((r) => r.type === "image");
-  if (imageRefs.length === 0) throw new Error("多参考图生视频需要至少一张参考图片");
+    const result = await pollTask(async () => {
+      const historyResp = await fetch(`${baseUrl}/history`);
+      const history = await historyResp.json();
+      const run = history[promptId];
+      if (!run) return { completed: false };
+      if (run.status?.exec_info?.error) {
+        return { completed: true, error: JSON.stringify(run.status.exec_info.error) };
+      }
+      const output = run.outputs?.["43"];
+      const fileInfo = output?.video?.[0] || output?.gifs?.[0] || output?.images?.[0];
+      if (fileInfo) return { completed: true, data: fileInfo };
+      return { completed: false };
+    }, 3000, 600000);
 
-  const images = imageRefs.map((r) => {
-    let b64 = r.base64 || "";
-    if (b64.includes(",")) b64 = b64.split(",")[1];
-    return b64;
-  });
-
-  logger(`[LTX 2.3 Multi2V] 开始生成，${images.length} 张参考图`);
-
-  // 2. 深拷贝工作流
-  const workflow = JSON.parse(JSON.stringify(WORKFLOW_JSON_MULTI2V));
-
-  // 3. 替换引导图 LoadImage 节点为 easy loadImageBase64，按实际上传数量设置 num_guides
-  const makeEasyLoad = (b64: string) => ({
-    class_type: "easy loadImageBase64",
-    inputs: { base64_data: b64, image_output: "Preview", save_prefix: "ComfyUI" }
-  });
-
-  const GUIDE_NODE_IDS = ["45", "56", "47", "248", "254", "257"] as const;
-  const guideCount = images.length;
-
-  workflow["221"]["inputs"]["num_guides"] = String(guideCount);
-
-  for (let i = 0; i < guideCount; i++) {
-    workflow[GUIDE_NODE_IDS[i]] = makeEasyLoad(images[i]);
-  }
-  // 清除未使用的引导图连接（避免 ComfyUI 报缺失节点）
-  for (let i = guideCount; i < 6; i++) {
-    delete workflow[GUIDE_NODE_IDS[i]];
-    delete workflow["221"]["inputs"][`num_guides.image_${i + 1}`];
+    if (result.error) throw new Error(`LTX 2.3 Multi2V 生成失败: ${result.error}`);
+    if (!result.data) throw new Error("未找到生成的视频");
+    const fileInfo = result.data;
+    const downloadUrl = `${baseUrl}/view?filename=${encodeURIComponent(fileInfo.filename)}&subfolder=${encodeURIComponent(fileInfo.subfolder || "")}&type=${fileInfo.type}`;
+    logger(`[LTX 2.3 Multi2V] 下载视频: ${downloadUrl}`);
+    return await urlToBase64(downloadUrl);
   }
 
-  // 4. 注入提示词（节点 16）
-  workflow["16"]["inputs"]["text"] = config.prompt;
-
-  // 5. 计算并设置视频时长（节点 169）
-  workflow["169"]["inputs"]["value"] = config.duration;
-
-  // 6. 设置分辨率
-  //    节点 166 (WIDTH), 节点 167 (HEIGHT) → 控制首帧缩放尺寸
-  //    所有 ResizeImagesByLongerEdge 节点 → 控制 LTXVPreprocess 输入尺寸
-  let width = 960, height = 544;
-  let longerEdge = 1536;
-  if (config.resolution === "480p") {
-    width = config.aspectRatio === "16:9" ? 854 : 480;
-    height = config.aspectRatio === "16:9" ? 480 : 854;
-    longerEdge = 1024;
-  } else if (config.resolution === "720p") {
-    width = config.aspectRatio === "16:9" ? 1280 : 720;
-    height = config.aspectRatio === "16:9" ? 720 : 1280;
-    longerEdge = 1280;
-  } else if (config.resolution === "1080p") {
-    width = config.aspectRatio === "16:9" ? 1920 : 1080;
-    height = config.aspectRatio === "16:9" ? 1080 : 1920;
-    longerEdge = 1920;
-  }
-  workflow["166"]["inputs"]["value"] = width;
-  workflow["167"]["inputs"]["value"] = height;
-
-  // 设置所有 ResizeImagesByLongerEdge 的 longer_edge
-  workflow["42"]["inputs"]["longer_edge"] = longerEdge;
-  workflow["58"]["inputs"]["longer_edge"] = longerEdge;
-  workflow["49"]["inputs"]["longer_edge"] = longerEdge;
-  workflow["250"]["inputs"]["longer_edge"] = longerEdge;
-  workflow["267"]["inputs"]["longer_edge"] = longerEdge;
-  workflow["270"]["inputs"]["longer_edge"] = longerEdge;
-
-  logger(`[LTX 2.3 Multi2V] 分辨率: ${width}x${height}, 时长: ${config.duration}s, 参考图: ${images.length}张`);
-
-  // 7. 设置随机种子
-  workflow["14"]["inputs"]["noise_seed"] = generateSeed();
-  workflow["15"]["inputs"]["noise_seed"] = generateSeed();
-
-  // 8. 提交到 ComfyUI API
-  const submitResp = await fetch(`${baseUrl}/prompt`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt: workflow }),
-  });
-  const submitData = await submitResp.json();
-  const promptId = submitData.prompt_id;
-
-  if (!promptId) {
-    throw new Error(`提交失败：${JSON.stringify(submitData)}`);
-  }
-
-  logger(`[LTX 2.3 Multi2V] 任务已提交，ID: ${promptId}`);
-
-  // 9. 轮询结果
-  const result = await pollTask(async () => {
-    const historyResp = await fetch(`${baseUrl}/history`);
-    const history = await historyResp.json();
-    const run = history[promptId];
-    if (!run) return { completed: false };
-    if (run.status?.exec_info?.error) {
-      return { completed: true, error: JSON.stringify(run.status.exec_info.error) };
-    }
-
-    // 检查 VHS_VideoCombine（节点 43）的输出
-    const output = run.outputs?.["43"];
-    const fileInfo = output?.video?.[0] || output?.gifs?.[0] || output?.images?.[0];
-    if (fileInfo) return { completed: true, data: fileInfo };
-    return { completed: false };
-  }, 3000, 600000);
-
-  if (result.error) throw new Error(`LTX 2.3 Multi2V 生成失败: ${result.error}`);
-  if (!result.data) throw new Error("未找到生成的视频");
-
-  // 10. 下载视频并转为 Base64
-  const fileInfo = result.data;
-  const downloadUrl = `${baseUrl}/view?filename=${encodeURIComponent(fileInfo.filename)}&subfolder=${encodeURIComponent(fileInfo.subfolder || "")}&type=${fileInfo.type}`;
-  logger(`[LTX 2.3 Multi2V] 下载视频: ${downloadUrl}`);
-  return await urlToBase64(downloadUrl);
+  throw new Error(`未知的视频模型: ${modelName}`);
 };
 
 const ttsRequest = async (config: TTSConfig, model: TTSModel): Promise<string> => {
