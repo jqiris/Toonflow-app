@@ -2238,6 +2238,9 @@ const getBaseUrl = (): string => {
 /** 生成随机种子 */
 const generateSeed = (): number => Math.floor(Math.random() * 4294967295);
 
+/** 生成随机 LoRA 强度 (0.3 - 0.7) */
+const generateLoraStrength = (): number => Math.round((Math.random() * 0.4 + 0.3) * 10) / 10;
+
 /** 去掉 base64 头（data:xxx;base64,）并去除空白 */
 const stripHeader = (b64: string): string => {
   const raw = b64.includes(",") ? b64.split(",")[1] : b64;
@@ -2358,6 +2361,8 @@ const runZImageT2I = async (config: ImageConfig): Promise<string> => {
   const workflow = JSON.parse(JSON.stringify(WORKFLOW_Z_IMAGE_T2I));
   workflow["7"].inputs.text = config.prompt || "";
   workflow["13"].inputs.seed = generateSeed();
+  // LoRA 强度随机化 (0.3 - 0.7)，增加生成多样性
+  workflow["19"].inputs.strength_model = generateLoraStrength();
   const { width, height } = getResolution(config.size, config.aspectRatio);
   workflow["14"].inputs.width = width;
   workflow["14"].inputs.height = height;
