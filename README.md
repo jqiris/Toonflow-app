@@ -25,18 +25,10 @@
 </p>
 
 <div align="center">
-  <p align="center">
-    <img src="./docs/logo.png" alt="Toonflow Logo" height="120"/>
-  </p>
 
-  <p align="center">
-    <a href="https://git.io/typing-svg" target="_blank">
-      <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="https://readme-typing-svg.demolab.com?font=Fira+Code&size=40&duration=3000&pause=1000&color=FFFFFF&center=true&vCenter=true&width=600&lines=Toonflow;AI%E7%9F%AD%E5%89%A7%E5%B7%A5%E5%8E%82;%E5%8A%A8%E5%8A%A8%E6%89%8B%E6%8C%87%EF%BC%8C%E5%B0%8F%E8%AF%B4%E7%A7%92%E5%8F%98%E5%89%A7%E9%9B%86%EF%BC%81" />
-        <img alt="Typing SVG" src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=40&duration=3000&pause=1000&color=000000&center=true&vCenter=true&width=600&lines=Toonflow;AI%E7%9F%AD%E5%89%A7%E5%B7%A5%E5%8E%82;%E5%8A%A8%E5%8A%A8%E6%89%8B%E6%8C%87%EF%BC%8C%E5%B0%8F%E8%AF%B4%E7%A7%92%E5%8F%98%E5%89%A7%E9%9B%86%EF%BC%81" />
-      </picture>
-    </a>
-  </p>
+<img src="./docs/logo.png" alt="Toonflow Logo" height="120"/>
+
+[![Typing SVG](https://readme-typing-svg.demolab.com?font=Fira+Code&size=40&duration=3000&pause=1000&color=000000&center=true&vCenter=true&width=600&lines=Toonflow;AI%E7%9F%AD%E5%89%A7%E5%B7%A5%E5%8E%82;%E5%8A%A8%E5%8A%A8%E6%89%8B%E6%8C%87%EF%BC%8C%E5%B0%8F%E8%AF%B4%E7%A7%92%E5%8F%98%E5%89%A7%E9%9B%86%EF%BC%81)](https://git.io/typing-svg)
 
   <p align="center">
     <a href="https://github.com/HBAI-Ltd/Toonflow-app/stargazers">
@@ -77,9 +69,6 @@
     <img src="https://ziadoua.github.io/m3-Markdown-Badges/badges/Docker/docker2.svg" alt="Docker" />&nbsp;
     <img src="https://ziadoua.github.io/m3-Markdown-Badges/badges/Electron/electron2.svg" alt="Electron" />
   </p>
-  <p align="center">
-    <img src="https://mobaicons.com/icons/typescript,nodejs,electron,docker,socket?perline=5" alt="Tech Stack Icons" />
-  </p>
   
   > 🚀 **一站式短剧工程**：从文本到角色，从分镜到视频，0门槛全流程AI化，创作效率提升10倍+！
 </div>
@@ -93,7 +82,9 @@
         </a>
       </td>
       <td width="50%" align="center">
-        GVP - Gitee最有价值开源项目
+        <a href="./docs/gvp.jpg" target="_blank">
+          <img src="./docs/gvp.jpg" alt="Gitee GVP 认证证书" width="100%"/>
+        </a>
       </td>
     </tr>
   </table>
@@ -214,22 +205,22 @@ https://github.com/user-attachments/assets/2d9fddac-dfdf-4640-b030-b09d7f7287e9
 
 ## Demo 信息
 
-| 项目 | 详情 |
-| :--- | :--- |
-| 制作周期 | 约 2 小时 |
-| 视频模型 | Seedance 2.0 |
-| 图片模型 | GPT Image 2 |
-| 语言模型 | Claude Opus 4.6 |
+| 项目       | 详情                                            |
+| :--------- | :---------------------------------------------- |
+| 制作周期   | 约 2 小时                                       |
+| 视频模型   | Seedance 2.0                                    |
+| 图片模型   | GPT Image 2                                     |
+| 语言模型   | Claude Opus 4.6                                 |
 | 成片总时长 | 约 2 分钟（原始素材 3 分钟，剪除废片约 1 分钟） |
 
 ## 成本明细
 
-| 模型类型 | 费用 |
-| :--- | :--- |
-| 语言模型 | 约 ¥10 |
-| 视频模型（全量生成） | 约 ¥120 |
-| 图片模型 | 不足 ¥1 |
-| **合计** | **约 ¥130** |
+| 模型类型             | 费用        |
+| :------------------- | :---------- |
+| 语言模型             | 约 ¥10      |
+| 视频模型（全量生成） | 约 ¥120     |
+| 图片模型             | 不足 ¥1     |
+| **合计**             | **约 ¥130** |
 
 > **声明**：Demo 原始分辨率为 1080×1882，发布版本已压缩至 480p。如涉及版权问题，请联系我们删除处理。
 
@@ -318,15 +309,17 @@ docker run -d -p <本地端口>:10588 -v <本地数据路径>:/app/data toonflow
 
 ## 云端部署
 
-### 一、服务器环境要求
+### 云服务器部署
+
+#### 一、服务器环境要求
 
 - **系统**：Ubuntu 20.04+ / CentOS 7+
 - **Node.js**：24.x（推荐，最低 23.11.1+）
 - **内存**：2GB+
 
-### 二、服务器部署
+#### 二、服务器部署
 
-#### 1. 安装环境
+##### 1. 安装环境
 
 ```bash
 # 安装 Node.js
@@ -337,7 +330,7 @@ nvm install 24
 npm install -g yarn pm2
 ```
 
-#### 2. 部署项目
+##### 2. 部署项目
 
 **从 GitHub 克隆：**
 
@@ -359,7 +352,7 @@ yarn install
 yarn build
 ```
 
-#### 3. 配置 PM2
+##### 3. 配置 PM2
 
 创建 `pm2.json` 文件：
 
@@ -387,7 +380,7 @@ yarn build
 
 ---
 
-#### 4. 启动服务
+##### 4. 启动服务
 
 ```bash
 pm2 start pm2.json
@@ -395,7 +388,7 @@ pm2 startup
 pm2 save
 ```
 
-#### 5. 常用命令
+##### 5. 常用命令
 
 ```bash
 pm2 list              # 查看进程
@@ -408,7 +401,7 @@ pm2 monit             # 监控面板
 > 账号：`admin`  
 > 密码：`admin123`
 
-#### 6. 部署前端网站
+##### 6. 部署前端网站
 
 如需单独部署或定制前端界面，请参考前端仓库：
 
@@ -416,6 +409,47 @@ pm2 monit             # 监控面板
 - **Gitee**：[Toonflow-web](https://gitee.com/HBAI-Ltd/Toonflow-web)
 
 > 💡 **说明**：本仓库已内置编译好的前端资源，普通用户无需单独部署前端。前端仓库仅供需要二次开发的开发者使用。
+
+### 云平台部署
+
+> 🎉 **官方认证算力合作平台 —— 智星云**
+>
+> **[智星云](https://www.ai-galaxy.com/)** 是 **Toonflow 官方授权的商用镜像服务商**，已合法搭载、分发并支持商用全套 Toonflow AI 短剧制作镜像，**开箱即用，无需手动部署**。
+>
+> - 🌐 官网：[https://www.ai-galaxy.com](https://www.ai-galaxy.com)
+> - 📖 镜像部署图文教程：[点击查看教程](https://mp.weixin.qq.com/s/lq9X1ovQ1_TKeXMOLgicKg?scene=1)
+
+<details>
+<summary>📄 点击展开文字版教程</summary>
+
+#### 一、租用 GPU 阶段教程
+
+1. 智星云 - 算力市场 - 4090 / 4090 Plus，点击「立即租用」进入租用详情页。
+   > 💡 建议开启「按小时自动续租」模式，防止正在跑视频时实例到期停工。
+2. 镜像选择：`windows10LTSCwin10_Toonflow` - 创建实例。
+3. 等待实例启动 30s ~ 60s，查看链接方式 - RDP 登录文件下载 - 点击复制密码 - 双击已下载好的云端连接文件。
+4. 将复制好的密码粘贴并登录，连接进入云端桌面。
+   > 💡 鼠标移到云端桌面顶端稍作停留，会显示切换桌面操作栏，可点击“——”切换回自己的电脑桌面，或点击“□”缩小布置到自己的电脑桌面作为操作窗口。
+
+#### 二、配置 Toonflow、启动 ComfyUI 阶段教程
+
+1. 先配置调用 Agent 的模型：打开桌面上的 Toonflow - 模型服务 - OpenAI 标准接口 - 填入 API 密钥以及请求地址。
+   默认账号：`admin`　密码：`admin123`（建议登录后修改密码）
+   > 💡 这里直接使用智星云的 AI 大模型 Token 服务，官方接口，稳定安全，低至 6 折（小说转剧本调用一次，约花费 6.4 毛钱）。
+   - 智星云调用模型 Token 请求地址：`https://token.ai-galaxy.com/v1`
+   - 智星云 Token 充值步骤：Token 市场 - 账户概览 - 充值 - 将智星云账户余额或算力券充值到 Token 账户中。
+   - 充值完成后进入「Key 管理」- 新建 API 管理，名称填 `Toonflow` 或其他均可，点击确定并复制 API 密钥。
+2. 回到步骤 1，将生成的 API 密钥和请求地址粘贴到 Toonflow 模型服务中，填好后点击空白处，系统会提示「供应商配置已更新」。
+   点击「手动添加」，回到智星云 - Token 市场页面，复制完整的模型名称。
+   > 💡 一个 Key 可以调用智星云上的所有模型，选择你想用的即可，推荐 `deepseek-v4-pro`。
+   > 将模型名称完整复制粘贴到 Toonflow 中并确认，完成模型配置。
+3. 配置完成后检查两处：
+   - 模型服务中的三个模型调用开关是否已开启
+   - Agent 配置中调用的模型是否与你配置的一致（不一致时点击选择改正即可）
+4. 启动 ComfyUI：云端桌面 - 绘世启动器 - 一键启动。
+5. 启动大约需要 1~2 分钟，启动完成后保持页面开启状态即可。
+
+</details>
 
 ---
 
@@ -477,7 +511,6 @@ pm2 monit             # 监控面板
 3. **启动开发环境**
 
    本项目包含 **后端 API 服务** 和 **前端页面** 两部分，请根据需要选择启动方式：
-
    - **方式一：仅启动后端服务**
 
      ```bash
@@ -503,7 +536,6 @@ pm2 monit             # 监控面板
      > 以生产模式直接运行编译后的服务（需先执行 `yarn build`）。
 
 4. **项目打包**
-
    - 编译并生成 TypeScript 文件：
 
      ```bash
@@ -529,7 +561,6 @@ pm2 monit             # 监控面板
      ```
 
 5. **代码质量检查**
-
    - 进行全局语法和规范检查：
 
      ```bash
@@ -664,13 +695,13 @@ Toonflow 基于 Apache-2.0 协议开源发布，并附有补充商业协议。
 
 ## 商业授权定价
 
-| 阶段 | 年销售额 | 年费 |
-|------|---------|------|
-| 🌱 扶持期 | < ¥10 万 | **申请即可免费授权** |
-| 🚀 初创期 | ¥10–50 万 | ¥5,000/年 |
-| 📈 成长期 | ¥50–150 万 | ¥20,000/年 |
-| 🏢 规模期 | ¥150–500 万 | ¥80,000/年 |
-| 🌐 企业级 | > ¥500 万 | 面议 |
+| 阶段      | 年销售额    | 年费                 |
+| --------- | ----------- | -------------------- |
+| 🌱 扶持期 | < ¥10 万    | **申请即可免费授权** |
+| 🚀 初创期 | ¥10–50 万   | ¥5,000/年            |
+| 📈 成长期 | ¥50–150 万  | ¥20,000/年           |
+| 🏢 规模期 | ¥150–500 万 | ¥80,000/年           |
+| 🌐 企业级 | > ¥500 万   | 面议                 |
 
 > **不追溯条款**：v1.0.8 发布前基于 AGPL-3.0 使用的用户，继续按 AGPL-3.0 执行，不受本协议变更约束。
 
@@ -685,7 +716,6 @@ Toonflow 基于 Apache-2.0 协议开源发布，并附有补充商业协议。
 [![Star History Chart](https://api.star-history.com/svg?repos=HBAI-Ltd/Toonflow-app&type=timeline&legend=top-left)](https://www.star-history.com/#HBAI-Ltd/Toonflow-app&type=timeline&legend=top-left)
 
 ---
-
 
 # 🙏 致谢
 
@@ -735,13 +765,18 @@ Toonflow 基于 Apache-2.0 协议开源发布，并附有补充商业协议。
       <td>腾讯混元3D AI创作引擎基于腾讯混元3D生成大模型2.5版本，业界首个一站式3D内容AI创作平台。具备文生、图生3D、3D动画生成、纹理生成等功能，支持草图生3D、3D人物生成，有低多边形模型生成优势。</td>
       <td align="center"><a href="https://3d.hunyuan.tencent.com/">官网</a></td>
     </tr>
+    <tr>
+      <td align="center"><img src="./docs/sponsored/ai-galaxy.png" alt="智星云 Logo" width="48"></td>
+      <td align="center"><b>智星云</b></td>
+      <td align="center">💻 算力支持 <br/> 🖼️ 镜像支持</td>
+      <td>国内知名专业算力服务品牌，提供便宜稳定的算力，服务国内清北、复旦、浙大等上千所985/211高校实验室、中科院及5000余家AI企业。</td>
+      <td align="center"><a href="https://www.ai-galaxy.com">官网</a></td>
+    </tr>
   </tbody>
 </table>
 
 完整的第三方依赖清单请查阅 `NOTICES.txt`
 
 ##### copyright © 北京爱阿科技有限公司
-
-
 
 <img src="https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=6,11,20&height=100&section=footer" width="100%"/>
