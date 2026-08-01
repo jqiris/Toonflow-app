@@ -8,6 +8,7 @@ import useTools from "@/agents/productionAgent/tools";
 import ResTool from "@/socket/resTool";
 import * as fs from "fs";
 import path from "path";
+import { createThinkStreamFilter } from "@/utils/stripThink";
 
 export interface AgentContext {
   socket: Socket;
@@ -404,6 +405,8 @@ async function consumeFullStream(
   let thinking: ReturnType<typeof msg.thinking> | null = null;
   let thinkTime = 0;
   let fullResponse = "";
+  // 思考块过滤器
+  const filter = createThinkStreamFilter();
 
   try {
     for await (const chunk of fullStream) {
@@ -425,14 +428,20 @@ async function consumeFullStream(
         thinking?.complete();
         thinking = null;
       } else if (chunk.type === "text-delta") {
-        text.append(chunk.text);
-        fullResponse += chunk.text;
+        // 过滤 thinking 块
+        const filtered = filter.push(chunk.text);
+        if (filtered) {
+          text.append(filtered);
+          fullResponse += filtered;
+        }
       } else if (chunk.type === "error") {
         throw chunk.error;
       } else if (chunk.type == "finish") {
         break;
       }
     }
+    // 刷新可能残留的不完整标签
+    fullResponse += filter.flush();
     text.complete();
     msg.complete();
   } catch (err: any) {

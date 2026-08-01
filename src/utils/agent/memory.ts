@@ -4,6 +4,7 @@ import { getEmbedding, cosineSimilarity } from "./embedding";
 import type { memories as MemoryRow } from "@/types/database";
 import { tool, jsonSchema } from "ai";
 import { z } from "zod";
+import { stripThink } from "@/utils/stripThink";
 
 // ── 可调配置默认值 ──
 const DEFAULTS: {
@@ -48,7 +49,7 @@ class Memory {
       system: `你是一个记忆压缩助手。请将以下多条记忆内容压缩为一段简洁的摘要，不超过${summaryMaxLength}个字符。只输出摘要内容，不要加任何前缀或解释。`,
       messages: [{ role: "user", content: contents.map((c, i) => `${i + 1}. ${c}`).join("\n") }],
     });
-    return text.slice(0, Number(summaryMaxLength));
+    return stripThink(text || "").slice(0, Number(summaryMaxLength));
   }
 
   private async judgeSummaryRelevance(keyword: string, summaries: { id: string; content: string }[]): Promise<string[]> {
@@ -59,7 +60,8 @@ class Memory {
       messages: [{ role: "user", content: `关键词: ${keyword}\n\n摘要列表:\n${list}` }],
     });
     try {
-      const ids = JSON.parse(text);
+      const cleanText = stripThink(text || "");
+      const ids = JSON.parse(cleanText);
       if (Array.isArray(ids)) return ids.map(String);
     } catch {}
     return [];

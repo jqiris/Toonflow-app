@@ -1,4 +1,4 @@
-// @db-hash ba820c330cd1ea70fb0639b5c70462ac
+// @db-hash 64d13281f34ed6eb09c2091146e02d3e
 //该文件由脚本自动生成，请勿手动修改
 
 export interface memories {
@@ -66,6 +66,15 @@ export interface o_assets2Storyboard {
 export interface o_assetsRole2Audio {
   'assetsAudioId'?: number;
   'assetsRoleId'?: number;
+}
+export interface o_canvasFlow {
+  'createTime'?: number | null;
+  'episodesId'?: number | null;
+  'flowData'?: string | null;
+  'id'?: number;
+  'key'?: string | null;
+  'projectId'?: number | null;
+  'updateTime'?: number | null;
 }
 export interface o_event {
   'createTime'?: number | null;
@@ -215,6 +224,7 @@ export interface o_video {
   'errorReason'?: string | null;
   'filePath'?: string | null;
   'id'?: number;
+  'lastFramePath'?: string | null;
   'projectId'?: number | null;
   'scriptId'?: number | null;
   'state'?: string | null;
@@ -242,6 +252,7 @@ export interface DB {
   "o_assets": o_assets;
   "o_assets2Storyboard": o_assets2Storyboard;
   "o_assetsRole2Audio": o_assetsRole2Audio;
+  "o_canvasFlow": o_canvasFlow;
   "o_event": o_event;
   "o_eventChapter": o_eventChapter;
   "o_image": o_image;

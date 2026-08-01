@@ -4,6 +4,7 @@ import { validateFields } from "@/middleware/middleware";
 import u from "@/utils";
 import { z } from "zod";
 import { tool, jsonSchema } from "ai";
+import { createThinkStreamFilter } from "@/utils/stripThink";
 const router = express.Router();
 
 // 检查语言模型
@@ -77,10 +78,13 @@ export default router.post(
           prompt: "请调用工具获取火星的天气，并回答我多少气温",
           tools: { getWeatherTool },
         });
+        const filter = createThinkStreamFilter();
         let fullResponse = "";
         for await (const chunk of textStream) {
-          fullResponse += chunk;
+          const filtered = filter.push(chunk);
+          fullResponse += filtered;
         }
+        fullResponse += filter.flush();
         if (!fullResponse) return res.status(500).send(error("模型未返回结果"));
         res.status(200).send(success(fullResponse));
       } else {

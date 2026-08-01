@@ -3,6 +3,7 @@ import u from "@/utils";
 import { z } from "zod";
 import { success } from "@/lib/responseFormat";
 import { validateFields } from "@/middleware/middleware";
+import { stripThink } from "@/utils/stripThink";
 const router = express.Router();
 
 export default router.post(
@@ -28,7 +29,7 @@ export default router.post(
           },
         ],
       });
-      res.status(200).send(success(resText.text));
+      res.status(200).send(success(stripThink(resText.text || "")));
     } catch (e) {
       const err = u.error(e);
       res.status(500).send({ message: err.message });

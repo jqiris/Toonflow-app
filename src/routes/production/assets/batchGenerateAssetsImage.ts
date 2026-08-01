@@ -5,6 +5,7 @@ import sharp from "sharp";
 import { success } from "@/lib/responseFormat";
 import { validateFields } from "@/middleware/middleware";
 import { Output } from "ai";
+import { stripThink } from "@/utils/stripThink";
 const router = express.Router();
 
 export default router.post(
@@ -82,12 +83,13 @@ export default router.post(
           },
         ],
       });
-        await u.db("o_assets").where("id", item.id).update({ prompt: text });
+      const cleanText = stripThink(text || "");
+      await u.db("o_assets").where("id", item.id).update({ prompt: cleanText });
 
       const imageBase64 = imageUrlRecord[item.assetsId!] ? await u.oss.getImageBase64(imageUrlRecord[item.assetsId!]) : null;
       try {
         const repeloadObj = {
-          prompt: text,
+          prompt: cleanText,
           size: projectSettingData?.imageQuality as "1K" | "2K" | "4K",
           aspectRatio: "16:9" as `${number}:${number}`,
         };

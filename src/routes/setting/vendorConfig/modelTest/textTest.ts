@@ -4,6 +4,7 @@ import { validateFields } from "@/middleware/middleware";
 import u from "@/utils";
 import { z } from "zod";
 import { tool, jsonSchema } from "ai";
+import { stripThink } from "@/utils/stripThink";
 const router = express.Router();
 
 // 检查语言模型
@@ -53,7 +54,7 @@ export default router.post(
       });
       console.log("%c Line:46 🍐 data", "background:#6ec1c2", data);
       if (!data) return res.status(500).send(error("模型未返回结果"));
-      res.status(200).send(success({ thinking: data.reasoningText, content: data.text }));
+      res.status(200).send(success({ thinking: data.reasoningText, content: stripThink(data.text || "") }));
     } catch (err) {
       console.error(err);
       const msg = u.error(err).message;

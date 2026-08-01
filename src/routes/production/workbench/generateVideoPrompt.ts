@@ -5,6 +5,7 @@ import { success, error } from "@/lib/responseFormat";
 import { validateFields } from "@/middleware/middleware";
 import fs from "fs/promises";
 import path from "path";
+import { stripThink } from "@/utils/stripThink";
 const router = express.Router();
 
 export default router.post(
@@ -184,11 +185,12 @@ export default router.post(
           },
         ],
       });
+      const cleanText = stripThink(text || "");
       await u.db("o_videoTrack").where({ id: trackId }).update({
         state: "已完成",
-        prompt: text,
+        prompt: cleanText,
       });
-      res.status(200).send(success(text));
+      res.status(200).send(success(cleanText));
     } catch (e) {
       await u
         .db("o_videoTrack")

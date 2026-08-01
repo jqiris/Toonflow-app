@@ -4,6 +4,7 @@ import pLimit from "p-limit";
 import * as zod from "zod";
 import { error, success } from "@/lib/responseFormat";
 import { validateFields } from "@/middleware/middleware";
+import { stripThink } from "@/utils/stripThink";
 const router = express.Router();
 interface OutlineItem {
   description: string;
@@ -121,7 +122,8 @@ export default router.post(
             return;
           }
 
-          await u.db("o_assets").where("id", item.assetsId).update({ prompt: _output, promptState: "已完成" });
+          const cleanPrompt = stripThink(_output);
+          await u.db("o_assets").where("id", item.assetsId).update({ prompt: cleanPrompt, promptState: "已完成" });
         } catch (e: any) {
           await u
             .db("o_assets")

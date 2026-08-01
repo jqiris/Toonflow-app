@@ -3,6 +3,7 @@ import u from "@/utils";
 import * as zod from "zod";
 import { error, success } from "@/lib/responseFormat";
 import { validateFields } from "@/middleware/middleware";
+import { stripThink } from "@/utils/stripThink";
 const router = express.Router();
 
 
@@ -76,9 +77,10 @@ export default router.post(
       })) as any;
 
       if (!_output) return res.status(500).send("失败");
-      await u.db("o_assets").where("id", assetsId).update({ prompt: _output, promptState: "已完成" });
+      const cleanPrompt = stripThink(_output);
+      await u.db("o_assets").where("id", assetsId).update({ prompt: cleanPrompt, promptState: "已完成" });
 
-      res.status(200).send(success({ prompt: _output, assetsId }));
+      res.status(200).send(success({ prompt: cleanPrompt, assetsId }));
     } catch (e: any) {
       await u
         .db("o_assets")
