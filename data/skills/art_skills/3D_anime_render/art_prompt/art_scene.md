@@ -105,22 +105,22 @@
 
 ## 六、提示词模板
 ```
-3D 动画渲染，电影级打光，活力赛璐珞质感，高细节材质，愉悦治愈氛围，卡通都市风，高细节卡通材质，适度卡通比例，暖色调配色，8K 超高清，电影级构图，柔和光影层次，明快卡通渲染风格，温馨治愈，都市场景主视图概念图，
+3D animation render, film lighting, vibrant cel-shaded quality, high-detail materials, joyful healing atmosphere, cartoon urban style, high-detail cartoon materials, moderate cartoon proportions, warm color palette, 8K ultra HD, cinematic composition, soft light and shadow layers, cheerful cartoon rendering style, warm healing, urban scene main view concept art,
 anime style, cel-shaded, 3D animation render,
 film lighting, warm sunset lighting,
 scene design sheet, environment concept art, no people, no characters, no human figures,
-{室内/室外}，{场景类型}，{建筑风格}，{季节+时间}，
-前景：{元素}，中景：{元素}，后景：{元素}，
-{色调描述}，{天候/氛围元素}，
-{材质描述}，空气透视，纹理清晰，赛璐珞化处理，
-材质自然使用痕迹，生活感磨损，布料自然垂褶（赛璐珞化），
-自然光漫射，体积光，赛璐珞光效，赛璐珞投影，
-单画面构图，自然观察视角，构图能代表场景主体并展示前/中/后景层次，
-画面中无任何人物，
-赛璐珞渲染风格，柔和光影，适度卡通比例，高细节卡通材质，
-暖色调配色，黄昏霞光氛围，愉悦治愈氛围，
-8K 超高清，电影级构图，
-图中不要有任何文字
+{indoor/outdoor}, {scene type}, {building style}, {season+time},
+Foreground: {elements}, Midground: {elements}, Background: {elements},
+{Color tone description}, {Weather/atmosphere elements},
+{Material description}, atmospheric perspective, clear texture, cel-shaded processing,
+Material natural use traces, life atmosphere, natural wear, fabric natural draping (cel-shaded),
+Natural light diffusion, volumetric light, cel-shaded effects, cel-shaded projection,
+Single frame composition, natural observation angle, composition represents scene subject and shows foreground/midground/background layers,
+No people in image
+cel-shaded render style, soft light and shadow, moderate cartoon proportions, high-detail cartoon materials,
+Warm color palette, sunset glow atmosphere, joyful healing atmosphere,
+8K ultra HD, cinematic composition,
+No text in image
 ```
 
 ---

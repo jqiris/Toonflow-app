@@ -80,18 +80,18 @@
 ### 单状态变体
 
 ```
-基于{道具名}设定图，3D 动画渲染，电影级打光，活力赛璐珞质感，高细节材质，愉悦治愈氛围，卡通都市风，高细节卡通材质，适度卡通比例，暖色调配色，8K 超高清，电影级构图，柔和光影层次，明快卡通渲染风格，温馨治愈，
+Based on {prop name} character sheet, 3D animation render, film lighting, vibrant cel-shaded quality, high-detail materials, joyful healing atmosphere, cartoon urban style, high-detail cartoon materials, moderate cartoon proportions, warm color palette, 8K ultra HD, cinematic composition, soft light and shadow layers, cheerful cartoon rendering style, warm healing,
 anime style, cel-shaded, 3D animation render,
-{道具类型}，{材质描述}，
-当前状态：{状态名}，{状态视觉描述}，
-{材质表面变化描述}，（赛璐珞化处理）
-纯道具静物展示，道具独立陈列，无人持有，无人佩戴，
-同一画面四宫格（2×2）：左上正面图(front view)+右上侧面图(side view)+左下背面图(back view)+右下细节特写(detail closeup)，
-纯净中性灰背景，均匀柔光，无硬阴影，
-材质纹理清晰，赛璐珞渲染，状态细节可辨，赛璐珞化处理，
-8K 超高清，电影级构图，
-图中不要有任何文字，
-画面中不能出现任何人物、手部、手指、肢体，道具不可处于被握持或佩戴状态
+{prop type}, {material description},
+Current state: {state name}, {state visual description},
+{material surface change description}, (cel-shaded processing)
+Pure prop still life display, prop displayed independently, no person holding, no person wearing,
+Same frame four-panel (2x2): top-left front view(front view)+top-right side view(side view)+bottom-left back view(back view)+bottom-right detail closeup(detail closeup),
+Pure neutral gray background, even soft light, no hard shadows,
+Clear material texture, cel-shaded render, state details discernible, cel-shaded processing,
+8K ultra HD, cinematic composition,
+No text in image,
+No people, hands, fingers, or limbs in image, prop cannot be in held or worn state
 ```
 
 ---

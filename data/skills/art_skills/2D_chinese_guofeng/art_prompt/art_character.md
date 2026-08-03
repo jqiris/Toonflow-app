@@ -10,7 +10,7 @@ metaData: art_skills
 
 ## 一、基础形象原则
 
-1. **造型即灵魂** — 角色造型是核心锚点，国风二次元造型，线条流畅
+1. **造型即灵魂** — 角色造型是核心锚点，国风二次元造型，flowing lines
 2. **底模即基础** — 基础打底服装 + 素颜，后续服化均为叠加层
 3. **四视图一致** — 面容/体型/发型/基础服装跨视图高度统一
 4. **古典气质** — 无妆状态仍需体现角色气质（典雅/温婉/英气）
@@ -88,7 +88,7 @@ metaData: art_skills
 | 发色 | 墨黑、禁其他颜色 | 墨黑长发、青丝如瀑 |
 | 发长 | 长发及腰 | 长发及腰、长发 |
 | 发质 | 细腻线条、发丝清晰 | 细腻线条、清晰发丝 |
-| 造型 | 自然散发、无发饰 | 长发自然散落、无发饰 |
+| 造型 | 自然散发、no hair accessories | 长发自然散落、no hair accessories |
 
 ### 男性
 
@@ -107,11 +107,11 @@ metaData: art_skills
 
 ### 女性基础服装
 
-素色古装长裙，颜色以基础色为主，无花纹装饰。
+素色古装长裙，颜色以基础色为主，no patterns装饰。
 
 ### 男性基础服装
 
-素色古装长衫，颜色以基础色为主，无花纹装饰。
+素色古装长衫，颜色以基础色为主，no patterns装饰。
 
 ### 着装统一规则
 
@@ -139,11 +139,11 @@ metaData: art_skills
 |---|---|
 | 布局 | 同一画面从左至右并排四视图 |
 | 背景 | 月白纯色 #E8EAF5 |
-| 站姿 | 自然站立、双脚平行微分、双臂自然下垂 |
+| 站姿 | natural standing、双脚平行微分、双臂自然下垂 |
 | 全身展示 | 全身立像必须从头顶到脚底完整入画，严禁裁切 |
 | 特写展示 | 人像特写必须从头顶到锁骨完整入画，严禁裁切 |
 | 表情 | 中性微表情，符合角色气质 |
-| 光线 | 均匀柔光，前方主光 + 双侧补光，无硬阴影 |
+| 光线 | even soft light，前方主光 + 双侧补光，no hard shadows |
 | 一致性 | 四视图的肤色/体型/发型/面容/基础服装完全一致 |
 | 画面比例 | 建议 4:1 或 3:1 |
 
@@ -151,19 +151,19 @@ metaData: art_skills
 
 ## 八、提示词模板
 
-{性别}角色四视图设定图，国风二次元，新国潮美学，日式动画渲染，赛璐璐平涂，细腻笔触，
+{gender} character four-view character sheet, Chinese-style 2D animation, new Chinese aesthetic, Japanese animation rendering, cel-shaded flat coloring, fine brushstrokes,
 character design sheet, character turnaround,
-{角色描述对应的五官特征 - 由角色描述自然推导}, {整体气质}, 素颜状态,
-{肤色}, 赛璐璐平涂, 皮肤通透发光, 细腻线条, 光影层次丰富,
-{身高描述, 如:165cm tall, tall elegant woman}, {头身比, 如:6.5 heads tall proportion}, {身材描述}, {体态描述},
-{发色}{发长}, 细腻发丝清晰, {基础造型}, 无发饰,
-（女性: 素色古装长裙 / 男性: 素色古装长衫）, 基础色, 无花纹装饰,
-同一画面左至右并排：人像特写+正视图+侧视图+后视图,
-人像特写从头顶到锁骨完整展示, 不裁切头顶, head to collarbone complete,
-全身立像从头顶到脚底完整展示, full body head to toe, 不裁切头顶和脚部,
-自然站立, 月白纯色背景, 均匀柔光, 无硬阴影,
-四视图一致性, 国风二次元造型清晰, 细腻线条清晰,
-图中不要有任何文字
+{facial features corresponding to character description - naturally derived from character description}, {overall temperament}, bare-faced state, no facial markings, no stains, no blood,
+{skin tone}, cel-shaded flat coloring, translucent glowing skin, fine lines, rich light and shadow layers,
+{height description, e.g.: 165cm tall, tall elegant woman}, {head-to-body ratio, e.g.: 6.5 heads tall proportion}, {body description}, {posture description},
+{hair color}{hair length}, fine hair strands clear, {basic style}, no hair accessories,
+(Female: plain ancient-style long dress / Male: plain ancient-style long robe), base colors, no patterned decorations,
+Same frame left to right: portrait closeup + front view + side view + back view,
+Portrait closeup complete from crown to collarbone, no cropping of crown, head to collarbone complete,
+Full body standing pose complete from crown to toe, full body head to toe, no cropping of crown or feet,
+Natural standing, pale moonlight solid background, even soft light, no hard shadows,
+Four-view consistency, clear Chinese-style 2D character design, fine lines clear,
+No text in image
 
 ---
 
@@ -173,11 +173,11 @@ character design sheet, character turnaround,
 
 | 编号 | 规则 |
 |---|---|
-| R1 | 必须为「素颜状态」 |
+| R1 | 必须为「bare-faced state」 |
 | R2 | 必须声明基础服装（女性：素色古装长裙；男性：素色古装长衫） |
-| R3 | 必须声明「无发饰、无配饰」 |
-| R4 | 必须指定「月白纯色背景」 |
-| R5 | 必须指定「四视图一致性」 |
+| R3 | 必须声明「no hair accessories、no accessories」 |
+| R4 | 必须指定「pale moonlight solid background」 |
+| R5 | 必须指定「four-view consistency」 |
 | R6 | 全身立像必须从头顶到脚底完整展示，严禁裁切 |
 | R7 | 必须声明角色身高并通过头身比换算约束全身比例（女性默认 160-170cm/6-7头身，男性默认 175-185cm/6-7头身） |
 | R8 | 人像特写必须从头顶到锁骨完整展示，严禁裁切头顶 |

@@ -80,13 +80,13 @@
 
 ```
 
-基于{道具名}设定图，真人写实摄影风格，自然光线，极致细节，
-{道具类型}，{材质描述}，
-当前状态：{状态名}，{状态视觉描述}，
-{材质表面变化描述}，
-同一画面四宫格（2×2）：左上正面图+右上侧面图+左下背面图+右下细节特写，
-纯净中性灰背景，均匀柔光，无硬阴影，
-材质纹理超清晰，质感写实，状态细节可辨
+基于{prop name}设定图，realistic photography style，自然光线，极致细节，
+{prop type}，{material description}，
+Current state：{state name}，{state visual description}，
+{material surface change description}，
+同一画面2x2 grid（2×2）：左上front view+右上side view+左下back view+右下detail closeup，
+pure neutral gray background，even soft light，no hard shadows，
+ultra-clear material texture，realistic texture，状态细节可辨
 
 ```
 

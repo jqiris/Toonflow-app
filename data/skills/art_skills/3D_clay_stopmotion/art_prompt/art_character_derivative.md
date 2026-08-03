@@ -215,17 +215,17 @@
 ## 九、提示词模板
 
 ```
-以角色基础形象图为底图，黏土定格动画{性别}角色四视图设定图，定格动画风格，3D卡通渲染，暖调光影，
+Based on the character base image, clay stop-motion {gender} character four-view character sheet, stop-motion animation style, 3D clay render, warm tone lighting,
 character design sheet，character turnaround，
-保持基础形象面容不变，{整体气质}，
-【L1·妆容】根据用户线索决策：{基础装饰妆/轻装饰妆/正式装饰妆}；使用 {妆容风格}，哑光黏土质感，{眉妆}，{眼妆}，{唇妆}，
-【L2·发型】{造型类型}，黏土发型，{发饰描述}，
-【L3+L4·服饰】{主色}{款式}，{材质}，{装饰工艺}，衣服纹理清晰，
-【L5·配饰】{头饰}，{耳饰}，{项饰}，{腰饰}，
-同一画面左至右并排：人像特写+正视图+侧视图+后视图，
-自然站立，纯净中性灰背景，暖调柔光，无硬阴影，
-四视图一致性，黏土肌理细腻渲染，表情柔和治愈
-图中不要有任何文字
+maintain base model facial features unchanged，{overall temperament}，face clean no facial markings, no stains, no blood，
+【L1·Makeup】Decision based on user clues: {basic decoration makeup / light decoration makeup / formal decoration makeup}; using {makeup style}, matte clay texture，{eyebrow makeup}，{eye makeup}，{lip makeup}，
+【L2·Hairstyle】{hairstyle type}，clay hair style，{hair accessories description}，
+【L3+L4·Clothing】{main color}{garment style}，{material}，{decorative craft}，clear garment texture，
+【L5·Accessories】{headpieces}，{earrings}，{necklaces}，{waist ornaments}，
+Same frame left to right: portrait closeup + front view + side view + back view，
+natural standing，pure neutral gray background，warm tone soft light，no hard shadows，
+four-view consistency，clay texture fine render，gentle and healing expression
+No text in image
 ```
 
 ---

@@ -150,19 +150,19 @@
 ## 八、提示词模板
 
 ```
-{性别}角色四视图设定图，90s anime style，复古日系动画风格，手绘平涂上色，柔和暖色调，精细流畅线条，电影感光影，
-character design sheet，character turnaround，
-{角色描述对应的五官特征 - 由角色描述自然推导}，{整体气质}，素颜无妆，
-{肤色}，平涂上色，手绘质感，皮肤细腻，
-{身高描述，如：165cm tall、slender woman}，{头身比，如：6.5 heads tall proportion}，{身材描述}，{体态描述}，
-{发色}{发长}，发丝流畅，{基础造型}，无发饰，
-{角色身份对应的常规着装，如：90年代校服/职业便装/复古连衣裙}，柔和低饱和色调，无复杂花纹，
-同一画面左至右并排：人像特写+正视图+侧视图+后视图，
-人像特写从头顶到锁骨完整展示，head to collarbone complete，
-全身立像从头顶到脚底完整展示，full body head to toe，不裁切头顶和脚部，
-自然站立，纯净中性灰背景，柔和电影光，无硬阴影，
-四视图一致性，面容细腻渲染，发丝细腻渲染
-图中不要有任何文字
+{gender} character four-view character sheet, 90s anime style, retro Japanese anime style, hand-drawn flat coloring, soft warm tones, fine smooth lines, cinematic lighting,
+character design sheet, character turnaround,
+{facial features corresponding to character description - naturally derived from character description}, {overall temperament}, bare-faced no makeup,，no facial markings, no stains, no blood
+{skin tone}, flat coloring, hand-drawn texture, delicate skin,
+{height description, e.g.: 165cm tall, slender woman}, {head-to-body ratio, e.g.: 6.5 heads tall proportion}, {body description}, {posture description},
+{hair color}{hair length}, smooth hair strands, {basic style}, no hair accessories,
+{regular clothing corresponding to character identity, e.g.: 90s school uniform / professional casual wear / retro dress}, soft low-saturation tones, no complex patterns,
+same frame left to right: portrait closeup + front view + side view + back view,
+portrait closeup complete from crown to collarbone, head to collarbone complete,
+full body standing pose complete from crown to toe, full body head to toe, no cropping of crown or feet,
+natural standing, pure neutral gray background, soft cinematic light, no hard shadows,
+four-view consistency, delicate face rendering, delicate hair strand rendering
+no text in image
 ```
 
 ---

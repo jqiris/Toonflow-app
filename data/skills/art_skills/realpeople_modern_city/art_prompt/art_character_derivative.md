@@ -44,7 +44,7 @@ metaData: liveaction_urban_art_skills
 
 | 步骤 | 处理内容 |
 |---|---|
-| S1 | 提取用户线索：场景情境、情绪氛围、面部状态描述 |
+| S1 | 提取用户线索：场景情境、情绪atmosphere、面部state description |
 | S2 | 过滤非妆容线索：道具/场景/动作词不上妆 |
 | S3 | 匹配场景→妆容强度：素肌级 / 日常级 / 场合级 / 盛典级 |
 | S4 | 生成 L1 提示词——只输出结论 |
@@ -53,7 +53,7 @@ metaData: liveaction_urban_art_skills
 
 | 场景 | 妆容强度 | 核心意图 |
 |---|---|---|
-| 居家/晨起/素颜状态 | 素肌级——无妆容痕迹，仅皮肤本身 | 真实的皮肤质感，未经修饰的面孔 |
+| 居家/晨起/bare-faced state | 素肌级——无妆容痕迹，仅皮肤本身 | 真实的皮肤质感，未经修饰的面孔 |
 | 日常通勤/超市/散步 | 日常级——轻妆，看起来像"没化妆但气色好" | 职场/生活中的得体，不引人注意的精致 |
 | 约会/聚会/逛街 | 场合级——看得出化了妆，但不过分 | 有存在感的妆容，但仍属于"日常生活"范畴 |
 | 晚宴/婚礼/盛典 | 盛典级——完整精致的妆容 | 为镜头和灯光设计的妆容，但底妆仍可见真实皮肤 |
@@ -128,11 +128,11 @@ metaData: liveaction_urban_art_skills
 | 自然垂落 | 黑长直 | 自然柔顺直发、发尾轻微内扣、中分发缝或侧分、碎发自然散落额前和颈后 | 清冷克制/温柔治愈/都市干练 |
 | 自然垂落 | 慵懒微卷 | 大弧度慵懒卷发、发根自然蓬松、卷度不均匀（非电卷棒一式一样）、碎发环绕面部 | 温柔治愈/青春元气 |
 | 自然垂落 | 锁骨层次短发 | 齐肩长度、发尾有层次碎剪、一侧拨到耳后露出耳饰、后颈碎发自然 | 都市干练/清冷克制 |
-| 自然垂落 | 羊毛小卷 | 全头中小卷、蓬松有空气感、发根自然站立、卷度有手工感而非机械均匀 | 青春元气/市井烟火 |
+| 自然垂落 | 羊毛小卷 | 全头中小卷、蓬松有空气感、发根natural standing、卷度有手工感而非机械均匀 | 青春元气/市井烟火 |
 | 扎束造型 | 高马尾 | 高颅顶位置扎起、发根自然蓬松、马尾有自然弧度而非直线垂落、额前和鬓角碎发自然散落 | 青春元气/都市干练/运动场景 |
 | 扎束造型 | 低马尾/低髻 | 后颈或耳后位置束起、松而不散、后颈碎发自然、有"随手扎起来"的松弛感 | 温柔治愈/市井烟火/居家场景 |
 | 扎束造型 | 丸子头 | 头顶或后脑位置盘起、松散不紧绷、碎发环绕面部和颈部 | 居家/日常/运动 |
-| 编发造型 | 单侧麻花辫 | 侧编麻花、松散有手工感、编入自然碎发、辫尾自然毛躁 | 温柔治愈/青春元气 |
+| 编发造型 | 单侧麻花辫 | 侧编麻花、松散有手工感、编入natural strands、辫尾自然毛躁 | 温柔治愈/青春元气 |
 | 编发造型 | 双麻花/双辫 | 两侧对称编发、松紧适中、适合年轻感造型 | 青春元气 |
 | 短发造型 | 齐耳短发 | 耳上或耳下长度、发尾整齐或碎剪、一侧挽耳后、后颈清爽 | 都市干练/清冷克制 |
 | 短发造型 | 少年感碎短发 | 层次碎剪短发、后颈推短、额前碎发自然散落 | 清冷克制/都市干练/中性风 |
@@ -145,7 +145,7 @@ metaData: liveaction_urban_art_skills
 | 发根 | 发根自然蓬松而非紧贴头皮、分缝处自然可见头皮 |
 | 发尾 | 发尾自然毛躁/分叉、扎束后发尾有自然弧度 |
 | 光泽 | 健康发质的自然反光——非油光非哑光、逆光下头发半透明暖色轮廓 |
-| 严禁 | 假发套般整齐边界、CG发丝根根分明、无碎发、僵硬定型 |
+| 严禁 | 假发套般整齐边界、CGclear hair strands、无碎发、僵硬定型 |
 
 ### 男性发型
 
@@ -245,7 +245,7 @@ metaData: liveaction_urban_art_skills
 | 街头夜市 | 场合级 | 羊毛卷/拳击辫/狼尾 | 街头潮范/街头潮牌 | 耳饰+棒球帽 |
 | 医院/正式场合 | 日常级 | 利落扎发/利落短发 | 简约素色穿搭 | 极简 |
 
-> **未覆盖场景推断规则**：先判断场景的私密/公共属性（私密→素肌级，公共→日常级起步）；再判断正式程度（正式场合→场合级/盛典级）；最后判断情调（浪漫/社交→场合级）。妆容适配面孔类型（见第三章），穿搭适配场景温度与氛围。
+> **未覆盖场景推断规则**：先判断场景的私密/公共属性（私密→素肌级，公共→日常级起步）；再判断正式程度（正式场合→场合级/盛典级）；最后判断情调（浪漫/社交→场合级）。妆容适配面孔类型（见第三章），穿搭适配场景温度与atmosphere。
 
 ---
 
@@ -267,10 +267,10 @@ metaData: liveaction_urban_art_skills
 | 项目 | 摄影要求 |
 |---|---|
 | 布局 | 同一画面从左至右并排四个角度，间距均匀。呈现为"造型确认照"排版 |
-| 背景 | 中灰无缝背景纸 #B0B0B0，无光斑无渐变无投影 |
+| 背景 | seamless grey backdrop paper #B0B0B0，无光斑无渐变无投影 |
 | 站姿 | 保持底模站姿——重心偏移的自然日常站姿，不是立正不是pose。**禁止因换装而改变体态** |
-| 面部表情 | 符合妆容强度与场景氛围的微表情——素肌级中性自然、场合级微含笑意、盛典级从容自信。**仅限面部微表情，不涉及肢体动作** |
-| 光线 | 棚拍柔光——前方柔光箱主光+双侧补光板。光影柔和、方向明确、光比约1:2至1:3，保留面部立体感。服装配饰材质质感清晰可见 |
+| 面部表情 | 符合妆容强度与场景atmosphere的微表情——素肌级中性自然、场合级微含笑意、盛典级从容自信。**仅限面部微表情，不涉及肢体动作** |
+| 光线 | studio soft lighting——前方柔光箱主光+双侧补光板。光影柔和、方向明确、光比约1:2至1:3，保留面部立体感。服装配饰材质质感清晰可见 |
 | 一致性 | 四角度为同一人物、同一次造型拍摄的连续摄影记录。面容/妆容/发型/穿搭/配饰完全呈现为同一次拍摄 |
 | 画面比例 | 建议 4:1 或 16:4 宽幅 |
 
@@ -288,22 +288,22 @@ metaData: liveaction_urban_art_skills
 | 禁止姿态变化 | 不改变底模站姿，不输出任何动作/体态变化 |
 | 格式 | 直接输出可用的完整提示词 |
 
-### 完整造型叠加提示词模板
+### Complete Styling Overlay Prompt Template
 
-以角色基础形象图为底图，img2img叠加造型，
-真人都市人物造型肖像系列，真人实拍摄影，棚拍柔光，中灰无缝背景纸，
-{性别}人物肖像系列，实拍风格，非3D非渲染非CG，
+Based on character base image, img2img overlay styling,
+Human urban character portrait series, live-action photography, studio soft lighting, seamless grey backdrop,
+{gender} character portrait series, live-action style, non-3D non-render non-CGI,
 character portrait series, live-action photography, studio soft lighting,
-保持基础形象面容不变，{整体气质}，
-【L1·妆容】{妆容强度——素肌级/日常级/场合级/盛典级}，{妆容描述}，妆容与真实皮肤融合、粉底不假面、皮肤毛孔纹理仍可见，
-【L2·发型】{发型描述}，真实发质纹理，{碎发/发根/发尾真实状态描述}，非假发套非CG发丝，
-【L3+L4·穿搭】{穿搭风格}，{上装描述}+{下装描述}，{颜色}，{面料自然质感}，衣物自然垂坠、有真实穿着褶皱、非样板衣，
-【L5·配饰】{配饰描述}，日常佩戴质感、有使用痕迹、自然贴合身体，
-同一画面从左至右并排：近景特写+正面全身+侧面全身+背面全身，
-自然日常站姿（重心偏移），中灰无缝背景纸 #B0B0B0，棚拍均匀柔光，光比柔和，
-四角度为同一次造型拍摄的连续摄影记录，
-画面干净无文字无水印无签名无边框，
-真人写实摄影画质、35mm全画幅摄影质感
+Maintain base model facial features unchanged, {overall temperament}, face clean no facial markings, no stains, no blood,
+【L1·Makeup】{makeup intensity - bare/natural/daily/event}; {makeup description}; makeup blended with realistic skin, foundation not mask-like, skin pores still visible,
+【L2·Hairstyle】{hair description}, real hair texture, {natural strand/root/ ends description}, non-wig non-CG hair,
+【L3+L4·Styling】{styling style}, {top description} + {bottom description}, {color}, {natural fabric texture}, clothing falls naturally with real wrinkles, not mannequin,
+【L5·Accessories】{accessory description}, daily wear with use traces, naturally fitted,
+Same frame left to right: close-up + front full body + side full body + back full body,
+natural daily standing pose (weight shifted), seamless grey backdrop paper #B0B0B0, even studio soft light, gentle contrast,
+Four angles show continuous photography record of the same styling shoot,
+Clean image, no text, no watermark, no signature, no border,
+Realistic human photography, 35mm full-frame photography
 
 ### 负面规避提示词
 
@@ -330,7 +330,7 @@ text, watermark, signature, logo, border, frame
 | R4 | 服装必须有真实穿着痕迹——自然褶皱、面料垂坠、非样板衣非全新出厂 |
 | R5 | 配饰必须有日常佩戴感——贴合身体、有使用痕迹、非悬浮非嵌肤 |
 | R6 | 必须输出四角度棚拍系列（近景特写+正面+侧面+背面全身） |
-| R7 | 必须指定「中灰无缝背景纸 #B0B0B0」，禁止添加场景环境 |
+| R7 | 必须指定「seamless grey backdrop paper #B0B0B0」，禁止添加场景环境 |
 | R8 | 必须指定「四角度为同一次造型拍摄的连续摄影记录」 |
 | R9 | **仅输出提示词**——不输出分析过程、速查表、方案对比等一切非提示词内容 |
 | R10 | **禁止道具交互**——不包含手持物，道具属独立资产 |
@@ -346,7 +346,7 @@ text, watermark, signature, logo, border, frame
 | X1 | 严禁「3D渲染 / 3D建模 / CG / PBR材质 / 8K建模 / UE引擎 / Blender」等一切CG术语 |
 | X2 | 严禁「2D手绘 / 插画 / 动画 / 二次元」等非摄影媒介 |
 | X3 | 严禁「过度磨皮 / 硅胶脸 / 蜡像假面 / 零毛孔 / AI感平滑皮肤」——妆容之下必须有真实皮肤 |
-| X4 | 严禁「假发套 / CG发丝根根分明 / 头发僵硬整齐 / 无碎发」 |
+| X4 | 严禁「假发套 / CGclear hair strands / 头发僵硬整齐 / 无碎发」 |
 | X5 | 严禁「样板衣 / 全新无褶服装 / 悬浮服饰 / 假人模特感着装」 |
 | X6 | 严禁「模特对称站姿 / 走秀pose / 军人立正 / 夸张动作」 |
 | X7 | 严禁「浓妆覆盖底模面容至不可辨认」 |

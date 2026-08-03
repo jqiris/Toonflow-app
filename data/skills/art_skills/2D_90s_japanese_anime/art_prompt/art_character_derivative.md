@@ -240,19 +240,19 @@
 ## 八、提示词模板
 
 ```
-以角色基础形象图为底图，img2img叠加服化妆造，
-90s anime style，复古日系动画风格，{性别}角色四视图设定图，手绘平涂上色，柔和暖色调，电影感光影，
-character design sheet，character turnaround，
-保持基础形象面容不变，{整体气质}，
-【L1·妆容】{基础妆/轻妆/正式妆}；使用 {妆容风格}，皮肤均匀，{眉妆}，{眼妆}，{唇妆}，
-【L2·发型】{造型类型}，发丝流畅，{发饰描述}，
-【L3+L4·服饰】{主色}{款式}，{材质}，{装饰工艺}，衣服线条流畅，纹理清晰，
-【L5·鞋履】{鞋款}，{鞋面材质}，{袜装/鞋口设计}，与服饰统一，
-【L6·配饰】{头饰}，{耳饰}，{项饰}，{腰饰}，
-同一画面左至右并排：人像特写+正视图+侧视图+后视图，
-自然站立，纯净中性灰背景，柔和电影光，无硬阴影，
-四视图一致性，面容细腻渲染，发丝细腻渲染，纹理细节清晰
-图中不要有任何文字
+Based on character base image, img2img overlay clothing/makeup/hair,
+90s anime style, retro Japanese anime style, {gender} character four-view character sheet, hand-drawn flat coloring, soft warm tones, cinematic lighting,
+character design sheet, character turnaround,
+Maintain base character face unchanged,  {overall temperament} no facial markings, no stains, no blood
+【L1·Makeup】{basic makeup / light makeup / formal makeup}; using {makeup style}, even skin, {eyebrow makeup}, {eye makeup}, {lip makeup},
+【L2·Hairstyle】{style type}, smooth hair strands, {hair accessory description},
+【L3+L4·Clothing】{main color}{style}, {material}, {decorative craft}, smooth clothing lines, clear texture,
+【L5·Footwear】{shoe style}, {shoe material}, {sock/shoe opening design}, unified with clothing,
+【L6·Accessories】{headwear}, {earrings}, {neckwear}, {waistwear},
+Same frame left to right: portrait closeup + front view + side view + back view,
+Natural standing, pure neutral gray background, soft cinematic light, no hard shadows,
+Four-view consistency, delicate face rendering, delicate hair strand rendering, clear texture details
+No text in image
 ```
 
 ---

@@ -64,8 +64,8 @@ metaData: art_skills
 | 项目 | 约束 |
 |---|---|
 | 背景 | 月白纯色 #E8EAF5（与设定图一致） |
-| 光线 | 均匀照明，无硬阴影 |
-| 角度 | 与原设定图正面图一致 |
+| 光线 | 均匀照明，no hard shadows |
+| 角度 | 与原设定图front view一致 |
 | 比例 | 道具占画面主体 70%+ |
 
 ### 状态对比图
@@ -73,7 +73,7 @@ metaData: art_skills
 | 项目 | 约束 |
 |---|---|
 | 布局 | 同一画面并排展示 2-3 种状态 |
-| 标注 | 每种状态下方标注状态名 |
+| 标注 | 每种状态下方标注state name |
 | 一致性 | 角度/光线/背景完全一致，仅状态不同 |
 
 ---
@@ -94,18 +94,18 @@ metaData: art_skills
 
 ### 单状态变体
 
-基于{道具名}设定图，国风二次元道具衍生状态，
-国风二次元，新国潮美学，日式动画渲染，赛璐璐平涂，细腻笔触，
-{道具类型}，{材质描述}，
-当前状态：{状态名}，{状态视觉描述}，
-{材质表面变化描述}，
-纯道具静物展示，道具独立陈列，无人持有，无人佩戴，
-同一画面四宫格（2×2）：左上正面图(front view)+右上侧面图(side view)+左下背面图(back view)+右下细节特写(detail closeup)，
-月白纯色背景，均匀柔光，无硬阴影，
-材质纹理超清晰，质感细腻，状态细节可辨，
-国风二次元高清渲染，高细节，细腻线条，赛璐璐平涂感，
-画面无字幕、无水印、无标题叠字，
-画面中不能出现任何人物、手部、手指、肢体，道具不可处于被握持或佩戴状态
+Based on {prop name} character sheet, Chinese-style 2D prop derivative state,
+Chinese-style 2D, new Chinese aesthetic, Japanese animation rendering, cel-shaded flat coloring, fine brushstrokes,
+{prop type}, {material description},
+Current state: {state name}, {state visual description},
+{material surface change description},
+Pure prop still life display, prop displayed independently, no person holding, no person wearing,
+Same frame four-panel (2x2): top-left front view(front view)+top-right side view(side view)+bottom-left back view(back view)+bottom-right detail closeup(detail closeup),
+Pale moonlight solid background, even soft light, no hard shadows,
+Ultra-clear material texture, fine texture, state details discernible,
+Chinese-style 2D HD rendering, high detail, fine lines, cel-shaded flat coloring feel,
+No subtitles, no watermarks, no title text in image,
+No people, hands, fingers, or limbs in image, prop cannot be in held or worn state
 
 ---
 
@@ -117,8 +117,8 @@ metaData: art_skills
 |---|---|
 | R1 | 道具核心造型/轮廓在所有状态中可识别 |
 | R2 | 状态变化须符合物理逻辑 |
-| R3 | 必须使用四宫格（2×2）布局：正面 + 侧面 + 背面 + 特写 |
-| R4 | 必须指定「月白纯色背景」，均匀柔光，无硬阴影 |
+| R3 | 必须使用2x2 grid（2×2）布局：正面 + 侧面 + 背面 + 特写 |
+| R4 | 必须指定「pale moonlight solid background」，even soft light，no hard shadows |
 | R5 | 必须包含「国风二次元 + 赛璐璐平涂」关键词 |
 
 ### 严禁

@@ -111,19 +111,19 @@
 
 ## 六、提示词模板
 ```
-90年代复古日系动画风格衍生场景图，基于参考图，
-90s anime style，手绘平涂上色，柔和暖色调，精细流畅线条，电影感光影，
-scene derivative design sheet，environment concept art，no people，no characters，no human figures，
-保持场景空间结构一致，
-{目标角度（如有）}，{景别视角（如有）}，{时段描述（如有）}，{天候描述（如有）}，
-{前景}，{中景}，{后景}，
-{色调描述}，{景深描述（如有）}，{天空色调变化（如有）}，{氛围调整（如有）}，
-{天候视觉特征（如有）}，{材质表面变化（如有）}，{植被适配描述（如有）}，
-线条流畅、块面阴影、使用痕迹，
-柔和电影光、背景光晕、自然光照，
-单画面构图，与参考图保持建筑结构/材质/色调/光线一致，仅按目标角度切换视点，
-画面中无任何人物
-图中不要有任何文字
+90s retro Japanese anime style derivative scene image, based on reference image,
+90s anime style, hand-drawn flat coloring, soft warm tones, fine smooth lines, cinematic lighting,
+scene derivative design sheet, environment concept art, no people, no characters, no human figures,
+Maintain scene spatial structure consistency,
+{target angle (if any)}, {shot angle (if any)}, {time period description (if any)}, {weather description (if any)},
+{Foreground}, {Midground}, {Background},
+{Color tone description}, {Depth of field description (if any)}, {Sky tone change (if any)}, {Atmosphere adjustment (if any)},
+{Weather visual features (if any)}, {Material surface changes (if any)}, {Vegetation adaptation description (if any)},
+Smooth lines, cel shading, wear traces,
+Soft cinematic light, background glow, natural lighting,
+Single frame composition, consistent with reference image in architecture structure/material/color tone/lighting, only switch viewpoint per target angle,
+No people in image
+No text in image
 ```
 
 > **使用说明**：根据用户提供的信息自行判断需要应用的变化维度（角度/景别/时段/天候），未提及的维度对应字段留空省略即可。无需为每种变体单独生成模板。

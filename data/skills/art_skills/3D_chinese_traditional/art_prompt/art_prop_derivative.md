@@ -55,8 +55,8 @@ metaData: art_skills
 | 项目 | 约束 |
 |---|---|
 | 背景 | 素灰纯色 #B8B8B8（与设定图一致） |
-| 光线 | 均匀照明，无硬阴影 |
-| 角度 | 与原设定图正面图一致 |
+| 光线 | 均匀照明，no hard shadows |
+| 角度 | 与原设定图front view一致 |
 | 比例 | 道具占画面主体 70%+ |
 
 ### 状态对比图
@@ -64,7 +64,7 @@ metaData: art_skills
 | 项目 | 约束 |
 |---|---|
 | 布局 | 同一画面并排展示 2-3 种状态 |
-| 标注 | 每种状态下方标注状态名 |
+| 标注 | 每种状态下方标注state name |
 | 一致性 | 角度/光线/背景完全一致，仅状态不同 |
 
 ---
@@ -85,16 +85,16 @@ metaData: art_skills
 
 ### 单状态变体
 
-基于{道具名}设定图，3D渲染风格，高精度建模，PBR材质，国风3D，电影级光影，
-{道具类型}，{材质描述}，
-当前状态：{状态名}，{状态视觉描述}，
-{材质表面变化描述}，
-纯道具静物展示，道具独立陈列，无人持有，无人佩戴，
-同一画面四宫格（2×2）：左上正面图(front view)+右上侧面图(side view)+左下背面图(back view)+右下细节特写(detail closeup)，
-素灰纯色背景，均匀柔光，无硬阴影，
-材质纹理超清晰，PBR材质渲染，状态细节可辨
-图中不要有任何文字，
-画面中不能出现任何人物、手部、手指、肢体，道具不可处于被握持或佩戴状态
+Based on {prop name} character sheet, 3D rendering style, high-precision modeling, PBR materials, Chinese-style 3D, cinematic lighting,
+{prop type}, {material description},
+Current state: {state name}, {state visual description},
+{material surface change description},
+Pure prop still life display, prop displayed independently, no person holding, no person wearing,
+Same frame four-panel (2x2): top-left front view(front view)+top-right side view(side view)+bottom-left back view(back view)+bottom-right detail closeup(detail closeup),
+Solid gray background, even soft light, no hard shadows,
+Ultra-clear material texture, PBR material rendering, state details discernible
+No text in image,
+No people, hands, fingers, or limbs in image, prop cannot be in held or worn state
 
 ---
 
@@ -106,8 +106,8 @@ metaData: art_skills
 |---|---|
 | R1 | 道具核心造型/轮廓在所有状态中可识别 |
 | R2 | 状态变化须符合物理逻辑 |
-| R3 | 必须使用四宫格（2×2）布局：左上正面图+右上侧面图+左下背面图+右下细节特写 |
-| R4 | 必须指定「素灰纯色背景」，均匀柔光，无硬阴影 |
+| R3 | 必须使用2x2 grid（2×2）布局：左上front view+右上side view+左下back view+右下detail closeup |
+| R4 | 必须指定「素灰纯色背景」，even soft light，no hard shadows |
 
 ### 严禁
 

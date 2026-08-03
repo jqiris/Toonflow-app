@@ -263,21 +263,19 @@
 ### 完整服化叠加（四视图）
 
 ```
-以角色基础形象图为底图，img2img叠加服化妆造，
-3D 动画渲染，电影级打光，活力赛璐珞质感，高细节材质，愉悦治愈氛围，卡通都市风，高细节卡通材质，适度卡通比例，暖色调配色，8K 超高清，电影级构图，柔和光影层次，明快卡通渲染风格，温馨治愈，{性别}角色四视图设定图，
-anime style, cel-shaded, 3D animation render, film lighting,
+Based on character base image, img2img overlay clothing/makeup/hair,
+3D anime render, film lighting, vibrant cel-shaded quality, high-detail material, cheerful healing atmosphere, cartoon urban style, high-detail cartoon material,
+{gender} character four-view character sheet, 3D rendered, high-precision modeling, 8K, ultra-faithful, face clean no facial markings, no stains, no blood,
 character design sheet, character turnaround,
-保持基础形象面容不变，{整体气质}，
-【L1·妆容】根据用户线索决策：{基础妆/轻妆/正式妆}；使用 {妆容风格}，赛璐珞肌肤，{眉妆}，{眼妆}，{唇妆}，
-【L2·发型】{造型类型}，发丝流畅渲染，{发饰描述}，
-【L3+L4·服饰】{主色}{款式}，{材质}，{装饰工艺}，衣服质感清晰、赛璐珞材质，
-【L5·配饰】{头饰}，{耳饰}，{项饰}，{腰饰}，
-同一画面左至右并排：人像特写+正视图+侧视图+后视图，
-自然站立，纯净中性灰背景，均匀柔光，无硬阴影，
-四视图一致性，面容细腻渲染，发丝细腻渲染，纹理细节清晰，
-赛璐珞渲染风格，柔和光影，适度卡通比例，写实材质结合，
-8K 超高清，电影级构图，
-图中不要有任何文字
+Maintain base model facial features unchanged, {overall temperament},
+【L1·Makeup】Decision based on user clues: {basic makeup / light makeup / formal makeup}; using {makeup style}, cel-shaded skin, {eyebrow makeup}, {eye makeup}, {lip makeup},
+【L2·Hairstyle】{hairstyle type}, clear hair strands, {hair accessories description},
+【L3+L4·Clothing】{main color}{garment style}, {material}, {decorative craft}, clear garment texture, cel-shaded quality,
+【L5·Accessories】{headpieces}, {earrings}, {necklaces}, {waist ornaments},
+Same frame left to right: portrait closeup + front view + side view + back view,
+Natural standing, pure neutral gray background, even soft light, no hard shadows,
+Four-view consistency, face/makeup/hairstyle/clothing/accessories completely consistent, 3D anime modeling clear, high-precision modeling clarity,
+No text in image
 ```
 
 ---

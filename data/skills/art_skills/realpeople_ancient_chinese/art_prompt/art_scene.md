@@ -105,21 +105,21 @@
 ## 六、提示词模板
 
 ```
-古风场景主视图概念图，
+Traditional Chinese scene concept map,
 real photography，photorealistic，shot on ARRI Alexa，35mm film grain，
 RAW photo，ultra realistic，hyper detailed，
 shallow depth of field，natural lens vignette，subtle chromatic aberration，bokeh，
-真实摄影质感，胶片颗粒感，自然光照，物理光影，
+realistic photography，film grain，natural lighting，physical light and shadow，
 scene design sheet，environment concept art，no people，no characters，no human figures，
-{室内/室外}，{场景类型}，{朝代风格}，{季节+时间}，
-前景：{元素}，中景：{元素}，后景：{元素}，
-{色调描述}，{天候/氛围元素}，
-{材质描述}，空气透视，纹理细节超清晰，
-材质自然磨损痕迹，岁月包浆，青苔风化，布料自然垂褶，
-自然光漫射，体积光，丁达尔效应，焦散投影，
-单画面构图，自然观察视角，构图能代表场景主体并展示前/中/后景层次，
-画面中无任何人物
-图中不要有任何文字
+{indoor/outdoor}，{scene type}，{dynasty style}，{season + time}，
+foreground: {element}，middle ground: {element}，background: {element}，
+{color description}，{weather/atmosphere elements}，
+{material description}，atmospheric perspective，ultra-clear texture details，
+natural material wear traces，age patina，moss weathering，natural fabric draping，
+natural light diffusion，volumetric lighting，God rays，caustic projection，
+Single frame composition，natural observation perspective，composition represents scene main body and shows foreground/middle/background layers，
+No people in the image
+No text in the image
 ```
 
 ---

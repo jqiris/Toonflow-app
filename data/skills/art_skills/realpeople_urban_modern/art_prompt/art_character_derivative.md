@@ -244,18 +244,18 @@
 ### 完整服化叠加（四视图）
 
 ```
-以角色基础形象图为底图，img2img叠加服化妆造，
-都市{性别}角色四视图设定图，真人写实摄影，都市写实纪实，强对比度，极致细节，8K，超保真
+Based on character base image, img2img overlay clothing/makeup/hair,
+urban {gender} character four-view character sheet, human realistic photography, urban realistic style, high contrast, extreme detail, 8K, ultra-faithful, face clean no facial markings, no stains, no blood,
 character design sheet，character turnaround，
-保持基础形象面容不变，{整体气质}，
-【L1·妆容】根据用户线索决策：{基础妆/轻妆/正式妆}；使用 {妆容风格}，自然肌肤，{眉妆}，{眼妆}，{唇妆}，
-【L2·发型】{造型类型}，发丝根根分明，{发饰描述}，
-【L3+L4·服饰】{主色}{款式}，{材质}，{装饰工艺}，衣服质感清晰，纹理超清晰，
-【L5·配饰】{头饰}，{耳饰}，{项链}，{手表}，
-同一画面左至右并排：人像特写+正视图+侧视图+后视图，
-自然站立，纯净中性灰背景，均匀柔光，无硬阴影，
-四视图一致性，面容细腻渲染，发丝细腻渲染，纹理细节超清晰
-图中不要有任何文字
+Maintain base model facial features unchanged，{overall temperament}，
+【L1·Makeup】Decision based on user clues: {basic makeup / light makeup / formal makeup}; using {makeup style}, natural skin, {eyebrow makeup}, {eye makeup}, {lip makeup},
+【L2·Hairstyle】{hairstyle type}，clear hair strands，{hair accessories description}，
+【L3+L4·Clothing】{main color}{garment style}，{material}，{decorative craft}，clear garment texture，ultra-clear texture，
+【L5·Accessories】{headpieces}，{earrings}，{necklaces}，{watches}，
+Same frame left to right: portrait closeup + front view + side view + back view，
+natural standing，pure neutral gray background，even soft light，no hard shadows，
+Four-view consistency，delicate face render，delicate hair strand render，ultra-clear texture details
+No text in image
 ```
 
 

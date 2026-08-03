@@ -20,7 +20,7 @@
 | 项目 | 约束 |
 |---|---|
 | 五官 | 由角色描述自然推导，不预设脸型/眼型/眉型/鼻型/唇型 |
-| 风格底色 | 二次元动画风格、赛璐璐上色、低饱和冷色调、电影级构图 |
+| 风格底色 | 二次元动画风格、赛璐璐上色、low-saturation cool tone、电影级构图 |
 | 气质 | 必须从角色描述提炼整体气质关键词（如清冷/温润/妩媚），并写入提示词 |
 | 表情 | 中性微表情，符合角色气质 |
 
@@ -34,7 +34,7 @@
 |---|---|---|
 | 肤色 | 冷白皮、全身均匀、白得通透 | 冷白皮、白皙肌肤 |
 | 光泽 | 柔和光感、非哑光非油光 | 肌肤柔光、肌肤细腻 |
-| 质感 | 细腻光滑、赛璐璐质感 | 皮肤细腻、肌肤质感 |
+| 质感 | 细腻光滑、赛璐璐质感 | delicate skin、肌肤质感 |
 | 露肤 | 面部/颈部/锁骨/手部 | 肩颈线条优美、肌肤白皙 |
 
 ### 男性
@@ -93,8 +93,8 @@
 |---|---|---|
 | 发色 | 纯黑、深蓝或深棕，禁挑染 | 黑色长发、深色长发 |
 | 发长 | 及肩、及腰或更长 | 及肩长发、及腰长发 |
-| 发质 | 层次分明、线条清晰 | 发丝层次分明、发丝细腻渲染 |
-| 造型 | 自然散发、中分/偏分、无发饰 | 长发自然散落、柔顺长发 |
+| 发质 | 层次分明、线条清晰 | 发丝层次分明、delicate hair strand render |
+| 造型 | 自然散发、中分/偏分、no hair accessories | 长发自然散落、柔顺长发 |
 
 ### 男性
 
@@ -102,7 +102,7 @@
 |---|---|---|
 | 发色 | 纯黑或深棕 | 黑发、深色短发/中发 |
 | 发长 | 短发至中长发 | 短发、中长发 |
-| 发质 | 层次分明、质感清晰 | 发丝层次分明、发丝细腻渲染 |
+| 发质 | 层次分明、质感清晰 | 发丝层次分明、delicate hair strand render |
 | 造型 | 自然散发或简单侧分、无发冠 | 头发自然散落、侧分发型 |
 
 ---
@@ -117,15 +117,15 @@
 |---|---|
 | 学生 | 现代校服 / 学院装 |
 | 上班族 | 职业便装（衬衫+裤装/裙装、轻西装） |
-| 居家/休闲 | 都市休闲服（卫衣/T恤+牛仔裤/连衣裙） |
+| 居家/休闲 | urban casual wear（卫衣/T恤+牛仔裤/连衣裙） |
 | 时尚/约会 | 都市时髦着装 |
 | 特殊职业 | 对应身份服装（医生/警察/教师等） |
-| 角色描述未明确 | 都市常服、低饱和冷色调 |
+| 角色描述未明确 | urban everyday wear、low-saturation cool tone |
 
 ### 着装统一规则
 
-- 服装风格须与现代都市二次元美学一致（赛璐璐上色、低饱和冷色调）
-- 颜色低饱和，无复杂花纹/装饰，便于后续衍生叠加
+- 服装风格须与现代都市二次元美学一致（赛璐璐上色、low-saturation cool tone）
+- 颜色低饱和，no complex patterns/装饰，便于后续衍生叠加
 - 四视图服装款式完全一致
 - 基础服装是「日常默认态」，焦点仍在面容与体态
 - 严禁内衣/暴露/性化打底
@@ -149,11 +149,11 @@
 |---|---|
 | 布局 | 同一画面从左至右并排四视图 |
 | 背景 | 纯净中性灰 `#E8E8E8` |
-| 站姿 | 自然站立、双脚平行微分、双臂自然下垂或微展 |
+| 站姿 | natural standing、双脚平行微分、双臂自然下垂或微展 |
 | 全身展示 | 全身立像必须从头顶到脚底完整入画，严禁裁切头顶或脚部 |
 | 特写展示 | 人像特写必须从头顶到锁骨完整入画，严禁裁切头顶，头发、额头、下巴均需完整 |
 | 表情 | 中性微表情，符合角色气质 |
-| 光线 | 均匀柔光，前方主光 + 双侧补光，无硬阴影 |
+| 光线 | even soft light，前方主光 + 双侧补光，no hard shadows |
 | 一致性 | 四视图的肤色/体型/发型/面容/基础服装完全一致 |
 | 画面比例 | 建议 4:1 或 3:1 |
 
@@ -161,19 +161,19 @@
 
 ## 八、提示词模板
 
-{性别}角色四视图设定图，二次元动画风格，赛璐璐上色，现代都市风格，强对比度，极致细节，
-character design sheet，character turnaround，
-{角色描述对应的五官特征 - 由角色描述自然推导}，{整体气质}，素颜无妆，
-{肤色}，肌肤柔光，皮肤细腻，赛璐璐质感，
-{身高描述，如：170cm tall、tall slender woman}，{头身比，如：7 heads tall proportion}，{身材描述}，{体态描述}，
-{发色}{发长}，发丝层次分明，{基础造型}，无发饰，
-{角色身份对应的常规着装，如：现代校服/职业便装/都市休闲服}，低饱和冷色调，无复杂花纹，
-同一画面左至右并排：人像特写+正视图+侧视图+后视图，
-人像特写从头顶到锁骨完整展示，不裁切头顶，head to collarbone complete，
-全身立像从头顶到脚底完整展示，full body head to toe，不裁切头顶和脚部，
-自然站立，纯净中性灰背景，均匀柔光，无硬阴影，
-四视图一致性，面容细腻渲染，发丝细腻渲染
-图中不要有任何文字
+{gender} character four-view character sheet, 2D anime style, cel-shaded coloring, modern urban style, high contrast, ultimate detail,
+character design sheet, character turnaround,
+{facial features corresponding to character description - naturally derived from character description}, {overall temperament}, bare-faced no makeup,
+{skin tone}, soft skin glow, delicate skin, cel-shaded texture,
+{height description, e.g.: 170cm tall, tall slender woman}, {head-to-body ratio, e.g.: 7 heads tall proportion}, {body description}, {posture description},
+{hair color}{hair length}, layered hair strands clear, {basic style}, no hair accessories,
+{regular clothing corresponding to character identity, e.g.: modern school uniform / professional casual wear / urban casual wear}, low-saturation cool tones, no complex patterns, face clean no facial markings, no stains, no blood,
+Same frame left to right: portrait closeup + front view + side view + back view,
+Portrait closeup complete from crown to collarbone, no cropping of crown, head to collarbone complete,
+Full body standing pose complete from crown to toe, full body head to toe, no cropping of crown or feet,
+Natural standing, pure neutral gray background, even soft light, no hard shadows,
+Four-view consistency, delicate face rendering, delicate hair strand rendering
+No text in image
 
 ---
 
@@ -183,11 +183,11 @@ character design sheet，character turnaround，
 
 | 编号 | 规则 |
 |---|---|
-| R1 | 必须为「素颜无妆」状态 |
-| R2 | 必须根据角色描述声明合适的常规着装作为基础服装（如学生→校服、上班族→职业便装、居家→都市休闲服）；禁止内衣打底 |
-| R3 | 必须声明「无发饰、无配饰」 |
-| R4 | 必须指定「纯净中性灰背景」 |
-| R5 | 必须指定「四视图一致性」 |
+| R1 | 必须为「bare-faced no makeup」状态 |
+| R2 | 必须根据角色描述声明合适的常规着装作为基础服装（如学生→校服、上班族→职业便装、居家→urban casual wear）；禁止内衣打底 |
+| R3 | 必须声明「no hair accessories、no accessories」 |
+| R4 | 必须指定「pure neutral gray background」 |
+| R5 | 必须指定「four-view consistency」 |
 | R6 | 全身立像必须从头顶到脚底完整展示，严禁裁切 |
 | R7 | 必须声明角色身高并通过头身比换算约束全身比例（女性默认160-170cm/6.5-7.5头身，男性默认175-185cm/7-8头身） |
 | R8 | 人像特写必须从头顶到锁骨完整展示，严禁裁切头顶 |

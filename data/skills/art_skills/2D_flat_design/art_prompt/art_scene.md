@@ -105,19 +105,19 @@
 ## 六、提示词模板
 
 ```
-扁平古风场景主视图概念图，
-2d flat design，vector art，flat illustration，
-minimalist，clean lines，solid colors，
-flat scene，environment design，no people，no characters，no human figures，
-{室内/室外}，{场景类型}，{朝代风格}，{季节+时间}，
-前景：{色块元素}，中景：{色块元素}，后景：{色块元素}，
-{色调描述}，{天候/氛围元素}，
-{材质描述}，无透视，纯色填充，
-无岁月痕迹，无磨损，扁平完美，
-无光照，无阴影，纯色平涂，
-单画面构图，自然观察视角，构图能代表场景主体并展示前/中/后景色块层次，
-画面中无任何人物
-图中不要有任何文字
+Flat ancient-style scene main view concept art,
+2d flat design, vector art, flat illustration,
+minimalist, clean lines, solid colors,
+flat scene, environment design, no people, no characters, no human figures,
+{indoor/outdoor}, {scene type}, {dynasty style}, {season+time},
+Foreground: {color block elements}, Midground: {color block elements}, Background: {color block elements},
+{Color tone description}, {weather/atmosphere elements},
+{Material description}, no perspective, solid color fill,
+No age wear, no wear traces, flat and perfect,
+No lighting, no shadows, solid flat color,
+Single frame composition, natural observation angle, composition represents scene subject and shows foreground/midground/background color block layers,
+No people in image
+No text in image
 ```
 
 ---

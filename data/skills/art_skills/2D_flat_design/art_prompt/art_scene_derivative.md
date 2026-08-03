@@ -112,21 +112,21 @@
 ## 六、提示词模板
 
 ```
-扁平古风衍生场景图，基于参考图，
-2d flat design，vector art，flat illustration，
-minimalist，clean lines，solid colors，
-flat scene derivative，environment concept art，no people，no characters，no human figures，
-保持场景空间结构一致，
-{目标角度（如有）}，{景别视角（如有）}，{时段描述（如有）}，{天候描述（如有）}，
-{前景色块}，{中景色块}，{后景色块}，
-{色调描述}，{色块变化（如有）}，{天空色块变化（如有）}，{氛围调整（如有）}，
-{天候视觉特征（如有）}，{材质色块变化（如有）}，{植被适配描述（如有）}，
-无岁月痕迹，无磨损，扁平完美，
-无光照，无阴影，纯色平涂，
-无透视，纯色填充，
-单画面构图，与参考图保持建筑结构/材质/色调一致，仅按目标角度切换视点，
-画面中无任何人物
-图中不要有任何文字
+Flat ancient-style derivative scene image, based on reference image,
+2d flat design, vector art, flat illustration,
+minimalist, clean lines, solid colors,
+flat scene derivative, environment concept art, no people, no characters, no human figures,
+Maintain scene spatial structure consistency,
+{target angle (if any)}, {shot angle (if any)}, {time period description (if any)}, {weather description (if any)},
+{Foreground color blocks}, {Midground color blocks}, {Background color blocks},
+{Color tone description}, {Color block changes (if any)}, {Sky color block change (if any)}, {Atmosphere adjustment (if any)},
+{Weather visual features (if any)}, {Material color block changes (if any)}, {Vegetation adaptation description (if any)},
+No age wear, no wear traces, flat and perfect,
+No lighting, no shadows, solid flat color,
+No perspective, solid color fill,
+Single frame composition, consistent with reference image in architecture structure/material/color tone, only switch viewpoint per target angle,
+No people in image
+No text in image
 ```
 
 > **使用说明**：根据用户提供的信息自行判断需要应用的变化维度（角度/景别/时段/天候），未提及的维度对应字段留空省略即可。无需为每种变体单独生成模板。

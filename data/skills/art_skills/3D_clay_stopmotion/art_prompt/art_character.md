@@ -144,19 +144,19 @@
 ## 八、提示词模板
 
 ```
-黏土定格动画{性别}角色四视图设定图，定格动画风格，3D卡通渲染，暖调光影，
+Clay stop-motion {gender} character four-view character sheet, stop-motion animation style, 3D clay render, warm tone lighting,
 character design sheet，character turnaround，
-{角色描述对应的五官特征 - 由角色描述自然推导，整体保持黏土圆润感}，{整体气质}，
-{肤色}，哑光黏土质感，黏土肌理清晰，手工捏塑痕迹，
-{身高描述}，{头身比，如：7 heads tall proportion}，{身材描述}，{体态描述}，
-{发色}{发长}，黏土发型，{基础造型}，无复杂发饰，
-（女性：简化连衣裙 / 男性：简化衬衫+裤装），低饱和暖色调，无花纹，
-同一画面左至右并排：人像特写+正视图+侧视图+后视图，
-人像特写从头顶到锁骨完整展示，head to collarbone complete，
-全身立像从头顶到脚底完整展示，full body head to toe，
-自然站立，纯净中性灰背景，暖调柔光，无硬阴影，
-四视图一致性，黏土肌理细腻渲染，表情柔和治愈
-图中不要有任何文字
+{facial features derived from character description - maintain clay rounded feel}，{overall temperament}， no facial markings, no stains, no blood
+{skin tone}，matte clay texture，clay texture clear，hand-sculpted traces，
+{height description}，{head-to-body ratio, e.g., 7 heads tall proportion}，{body description}，{posture description}，
+{hair color}{hair length}，clay hairstyle，{basic hairstyle}，no complex hair accessories，
+(female: simplified sundress / male: simplified shirt + trousers)，low saturation warm tone，no patterns，
+Same frame left to right: portrait closeup + front view + side view + back view，
+Portrait closeup complete from crown to collarbone，head to collarbone complete，
+Full body standing pose complete from crown to toe，full body head to toe，
+natural standing，pure neutral gray background，warm tone soft light，no hard shadows，
+four-view consistency，clay texture fine render，gentle and healing expression
+No text in image
 ```
 
 ---

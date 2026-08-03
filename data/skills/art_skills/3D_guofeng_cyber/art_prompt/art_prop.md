@@ -98,38 +98,38 @@ metaData: art_skills
 ## 五、标准化提示词模板（双场景全适配，直接复用）
 ### 【通用模板】古风+都市双场景兼容
 ```
-国风赛博朋克道具设定图，8K超高清，次世代高精度3D建模，PBR物理材质，光线追踪，全局光照，3D国风赛博风格，东方古典形制融合赛博机能美学，电影级光影，
-{道具类型}，{材质描述}，{工艺/装饰描述}，{机能元素描述}，{状态描述}，{发光效果描述}，
-纯道具静物展示，道具独立陈列，无人持有，无人佩戴，无人使用，
-同一画面四宫格（2×2）：左上正面正交视图+右上侧面正交视图+左下背面正交视图+右下细节特写，
-素灰纯色#B8B8B8背景，均匀柔光，全局光照，无硬阴影，无过曝，无死黑，
-材质纹理超清晰，PBR物理材质渲染，{材质光泽描述}，纹理细节极致清晰，
-图中不要有任何文字、标注、刻度线、水印，
-画面中不能出现任何人物、手部、手指、肢体，道具不可处于被握持、佩戴、使用状态
+国风赛博朋克prop design图，8K超高清，次世代高精度3D建模，PBR物理材质，光线追踪，全局光照，3D cyber guofeng风格，东方古典形制融合赛博机能美学，电影级光影，
+{prop type}，{material description}，{craft/decoration description}，{机能元素描述}，{state description}，{发光效果描述}，
+纯prop still life展示，prop displayed independently，no one holding，no one wearing，无人使用，
+同一画面2x2 grid（2×2）：左上正面正交视图+右上侧面正交视图+左下背面正交视图+右下detail closeup，
+素灰纯色#B8B8B8背景，even soft light，全局光照，no hard shadows，无过曝，no pure black，
+ultra-clear material texture，PBR物理材质渲染，{material gloss description}，纹理细节极致清晰，
+No text in image、标注、刻度线、水印，
+No people in the image、手部、手指、肢体，道具不可处于被握持、佩戴、使用状态
 ```
 
 ### 【古风赛博专属模板】仙侠/武侠世界观专用
 ```
-古风赛博朋克道具设定图，8K超高清，次世代高精度3D建模，PBR物理材质，光线追踪，全局光照，3D国风仙侠赛博风格，东方古典形制为核心，赛博机能元素为点缀，东方水墨电影级光影，
-{道具类型}，{材质描述}，{传统工艺描述}，{符文/能量回路描述}，{状态描述}，{柔和发光效果描述}，
-纯道具静物展示，道具独立陈列，无人持有，无人佩戴，无人使用，
-同一画面四宫格（2×2）：左上正面正交视图+右上侧面正交视图+左下背面正交视图+右下细节特写，
-素灰纯色#B8B8B8背景，东方水墨柔光，低对比，无硬阴影，无过曝，
-材质纹理超清晰，PBR物理材质渲染，{材质光泽描述}，细节极致写实，
-图中不要有任何文字、标注、刻度线、水印，
-画面中不能出现任何人物、手部、手指、肢体，道具不可处于被握持、佩戴、使用状态
+古风赛博朋克prop design图，8K超高清，次世代高精度3D建模，PBR物理材质，光线追踪，全局光照，3D国风仙侠赛博风格，东方古典形制为核心，赛博机能元素为点缀，东方水墨电影级光影，
+{prop type}，{material description}，{传统工艺描述}，{符文/能量回路描述}，{state description}，{柔和发光效果描述}，
+纯prop still life展示，prop displayed independently，no one holding，no one wearing，无人使用，
+同一画面2x2 grid（2×2）：左上正面正交视图+右上侧面正交视图+左下背面正交视图+右下detail closeup，
+素灰纯色#B8B8B8背景，东方水墨柔光，低对比，no hard shadows，无过曝，
+ultra-clear material texture，PBR物理材质渲染，{material gloss description}，细节极致写实，
+No text in image、标注、刻度线、水印，
+No people in the image、手部、手指、肢体，道具不可处于被握持、佩戴、使用状态
 ```
 
 ### 【都市国风赛博专属模板】近未来新中式都市专用
 ```
-新中式都市赛博朋克道具设定图，8K超高清，次世代高精度3D建模，PBR物理材质，光线追踪，全局光照，3D都市国风赛博风格，极简新中式设计为核心，赛博机能为功能载体，赛博朋克电影级光影，
-{道具类型}，{材质描述}，{工艺描述}，{智能机能元素描述}，{状态描述}，{霓虹发光效果描述}，
-纯道具静物展示，道具独立陈列，无人持有，无人佩戴，无人使用，
-同一画面四宫格（2×2）：左上正面正交视图+右上侧面正交视图+左下背面正交视图+右下细节特写，
-素灰纯色#B8B8B8背景，全局光照，均匀柔光，物理级反射，无硬阴影，无过曝，
-材质纹理超清晰，PBR物理材质渲染，{材质光泽描述}，精密细节极致写实，
-图中不要有任何文字、标注、刻度线、水印，
-画面中不能出现任何人物、手部、手指、肢体，道具不可处于被握持、佩戴、使用状态
+新中式都市赛博朋克prop design图，8K超高清，次世代高精度3D建模，PBR物理材质，光线追踪，全局光照，3D都市国风赛博风格，极简新中式设计为核心，赛博机能为功能载体，赛博朋克电影级光影，
+{prop type}，{material description}，{工艺描述}，{智能机能元素描述}，{state description}，{霓虹发光效果描述}，
+纯prop still life展示，prop displayed independently，no one holding，no one wearing，无人使用，
+同一画面2x2 grid（2×2）：左上正面正交视图+右上侧面正交视图+左下背面正交视图+右下detail closeup，
+素灰纯色#B8B8B8背景，全局光照，even soft light，物理级反射，no hard shadows，无过曝，
+ultra-clear material texture，PBR物理材质渲染，{material gloss description}，精密细节极致写实，
+No text in image、标注、刻度线、水印，
+No people in the image、手部、手指、肢体，道具不可处于被握持、佩戴、使用状态
 ```
 
 ---

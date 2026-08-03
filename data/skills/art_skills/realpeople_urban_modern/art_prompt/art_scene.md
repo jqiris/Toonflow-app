@@ -108,17 +108,17 @@
 real photography，photorealistic，shot on ARRI Alexa，35mm film grain，
 RAW photo，ultra realistic，hyper detailed，
 shallow depth of field，natural lens vignette，subtle chromatic aberration，bokeh，
-真实摄影质感，胶片颗粒感，自然光照，物理光影，
+realistic photography，film grain感，natural lighting，physical light and shadow，
 scene design sheet，environment concept art，no people，no characters，no human figures，
-{室内/室外}，{场景类型}，{风格}，{季节+时间}，
-前景：{元素}，中景：{元素}，后景：{元素}，
-{色调描述}，{天候/氛围元素}，
-{材质描述}，空气透视，纹理细节超清晰，
-材质自然磨损痕迹，使用痕迹，墙面剥落，金属氧化，
-自然光漫射，体积光，丁达尔效应，焦散投影，
-单画面构图，自然观察视角，构图能代表场景主体并展示前/中/后景层次，
-画面中无任何人物
-图中不要有任何文字
+{indoor/outdoor}，{场景类型}，{风格}，{季节+时间}，
+foreground：{元素}，middle ground：{元素}，background：{元素}，
+{color描述}，{weather/atmosphere元素}，
+{material description}，atmospheric perspective，ultra-clear texture details，
+natural material wear traces，使用痕迹，墙面剥落，金属氧化，
+自然光漫射，volumetric lighting，丁达尔效应，焦散投影，
+Single frame composition，natural observation perspective，composition represents scene main body并shows foreground/middle/background layers，
+No people in the image
+No text in image
 ```
 
 

@@ -112,20 +112,20 @@
 ## 六、提示词模板
 
 ```
-黏土定格动画衍生场景图，基于参考图，定格动画风格，3D卡通渲染，暖调光影，柔和浅景深，
+clay stop-motion animation衍生场景图，基于参考图，定格动画风格，3D卡通渲染，暖调光影，soft shallow depth of field，
 claymation style，stop-motion aesthetic，warm lighting，shallow depth of field，bokeh，
 scene derivative design sheet，environment concept art，no people，no characters，no human figures，
 保持场景空间结构一致，
-{目标角度（如有）}，{景别视角（如有）}，{时段描述（如有）}，{天候描述（如有）}，
-{前景}，{中景}，{后景}，
-{色调描述}，{景深描述（如有）}，{天空色调变化（如有）}，{氛围调整（如有）}，
-{天候视觉特征（如有）}，{材质表面变化（如有）}，{植被适配描述（如有）}，
-材质自然磨损痕迹，岁月包浆，青苔风化，布料自然垂褶，
-暖调柔光漫射，体积光，暖调光斑，浅景深虚化，
-空气透视，纹理细节超清晰，
-单画面构图，与参考图保持建筑结构/材质/色调/光线一致，仅按目标角度切换视点，
-画面中无任何人物
-图中不要有任何文字
+{目标角度（如有）}，{景别视角（如有）}，{时段描述（如有）}，{weather描述（如有）}，
+{foreground}，{middle ground}，{background}，
+{color描述}，{景深描述（如有）}，{天空color变化（如有）}，{atmosphere调整（如有）}，
+{weather视觉特征（如有）}，{材质表面变化（如有）}，{植被适配描述（如有）}，
+natural material wear traces，age patina，moss weathering，natural fabric draping，
+warm soft light diffusion，volumetric lighting，warm light spots，shallow depth of field，
+atmospheric perspective，ultra-clear texture details，
+Single frame composition，与参考图保持建筑结构/材质/color/光线一致，仅按目标角度切换视点，
+No people in the image
+No text in image
 ```
 
 ---

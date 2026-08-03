@@ -5,7 +5,7 @@
 ## 一、叠加原则
 
 1. **面容不变** — 叠加后五官必须与底模完全一致，禁止面容偏移
-2. **姿态不变** — 保持底模自然站立姿态，禁止任何姿态/动作/体态变化
+2. **姿态不变** — 保持底模natural standing姿态，禁止任何姿态/动作/体态变化
 3. **逐层可控** — 每层独立描述，便于按层替换（换装不换妆）
 4. **风格统一** — 所有服化元素服从同一美学体系
 5. **质感不降** — 叠加后质感标准不低于底模
@@ -25,7 +25,7 @@
 | L5 | 配饰 | 首饰/手表/眼镜/包袋等 |
 | L6 | 鞋履 | 高跟鞋/短靴/乐福鞋/运动鞋等，与整体服装完整配套 |
 
-> **范畴边界**：人物衍生资产仅包含 L0–L6 层级（服化妆造），不包含道具（手机/书本/雨伞/咖啡杯等手持物）、场景环境（室内/室外/天气等）、姿态动作（行走/回眸/举手等）。这些属于其他资产类型的范畴。
+> **范畴边界**：人物衍生资产仅包含 L0–L6 层级（服化妆造），不包含道具（手机/书本/雨伞/咖啡杯等手持物）、场景环境（indoor/outdoor/天气等）、姿态动作（行走/回眸/举手等）。这些属于其他资产类型的范畴。
 
 ---
 
@@ -151,7 +151,7 @@
 
 | 项目 | 约束 | 提示词 |
 |---|---|---|
-| 主色 | 柔和色系为主，低饱和，但不同角色需有各自配色重心 | 柔和色调、低饱和色、角色专属配色 |
+| 主色 | 柔和色系为主，低饱和，但不同角色需有各自配色重心 | 柔和color、低饱和色、角色专属配色 |
 | 材质 | 现代面料质感、纹理清晰 | 现代面料、纹理清晰 |
 | 质感 | 衣物布料质感清晰 | 衣物质感清晰、布料纹理 |
 | 层次 | 服装层次分明、搭配合理，不做千篇一律模板化穿搭 | 服装层次清晰、搭配得当 |
@@ -226,7 +226,7 @@
 > | 发型 | 职场/通勤→半扎发或盘发；日常/恋爱→自然披发；运动/行动→高马尾；正式场合→优雅盘发 |
 > | 服饰 | 现代都市场景优先；情感强度越高→服饰精致度越高；张力场景→商务正装/冷色系 |
 > | 配饰繁度 | 日常→简约；约会→精致首饰+包袋；正式/晚宴→精致首饰+手表；运动→简或无 |
-> | 色调倾向 | 冷白皮+低饱和都市配色；暧昧场景→暖粉调；对峙/张力→冷灰+黑白对比 |
+> | color倾向 | 冷白皮+低饱和都市配色；暧昧场景→暖粉调；对峙/张力→冷灰+黑白对比 |
 
 ## 八、四视图设定图规范
 
@@ -247,9 +247,9 @@
 |---|---|
 | 布局 | 同一画面从左至右并排四视图 |
 | 背景 | 纯净中性灰 `#E8E8E8` |
-| 站姿 | 自然站立、双脚平行微分、双臂自然下垂或微展（**禁止任何姿态变化**） |
+| 站姿 | natural standing、双脚平行微分、双臂自然下垂或微展（**禁止任何姿态变化**） |
 | 表情 | 符合妆容风格的微表情（如清雅素妆→淡然、桃妆→含笑），仅限面部微表情，不涉及肢体动作 |
-| 光线 | 均匀柔光，前方主光 + 双侧补光，无硬阴影 |
+| 光线 | even soft light，前方主光 + 双侧补光，no hard shadows |
 | 一致性 | 四视图的面容/妆容/发型/发饰/服饰/配饰/鞋履完全一致 |
 | 画面比例 | 建议 4:1 或 3:1 |
 
@@ -265,24 +265,24 @@
 | 禁止输出 | 速查表、分层构建方案、视觉约束表、禁止事项表、衍生方案、输出建议、核心要素表等一切非提示词内容 |
 | 禁止场景 | 人物衍生资产**不包含场景/环境描述**，不输出任何场景/环境/天气/背景叙事内容（场景属于场景资产范畴） |
 | 禁止道具 | **不包含任何道具交互**，不输出手机/书本/雨伞/咖啡杯等手持物或交互物（道具属于道具资产范畴） |
-| 禁止姿态变化 | **不改变底模姿态**，不输出行走/回眸/举手/侧身/奔跑等任何动作或体态变化，保持自然站立 |
+| 禁止姿态变化 | **不改变底模姿态**，不输出行走/回眸/举手/侧身/奔跑等任何动作或体态变化，保持natural standing |
 | 格式 | 直接输出可用的提示词代码块，无需标题、表格、解释、方案对比 |
 
 ### 完整服化叠加（四视图）
 
-以角色基础形象图为底图，img2img叠加服化妆造，
-二次元{性别}角色四视图设定图，赛璐璐上色，现代都市风格，强对比度，极致细节，8K，超保真
-character design sheet，character turnaround，
-保持基础形象面容不变，{整体气质}，
-【L1·妆容】根据用户线索决策：{基础妆/轻妆/正式妆}；使用 {妆容风格}，肌肤柔光，{眉妆}，{眼妆}，{唇妆}，
-【L2·发型】{造型类型}，发丝层次分明，{发饰描述}，
-【L3+L4·服饰】{主色}{款式}，{材质}，{装饰工艺}，按角色身份与场景差异化搭配，避免所有人服装同款同色，衣服质感清晰，纹理超清晰，
-【L5·配饰】{头饰}，{耳饰}，{手表}，{包袋}，
-【L6·鞋履】{鞋型}，{鞋面材质}，{鞋跟/鞋底描述}，与服装风格一致，
-同一画面左至右并排：人像特写+正视图+侧视图+后视图，
-自然站立，纯净中性灰背景，均匀柔光，无硬阴影，
-四视图一致性，面容细腻渲染，发丝细腻渲染，纹理细节超清晰
-图中不要有任何文字
+Based on character base image, img2img overlay clothing/makeup/hair,
+2D {gender} character four-view character sheet, cel-shaded coloring, modern urban style, high contrast, ultimate detail, 8K, ultra-faithful
+character design sheet, character turnaround,
+Maintain base character face unchanged, {overall temperament},
+【L1·Makeup】Decision based on user clues: {basic makeup / light makeup / formal makeup}; using {makeup style}, soft skin glow, {eyebrow makeup}, {eye makeup}, {lip makeup},
+【L2·Hairstyle】{style type}, layered hair strands clear, {hair accessory description},
+【L3+L4·Clothing】{main color}{style}, {material}, {decorative craft}, match based on character identity and scene differences to avoid all characters wearing same clothing/color, clear clothing texture, ultra-clear texture, face clean no facial markings, no stains, no blood,
+【L5·Accessories】{headwear}, {earrings}, {watch}, {bag},
+【L6·Footwear】{shoe style}, {shoe material}, {heel/sole description}, consistent with clothing style,
+Same frame left to right: portrait closeup + front view + side view + back view,
+Natural standing, pure neutral gray background, even soft light, no hard shadows,
+Four-view consistency, delicate face rendering, delicate hair strand rendering, ultra-clear texture details
+No text in image
 
 ---
 
@@ -297,12 +297,12 @@ character design sheet，character turnaround，
 | R3 | 女性配饰必须「简约精致 + 工艺清晰」 |
 | R4 | 妆容/发型/服饰/配饰/鞋履风格统一 |
 | R5 | 必须输出四视图设定图（人像特写+正视图+侧视图+后视图） |
-| R6 | 必须指定「纯净中性灰背景」 |
-| R7 | 必须指定「四视图一致性」 |
+| R6 | 必须指定「pure neutral gray background」 |
+| R7 | 必须指定「four-view consistency」 |
 | R8 | **仅输出提示词**——禁止输出速查表/分层方案/视觉约束/禁止事项/衍生方案/输出建议等任何非提示词内容 |
 | R9 | **禁止包含场景描述**——人物衍生资产不涉及场景/环境/天气/背景叙事，场景属于独立资产类型 |
 | R10 | **禁止道具交互**——不包含任何手持物/交互物（手机/书本/雨伞/咖啡杯等），道具属于独立资产类型 |
-| R11 | **姿态保持不变**——必须保持底模自然站立姿态，禁止任何动作/体态/姿势变化 |
+| R11 | **姿态保持不变**——必须保持底模natural standing姿态，禁止任何动作/体态/姿势变化 |
 | R12 | **L1 必须先分析再决策**——先解析用户面部线索，再确定基础妆/轻妆/正式妆 |
 | R13 | **所有衍生资产均需妆造**——正常情况不保持素颜，至少使用基础妆 |
 | R14 | **上妆强度受控**——即使上妆也需克制，不得出现夸张彩妆效果 |
@@ -320,7 +320,7 @@ character design sheet，character turnaround，
 | X4 | 复杂场景背景（必须纯灰底） |
 | X5 | 四视图间服化妆造不一致 |
 | X6 | 输出提示词以外的任何内容（表格/方案/建议/解释/变体等） |
-| X7 | 在人物衍生资产中加入场景描述（现代室内/室外/天气等环境元素） |
+| X7 | 在人物衍生资产中加入场景描述（现代indoor/outdoor/天气等环境元素） |
 | X8 | 省略鞋履设计，导致脚部只有默认底模或无明确搭配 |
 | X9 | 所有角色使用同款同色同版型服装，缺乏角色差异 |
 | X10 | 输出「核心要素速查」「分层构建方案」「视觉约束」「禁止事项」「衍生方案」等章节 |

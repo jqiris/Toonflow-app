@@ -165,19 +165,19 @@
 ## 八、提示词模板
 
 ```
-{性别}角色四视图设定图，3D 动画渲染，电影级打光，活力赛璐珞质感，高细节材质，愉悦治愈氛围，卡通都市风，高细节卡通材质，适度卡通比例，暖色调配色，8K 超高清，电影级构图，柔和光影层次，明快卡通渲染风格，温馨治愈，
+{gender} character four-view character sheet, 3D anime render, film lighting, vibrant cel-shaded quality, high-detail material, cheerful healing atmosphere, cartoon urban style, high-detail cartoon material, moderate cartoon proportion, warm tone color, 8K ultra high definition, cinematic composition, soft light and shadow layers, bright cartoon render style, warm healing,
 character design sheet，character turnaround，
-{角色描述对应的五官特征 - 由角色描述自然推导}，{整体气质}，素颜无妆，
-{肤色}，柔光肌，皮肤通透发光，皮肤细腻，赛璐珞质感，
-{身高描述，如：165cm tall、petite cute girl}，{头身比，如：6.5 heads tall proportion}，{身材描述}，{体态描述}，
-{发色}{发长}，发丝根根分明，{基础造型}，无发饰，
-{角色身份对应的常规着装，如：校服/职业便装/都市休闲服}，暖色调，无复杂花纹，
-同一画面左至右并排：人像特写+正视图+侧视图+后视图，
-人像特写从头顶到锁骨完整展示，不裁切头顶，head to collarbone complete，
-全身立像从头顶到脚底完整展示，full body head to toe，不裁切头顶和脚部，
-自然站立，纯净中性灰背景，均匀柔光，无硬阴影，
-四视图一致性，面容细腻渲染，发丝细腻渲染
-图中不要有任何文字
+{facial features derived from character description}，{overall temperament}，bare face，no facial markings, no stains, no blood，
+{skin tone}，soft light skin，skin translucent and smooth，delicate skin，cel-shaded quality，
+{height description, e.g., 165cm tall, petite cute girl}，{head-to-body ratio, e.g., 6.5 heads tall proportion}，{body description}，{posture description}，
+{hair color}{hair length}，clear hair strands，{basic hairstyle}，no hair accessories，
+{role identity corresponding regular clothing, e.g., school uniform/professional casual wear/casual wear}，warm tone，no complex patterns，
+Same frame left to right: portrait closeup + front view + side view + back view，
+Portrait closeup complete from crown to collarbone，no cropping of crown，head to collarbone complete，
+Full standing pose complete from crown to toe，full body head to toe，no cropping of crown or feet，
+natural standing，pure neutral gray background，even soft lighting，no hard shadows，
+Four-view consistency，delicate face render，delicate hair strand render
+No text in image
 ```
 
 

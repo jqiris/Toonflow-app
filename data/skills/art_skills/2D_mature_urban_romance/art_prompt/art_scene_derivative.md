@@ -6,8 +6,8 @@
 
 1. **空间一致** — 建筑结构/布局/材质在所有变体中保持一致
 2. **景别驱动** — 同一场景通过不同景别展示不同叙事功能
-3. **时段切换** — 同一空间在不同时间段呈现不同光影氛围
-4. **天候变化** — 同一空间在不同天气下呈现不同情绪
+3. **时段切换** — 同一空间在不同时间段呈现不同光影atmosphere
+4. **weather变化** — 同一空间在不同天气下呈现不同情绪
 5. **赛璐璐为锚** — 所有变体必须保持二次元动画风格，保持清晰线条与赛璐璐上色
 
 ---
@@ -20,17 +20,17 @@
 |---|---|---|---|
 | 大全景 | 场景全貌 + 周围环境 | 建立空间感、定位 | `extreme wide shot`、大全景 |
 | 全景 | 场景完整呈现 | 展示空间结构 | `wide shot`、全景 |
-| 中景 | 场景局部区域 | 聚焦功能区 | `medium shot`、中景 |
-| 近景 | 场景细部 | 材质/氛围道具特写 | `close shot`、近景 |
+| middle ground | 场景局部区域 | 聚焦功能区 | `medium shot`、middle ground |
+| 近景 | 场景细部 | 材质/atmosphere道具特写 | `close shot`、近景 |
 | 特写 | 极局部细节 | 材质纹理/关键道具 | `extreme closeup`、特写 |
 
 ### 景别衍生规范
 
 | 从基准图衍生 | 保持不变 | 允许变化 |
 |---|---|---|
-| 大全景 → 全景 | 建筑外观、整体布局 | 视角收窄、前景增加 |
-| 全景 → 中景 | 材质、色调、光线 | 裁切聚焦、景深变化 |
-| 中景 → 近景 | 材质、色调 | 景深浅、背景虚化 |
+| 大全景 → 全景 | 建筑外观、整体布局 | 视角收窄、foreground增加 |
+| 全景 → middle ground | 材质、color、光线 | 裁切聚焦、景深变化 |
+| middle ground → 近景 | 材质、color | 景深浅、背景虚化 |
 | 近景 → 特写 | 材质纹理 | 极浅景深、微距感 |
 
 ---
@@ -43,25 +43,25 @@
 |---|---|---|
 | 清晨 | 冷白光调、薄雾感 | 晨光微熹、清晨薄雾 |
 | 正午 | 明亮、阴影短、色彩鲜明 | 正午阳光、光线明亮 |
-| 黄昏 | 金色调、长影、天空渐变 | 暮色金辉、golden hour |
-| 夜间（月光） | 冷蓝色调、幽静清冷 | 月光清辉、moonlight |
-| 夜间（灯火） | 暖黄点缀、明暗对比 | 灯火阑珊、灯光氛围 |
+| 黄昏 | 金color、长影、天空渐变 | 暮色金辉、golden hour |
+| 夜间（月光） | 冷蓝color、幽静清冷 | 月光清辉、moonlight |
+| 夜间（灯火） | 暖黄点缀、明暗对比 | 灯火阑珊、灯光atmosphere |
 
 ### 时段衍生规范
 
 | 从基准时段衍生 | 保持不变 | 变化项 |
 |---|---|---|
-| 日间 → 黄昏 | 建筑/布局/材质 | 天空色调暖化、影子拉长 |
-| 日间 → 夜间 | 建筑/布局/材质 | 整体变暗、增加灯火/月色氛围 |
-| 室内日间 → 室内夜间 | 空间结构、家具 | 整体色调暖化、增加室内灯光 |
+| 日间 → 黄昏 | 建筑/布局/材质 | 天空color暖化、影子拉长 |
+| 日间 → 夜间 | 建筑/布局/材质 | 整体变暗、增加灯火/月色atmosphere |
+| 室内日间 → 室内夜间 | 空间结构、家具 | 整体color暖化、增加室内灯光 |
 
 ---
 
-## 四、天候变体
+## 四、weather变体
 
-### 天候定义
+### weather定义
 
-| 天候 | 视觉特征 | 提示词 |
+| weather | 视觉特征 | 提示词 |
 |---|---|---|
 | 晴天 | 明亮、阴影清晰 | 晴空万里、阳光明媚 |
 | 阴天 | 光线均匀、无硬影 | 阴天柔光、overcast |
@@ -69,14 +69,14 @@
 | 细雨 | 水珠、湿润反光、雨丝 | 细雨如丝、雨幕轻纱 |
 | 飞雪 | 白色覆盖、雪花飘落 | 飞雪纷纷、银装素裹 |
 
-### 天候衍生规范
+### weather衍生规范
 
-| 从基准天候衍生 | 保持不变 | 变化项 |
+| 从基准weather衍生 | 保持不变 | 变化项 |
 |---|---|---|
 | 晴 → 薄雾 | 建筑/布局 | 增加雾气层、远景模糊、饱和度降低 |
-| 晴 → 细雨 | 建筑/布局 | 增加雨丝、地面反光、色调偏冷 |
-| 晴 → 飞雪 | 建筑/布局 | 增加积雪、雪花、色调偏白 |
-| 植被需随天候逻辑适配 | — | 雨中花瓣湿润、雪中枯枝挂霜 |
+| 晴 → 细雨 | 建筑/布局 | 增加雨丝、地面反光、color偏冷 |
+| 晴 → 飞雪 | 建筑/布局 | 增加积雪、雪花、color偏白 |
+| 植被需随weather逻辑适配 | — | 雨中花瓣湿润、雪中枯枝挂霜 |
 
 ---
 
@@ -100,7 +100,7 @@
 
 | 项目 | 约束 |
 |---|---|
-| 参考一致性 | 建筑结构/布局/材质/色调/光线/季节/天候必须与参考图一致 |
+| 参考一致性 | 建筑结构/布局/材质/color/光线/季节/weather必须与参考图一致 |
 | 视点 | 同一场景中心点，仅角度切换；视线高度可随角度调整 |
 | 光照逻辑 | 参考图光源方向不变，角度切换后光影投射方向需同步重算（保持物理合理） |
 | 布局 | 单画面（非拼图、非多视图、非分屏） |
@@ -111,26 +111,26 @@
 
 ## 六、提示词模板
 
-二次元衍生场景图，基于参考图，
-anime style，cel shading，modern urban style，
-cinematic composition，dramatic low-key lighting，
-ultra detailed，8K，high quality，
-shallow depth of field，画面颗粒感，镜头暗角，
-赛璐璐动画风格，电影级构图，戏剧化低调光影，
-scene derivative design sheet，environment concept art，no people，no characters，no human figures，
-保持场景空间结构一致，
-{目标角度（如有）}，{景别视角（如有）}，{时段描述（如有）}，{天候描述（如有）}，
-{前景}，{中景}，{后景}，
-{色调描述}，{景深描述（如有）}，{天空色调变化（如有）}，{氛围调整（如有）}，
-{天候视觉特征（如有）}，{材质表面变化（如有）}，{植被适配描述（如有）}，
-材质现代使用痕迹，生活气息，自然磨损，
-自然光/人造光、戏剧化光影，低饱和冷色调，
-空气透视，纹理细节超清晰，
-单画面构图，与参考图保持建筑结构/材质/色调/光线一致，仅按目标角度切换视点，
-画面中无任何人物
-图中不要有任何文字
+2D anime-style derivative scene image, based on reference image,
+anime style, cel shading, modern urban style,
+cinematic composition, dramatic low-key lighting,
+ultra detailed, 8K, high quality,
+shallow depth of field, film grain texture, lens vignette,
+cel-shaded anime style, cinematic composition, dramatic low-key lighting,
+scene derivative design sheet, environment concept art, no people, no characters, no human figures,
+Maintain scene spatial structure consistency,
+{target angle (if any)}, {shot angle (if any)}, {time period description (if any)}, {weather description (if any)},
+{Foreground}, {Midground}, {Background},
+{Color tone description}, {Depth of field description (if any)}, {Sky color change (if any)}, {Atmosphere adjustment (if any)},
+{Weather visual features (if any)}, {Material surface changes (if any)}, {Vegetation adaptation description (if any)},
+Modern materials with use traces, life atmosphere, natural wear,
+Natural/artificial light, dramatic shadows, low-saturation cool tones,
+Atmospheric perspective, ultra-clear texture details,
+Single frame composition, consistent with reference image in architecture structure/material/color tone/lighting, only switch viewpoint per target angle,
+No people in image
+No text in image
 
-> **使用说明**：根据用户提供的信息自行判断需要应用的变化维度（角度/景别/时段/天候），未提及的维度对应字段留空省略即可。无需为每种变体单独生成模板。
+> **使用说明**：根据用户提供的信息自行判断需要应用的变化维度（角度/景别/时段/weather），未提及的维度对应字段留空省略即可。无需为每种变体单独生成模板。
 
 ---
 
@@ -141,12 +141,12 @@ scene derivative design sheet，environment concept art，no people，no charact
 | 编号 | 规则 |
 |---|---|
 | R1 | 场景空间结构在所有变体中保持一致 |
-| R2 | 时段变体必须调整天空色调与氛围 |
-| R3 | 天候变体必须适配植被/材质表面 |
+| R2 | 时段变体必须调整天空color与atmosphere |
+| R3 | weather变体必须适配植被/材质表面 |
 | R4 | 衍生图必须为「单画面」，不得拼接多视图/网格/分屏 |
-| R5 | 衍生图必须与参考图保持建筑结构/材质/色调/光线一致，仅按指定角度切换视点 |
+| R5 | 衍生图必须与参考图保持建筑结构/材质/color/光线一致，仅按指定角度切换视点 |
 | R6 | 场景图中**严禁出现任何人物** |
-| R7 | 根据用户提供的信息自行判断变化维度（角度/景别/时段/天候），未提及维度留空省略 |
+| R7 | 根据用户提供的信息自行判断变化维度（角度/景别/时段/weather），未提及维度留空省略 |
 | R8 | 必须包含「二次元动画风格」关键词（anime style / cel shading） |
 | R9 | 必须包含景深特征（shallow depth of field / vignette 至少一项），保持动画赛璐璐风格 |
 | R10 | 材质必须带有现代使用痕迹/生活气息，禁止全新无瑕的"3D渲染感" |
@@ -156,7 +156,7 @@ scene derivative design sheet，environment concept art，no people，no charact
 | 编号 | 严禁 |
 |---|---|
 | X1 | 变体间建筑结构/布局不一致 |
-| X2 | 天候与季节矛盾（夏天飞雪等） |
+| X2 | weather与季节矛盾（夏天飞雪等） |
 | X3 | 变体间材质/风格突变 |
 | X4 | 出现任何人物、人影、人体剪影或人体轮廓 |
 | X5 | 画面被拼接成多视图/网格/分屏布局 |

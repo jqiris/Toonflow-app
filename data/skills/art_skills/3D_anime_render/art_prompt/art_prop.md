@@ -96,16 +96,16 @@
 ## 五、提示词模板
 
 ```
-3D 动画渲染，电影级打光，活力赛璐珞质感，高细节材质，愉悦治愈氛围，卡通都市风，高细节卡通材质，适度卡通比例，暖色调配色，8K 超高清，电影级构图，柔和光影层次，明快卡通渲染风格，温馨治愈，道具设定图，
+3D animation render, film lighting, vibrant cel-shaded quality, high-detail materials, joyful healing atmosphere, cartoon urban style, high-detail cartoon materials, moderate cartoon proportions, warm color palette, 8K ultra HD, cinematic composition, soft light and shadow layers, cheerful cartoon rendering style, warm healing, prop character sheet,
 anime style, cel-shaded, 3D animation render,
-{道具类型}，{材质描述}，{工艺/装饰描述}，{状态描述}，
-纯道具静物展示，道具独立陈列，无人持有，无人佩戴，
-同一画面四宫格（2×2）：左上正面图+右上侧面图+左下背面图+右下细节特写，
-纯净中性灰背景，均匀柔光，无硬阴影，
-材质纹理清晰，赛璐珞渲染，{材质光泽描述}，现代卡通都市风格，
-8K 超高清，电影级构图，
-图中不要有任何文字，
-画面中不能出现任何人物、手部、手指、肢体，道具不可处于被握持或佩戴状态
+{prop type}, {material description}, {craft/decoration description}, {status description},
+Pure prop still life display, prop displayed independently, no person holding, no person wearing,
+Same frame four-panel (2x2): top-left front view + top-right side view + bottom-left back view + bottom-right detail closeup,
+Pure neutral gray background, even soft light, no hard shadows,
+Clear material texture, cel-shaded render, {material sheen description}, modern cartoon urban style,
+8K ultra HD, cinematic composition,
+No text in image,
+No people, hands, fingers, or limbs in image, prop cannot be in held or worn state
 ```
 
 ---

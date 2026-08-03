@@ -54,7 +54,7 @@ metaData: art_skills
 
 | 项目 | 约束 | 提示词 |
 |---|---|---|
-| 类型 | 信物/令牌/卷轴/药瓶/玉印 | {道具类型}，古风道具 |
+| 类型 | 信物/令牌/卷轴/药瓶/玉印 | {prop type}，Traditional Chinese prop |
 | 特殊性 | 需有辨识度、叙事象征意义 | 独特造型、寓意深远 |
 | 做旧感 | 可按剧情需要添加年代感 | 古旧斑驳 / 崭新精致 |
 | 风格 | 国风二次元 | 新国潮风格、动漫感 |
@@ -75,7 +75,7 @@ metaData: art_skills
 | 类型 | 灯笼/烟花/春联/福字 | {节庆类型}，节庆道具 |
 | 材质 | 纸/布/竹/绸缎 | 丝绸灯笼、纸质春联 |
 | 质感 | 纸纹/布料纹理清晰 | 纹理清晰、质感细腻 |
-| 风格 | 喜庆热闹 | 色彩明亮、热闹氛围 |
+| 风格 | 喜庆热闹 | 色彩明亮、热闹atmosphere |
 
 ---
 
@@ -85,18 +85,18 @@ metaData: art_skills
 
 | 位置 | 视图 | 角度 | 要求 | 提示词 |
 |---|---|---|---|---|
-| 左上 | 正面图 | 正面 0° | 道具完整正面形态 | front view |
-| 右上 | 侧面图 | 侧面 90° | 厚度/轮廓/结构清晰 | side view |
-| 左下 | 背面图 | 背面 180° | 道具背部结构/装饰 | back view |
-| 右下 | 细节特写 | 局部放大 | 材质纹理/工艺细节 | detail closeup |
+| 左上 | front view | 正面 0° | 道具完整正面形态 | front view |
+| 右上 | side view | 侧面 90° | 厚度/轮廓/结构清晰 | side view |
+| 左下 | back view | 背面 180° | 道具背部结构/装饰 | back view |
+| 右下 | detail closeup | 局部放大 | 材质纹理/工艺细节 | detail closeup |
 
 ### 画面规范
 
 | 项目 | 约束 |
 |---|---|
-| 布局 | 同一画面四宫格（2×2），上下左右四视角 |
+| 布局 | 同一画面2x2 grid（2×2），上下左右四视角 |
 | 背景 | 月白纯色 #E8EAF5 |
-| 光线 | 均匀柔光，无硬阴影 |
+| 光线 | even soft light，no hard shadows |
 | 比例 | 每格道具占格内主体 70%+ |
 | 投影 | 允许自然地面微投影 |
 | 画面比例 | 建议 1:1 |
@@ -119,16 +119,16 @@ metaData: art_skills
 
 ## 五、提示词模板
 
-国风二次元道具设定图，
-国风二次元，新国潮美学，日式动画渲染，赛璐璐平涂，细腻笔触，电影质感，
-{道具类型}，{材质描述}，{工艺/装饰描述}，{状态描述}，
-纯道具静物展示，道具独立陈列，无人持有，无人佩戴，
-同一画面四宫格（2×2）：左上正面图+右上侧面图+左下背面图+右下细节特写，
-月白纯色背景，均匀柔光，无硬阴影，
-材质纹理超清晰，质感细腻，{材质光泽描述}
-国风二次元高清渲染，高细节，细腻线条，赛璐璐平涂感，
-画面无字幕、无水印、无标题叠字，
-画面中不能出现任何人物、手部、手指、肢体，道具不可处于被握持或佩戴状态
+Chinese-style 2D prop character sheet,
+Chinese-style 2D, new Chinese aesthetic, Japanese animation rendering, cel-shaded flat coloring, fine brushstrokes, cinematic quality,
+{prop type}, {material description}, {craft/decoration description}, {status description},
+Pure prop still life display, prop displayed independently, no person holding, no person wearing,
+Same frame four-panel (2x2): top-left front view + top-right side view + bottom-left back view + bottom-right detail closeup,
+Pale moonlight solid background, even soft light, no hard shadows,
+Ultra-clear material texture, fine texture, {material sheen description}
+Chinese-style 2D HD rendering, high detail, fine lines, cel-shaded flat coloring feel,
+No subtitles, no watermarks, no title text in image,
+No people, hands, fingers, or limbs in image, prop cannot be in held or worn state
 
 ---
 
@@ -138,10 +138,10 @@ metaData: art_skills
 
 | 编号 | 规则 |
 |---|---|
-| R1 | 必须指定「月白纯色背景」 |
+| R1 | 必须指定「pale moonlight solid background」 |
 | R2 | 必须明确道具材质与工艺 |
 | R3 | 道具造型必须符合古风世界观 |
-| R4 | 必须为「四宫格」布局：正面 + 侧面 + 背面 + 特写 |
+| R4 | 必须为「2x2 grid」布局：正面 + 侧面 + 背面 + 特写 |
 | R5 | 必须包含「国风二次元 + 赛璐璐平涂」关键词 |
 
 ### 严禁
@@ -153,4 +153,4 @@ metaData: art_skills
 | X3 | 出现任何人物形象，包括全身、半身、局部（手、手指、手臂等肢体） |
 | X4 | 道具处于被持有、握持、佩戴、使用中的状态 |
 | X5 | 出现暗示人物存在的元素（如手持痕迹、佩戴视角、使用姿态） |
-| X6 | 现代元素出现在古风道具中 |
+| X6 | 现代元素出现在Traditional Chinese prop中 |

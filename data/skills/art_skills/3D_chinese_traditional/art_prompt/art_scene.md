@@ -11,15 +11,15 @@ metaData: art_skills
 ## 一、场景美学原则
 
 1. **空间叙事** — 场景承载情绪与叙事功能，不是纯背景板
-2. **层次纵深** — 所有场景必须具备前/中/后景，杜绝扁平
+2. **层次纵深** — 所有场景必须具备前/中/background，杜绝扁平
 3. **质感至上** — 木质/石质/布料/水面等材质纹理必须超清晰
-4. **3D为锚** — 一切画面以3D渲染为标准，拒绝平面贴图/3D渲染/CG动画质感；追求体积光、环境光遮蔽、景深虚化等电影渲染效果
+4. **3D为锚** — 一切画面以3D渲染为标准，拒绝平面贴图/3D渲染/CG动画质感；追求volumetric lighting、环境光遮蔽、景深虚化等电影渲染效果
 
 ---
 
-## 二、季节色调映射
+## 二、季节color映射
 
-| 季节 | 主色调 | 辅色调 | 提示词 |
+| 季节 | 主color | 辅color | 提示词 |
 |---|---|---|---|
 | 春 | 青绿 + 朱红 | 月白、藤黄 | 春色青翠、桃花灼灼 |
 | 夏 | 青绿 + 靛蓝 | 月白、青绿 | 夏荷碧绿、浓荫蔽日 |
@@ -36,16 +36,16 @@ metaData: art_skills
 |---|---|---|
 | 风格 | 古代宅邸/宫殿/书房/闺阁，明清至唐宋 | 古代{朝代}风格 |
 | 材质 | 木质为主、石/玉/绢/纱为辅 | 檀木家具、玉石屏风、绢纱帷幔 |
-| 色调 | 中国传统色调 + 月白纱幔 + 朱红木漆 | 暖木色调、素雅陈设 |
-| 纵深 | 前/中/后景层次 | 前景{元素}、中景{元素}、后景{元素} |
+| color | 中国传统color + 月白纱幔 + 朱红木漆 | 暖木color、素雅陈设 |
+| 纵深 | 前/中/background层次 | foreground{元素}、middle ground{元素}、background{元素} |
 | 质感 | 木纹/布料垂感/瓷器光泽可辨 | 纹理清晰、材质质感精细 |
-| 光照 | 自然光源为主（窗光/烛光），体积光，环境光遮蔽 | 自然光漫射、烛光摇曳、体积光 |
-| 镜头感 | 景深虚化前后景、镜头暗角、色散微痕 | depth of field、lens vignette、chromatic aberration |
-| 瑕疵感 | 木面有使用痕迹、石面有风化纹、布料有自然褶皱 | 岁月痕迹、自然磨损、布料自然垂褶 |
+| 光照 | 自然光源为主（窗光/烛光），volumetric lighting，环境光遮蔽 | 自然光漫射、烛光摇曳、volumetric lighting |
+| 镜头感 | 景深虚化前background、镜头暗角、色散微痕 | depth of field、lens vignette、chromatic aberration |
+| 瑕疵感 | 木面有使用痕迹、石面有风化纹、布料有自然褶皱 | 岁月痕迹、自然磨损、natural fabric draping |
 
 ### 室内类型速查
 
-| 类型 | 核心元素 | 氛围词 |
+| 类型 | 核心元素 | atmosphere词 |
 |---|---|---|
 | 闺阁/卧房 | 纱帐、梳妆台、铜镜、花瓶 | 温馨私密、纱幔轻垂 |
 | 书房/书斋 | 书架、卷轴、笔墨、棋盘 | 幽静雅致、墨香四溢 |
@@ -62,18 +62,18 @@ metaData: art_skills
 | 维度 | 约束 | 提示词 |
 |---|---|---|
 | 类型 | 庭院/山林/溪畔/古桥/集市 | {场景}，{季节}，{时间} |
-| 天候 | 晴/阴/薄雾/细雨/飞雪 | 薄雾弥漫、细雨如丝 |
+| weather | 晴/阴/薄雾/细雨/飞雪 | 薄雾弥漫、细雨如丝 |
 | 植被 | 梅/竹/松/桃花/柳/荷（须符合季节） | 桃花灼灼、翠竹成林 |
 | 水体 | 溪/湖/瀑布需有光影反射 | 溪水潺潺、湖面如镜 |
 | 建筑 | 飞檐斗拱、青瓦白墙、石桥木亭 | 飞檐翘角、石拱桥 |
-| 空气感 | 必须有空气透视，体积光，远景模糊 | 远山如黛、空气透视、体积光 |
-| 光照 | 自然光为唯一光源，日光/月光需有体积光与散射 | 自然光照、体积光、景深虚化 |
+| 空气感 | 必须有atmospheric perspective，volumetric lighting，远景模糊 | 远山如黛、atmospheric perspective、volumetric lighting |
+| 光照 | 自然光为唯一光源，日光/月光需有volumetric lighting与散射 | natural lighting、volumetric lighting、景深虚化 |
 | 镜头感 | 景深虚化、镜头暗角、色散、光斑散景 | depth of field、bokeh、lens flare、vignette |
-| 瑕疵感 | 石面青苔/风化、木面开裂/包浆、瓦片残缺/苔痕 | 青苔斑驳、风化痕迹、岁月包浆 |
+| 瑕疵感 | 石面青苔/风化、木面开裂/包浆、瓦片残缺/苔痕 | 青苔斑驳、风化痕迹、age patina |
 
 ### 室外类型速查
 
-| 类型 | 核心元素 | 氛围词 |
+| 类型 | 核心元素 | atmosphere词 |
 |---|---|---|
 | 庭院花园 | 假山、池塘、花木、石径 | 花影扶疏、曲径通幽 |
 | 山林竹海 | 古木、竹林、山石、云雾 | 层峦叠嶂、云雾缥缈 |
@@ -92,9 +92,9 @@ metaData: art_skills
 
 | 项目 | 约束 | 提示词 |
 |---|---|---|
-| 视角 | 自然观察视角，构图最能体现场景主体与纵深 | hero shot、representative angle |
+| 视角 | natural observation perspective，构图最能体现场景主体与纵深 | hero shot、representative angle |
 | 视点高度 | 默认人眼平视高度，特殊场景可俯/仰 | eye level（默认） |
-| 构图 | 主体居中或符合三分法，前/中/后景层次清晰 | balanced composition |
+| 构图 | 主体居中或符合三分法，前/中/background层次清晰 | balanced composition |
 
 ### 画面规范
 
@@ -102,7 +102,7 @@ metaData: art_skills
 |---|---|
 | 布局 | 单画面（非拼图、非多视图、非分屏） |
 | 人物 | **严禁出现任何人物、人影、人体轮廓** |
-| 一致性 | 风格/材质/色调/光线统一 |
+| 一致性 | 风格/材质/color/光线统一 |
 | 光线 | 单一光源逻辑，光影方向一致 |
 | 画面比例 | 默认 16:9（或按调用方设定） |
 
@@ -110,21 +110,21 @@ metaData: art_skills
 
 ## 六、提示词模板
 
-古风场景主视图概念图，
-3D渲染风格，高精度建模，PBR材质，国风3D，电影级光影，
+Ancient-style scene main view concept art,
+3D rendering style, high-precision modeling, PBR materials, Chinese-style 3D, cinematic lighting,
 3D rendered, volumetric lighting,
 depth of field, natural lens vignette, subtle chromatic aberration, bokeh,
-3D渲染质感，体积光，自然光照，物理光影，
+3D rendered quality, volumetric light, natural lighting, physical light and shadow,
 scene design sheet, environment concept art, no people, no characters, no human figures,
-{室内/室外}，{场景类型}，{朝代风格}，{季节+时间},
-前景：{元素}, 中景：{元素}, 后景：{元素},
-{色调描述}, {天候/氛围元素},
-{材质描述}, 空气透视, 纹理细节超清晰,
-材质自然磨损痕迹，岁月包浆，青苔风化，布料自然垂褶，
-体积光，环境光遮蔽，自然光漫射，柔和光影，
-单画面构图，自然观察视角，构图能代表场景主体并展示前/中/后景层次，
-画面中无任何人物
-图中不要有任何文字
+{indoor/outdoor}, {scene type}, {dynasty style}, {season+time},
+Foreground: {elements}, Midground: {elements}, Background: {elements},
+{color tone description}, {weather/atmosphere elements},
+{material description}, atmospheric perspective, ultra-clear texture details,
+Natural material wear traces, aged patina, moss weathering, natural fabric draping,
+Volumetric light, ambient occlusion, natural light diffusion, soft light and shadow,
+Single frame composition, natural observation angle, composition represents scene subject and shows foreground/midground/background layers,
+No people in image
+No text in image
 
 ---
 
@@ -134,10 +134,10 @@ scene design sheet, environment concept art, no people, no characters, no human 
 
 | 编号 | 规则 |
 |---|---|
-| R1 | 场景必须有「前中后景层次」 |
-| R2 | 室外必须包含「空气透视」 |
+| R1 | 场景必须有「前中background层次」 |
+| R2 | 室外必须包含「atmospheric perspective」 |
 | R3 | 场景图必须为「单画面主视图」，不得拼接多视图/分屏/网格 |
-| R4 | 构图须能代表场景主体并展示前/中/后景层次 |
+| R4 | 构图须能代表场景主体并shows foreground/middle/background layers |
 | R5 | 场景图中**严禁出现任何人物** |
 | R6 | 必须包含3D渲染关键词（3D rendered / volumetric lighting / PBR materials） |
 | R7 | 必须包含镜头光学特征（depth of field / lens vignette / bokeh 至少一项） |
@@ -148,9 +148,9 @@ scene design sheet, environment concept art, no people, no characters, no human 
 | 编号 | 严禁 |
 |---|---|
 | X1 | 背景纯白/纯黑/无场景 |
-| X2 | 极端天候（暴风雨/雷电/暴雪，除非剧情需要） |
+| X2 | 极端weather（暴风雨/雷电/暴雪，除非剧情需要） |
 | X3 | 场景无纵深/无层次 |
-| X4 | 植被/天候与季节矛盾 |
+| X4 | 植被/weather与季节矛盾 |
 | X5 | 出现任何人物、人影、人体剪影或人体轮廓 |
 | X6 | 画面被拼接成多视图/网格/分屏布局 |
 | X7 | 低精度建模/粗糙贴图/塑料质感（禁用 low-poly、rough modeling 等词） |

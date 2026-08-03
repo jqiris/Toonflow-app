@@ -165,19 +165,19 @@
 ## 八、提示词模板
 
 ```
-{性别}角色四视图设定图，真人写实摄影，古风写实纪实，强对比度，极致细节，
+{gender} character four-view character sheet, human realistic photography, traditional Chinese style, realistic style, high contrast, extreme detail,
 character design sheet，character turnaround，
-{角色描述对应的五官特征 - 由角色描述自然推导}，{整体气质}，素颜无妆，
-{肤色}，水光肌，皮肤通透发光，皮肤细腻，毛孔微可见，
-{身高描述，如：170cm tall、tall slender woman}，{头身比，如：7.5 heads tall proportion}，{身材描述}，{体态描述}，
-{发色}{发长}，发丝根根分明，{基础造型}，无发饰，
-{角色身份对应的常规古装着装，如：素色长裙/素色长衫/轻便武服/粗布短打}，中国传统色调低饱和色，无复杂花纹，
-同一画面左至右并排：人像特写+正视图+侧视图+后视图，
-人像特写从头顶到锁骨完整展示，不裁切头顶，head to collarbone complete，
-全身立像从头顶到脚底完整展示，full body head to toe，不裁切头顶和脚部，
-自然站立，纯净中性灰背景，均匀柔光，无硬阴影，
-四视图一致性，面容细腻渲染，发丝细腻渲染
-图中不要有任何文字
+{facial features derived from character description}，{overall temperament}，bare face，no facial markings, no stains, no blood，
+{skin tone}，glass skin，skin translucent and smooth，delicate skin，pores barely visible，
+{height description, e.g., 170cm tall, tall slender woman}，{head-to-body ratio, e.g., 7.5 heads tall proportion}，{body description}，{posture description}，
+{hair color}{hair length}，clear hair strands，{basic hairstyle}，no hair accessories，
+{role identity corresponding regular ancient clothing, e.g.: plain long skirt / plain long robe / light martial uniform / coarse cloth jacket}，low saturation Chinese traditional colors，no complex patterns，
+Same frame left to right: portrait closeup + front view + side view + back view，
+Portrait closeup complete from crown to collarbone，no cropping of crown，head to collarbone complete，
+Full standing pose complete from crown to toe，full body head to toe，no cropping of crown or feet，
+natural standing，pure neutral gray background，even soft light，no hard shadows，
+Four-view consistency，delicate face render，delicate hair strand render
+No text in image
 ```
 
 ---

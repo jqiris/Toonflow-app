@@ -54,7 +54,7 @@ metaData: art_skills
 
 | 项目 | 约束 | 提示词 |
 |---|---|---|
-| 类型 | 信物/令牌/卷轴/药瓶/玉印 | {道具类型}，古风道具 |
+| 类型 | 信物/令牌/卷轴/药瓶/玉印 | {prop type}，Traditional Chinese prop |
 | 特殊性 | 需有辨识度、叙事象征意义 | 独特造型、寓意深远 |
 | 做旧感 | 可按剧情需要添加年代感 | 古旧斑驳 / 崭新精致 |
 | 提示词 | 古风{道具}，{材质}，{状态}，独特造型 | — |
@@ -67,18 +67,18 @@ metaData: art_skills
 
 | 位置 | 视图 | 角度 | 要求 | 提示词 |
 |---|---|---|---|---|
-| 左上 | 正面图 | 正面 0° | 道具完整正面形态 | front view |
-| 右上 | 侧面图 | 侧面 90° | 厚度/轮廓/结构清晰 | side view |
-| 左下 | 背面图 | 背面 180° | 道具背部结构/装饰 | back view |
-| 右下 | 细节特写 | 局部放大 | 材质纹理/工艺细节 | detail closeup |
+| 左上 | front view | 正面 0° | 道具完整正面形态 | front view |
+| 右上 | side view | 侧面 90° | 厚度/轮廓/结构清晰 | side view |
+| 左下 | back view | 背面 180° | 道具背部结构/装饰 | back view |
+| 右下 | detail closeup | 局部放大 | 材质纹理/工艺细节 | detail closeup |
 
 ### 画面规范
 
 | 项目 | 约束 |
 |---|---|
-| 布局 | 同一画面四宫格（2×2），上下左右四视角 |
+| 布局 | 同一画面2x2 grid（2×2），上下左右四视角 |
 | 背景 | 素灰纯色 #B8B8B8 |
-| 光线 | 均匀柔光，无硬阴影 |
+| 光线 | even soft light，no hard shadows |
 | 比例 | 每格道具占格内主体 70%+ |
 | 投影 | 允许自然地面微投影 |
 | 画面比例 | 建议 1:1 |
@@ -100,14 +100,14 @@ metaData: art_skills
 
 ## 五、提示词模板
 
-古风道具设定图，3D渲染风格，高精度建模，PBR材质，国风3D，电影级光影，
-{道具类型}，{材质描述}，{工艺/装饰描述}，{状态描述}，
-纯道具静物展示，道具独立陈列，无人持有，无人佩戴，
-同一画面四宫格（2×2）：左上正面图+右上侧面图+左下背面图+右下细节特写，
-素灰纯色背景，均匀柔光，无硬阴影，
-材质纹理超清晰，PBR材质渲染，{材质光泽描述}
-图中不要有任何文字，
-画面中不能出现任何人物、手部、手指、肢体，道具不可处于被握持或佩戴状态
+古风prop design图，3D渲染风格，高精度建模，PBR材质，国风3D，电影级光影，
+{prop type}，{material description}，{craft/decoration description}，{state description}，
+纯prop still life展示，prop displayed independently，no one holding，no one wearing，
+同一画面2x2 grid（2×2）：左上front view+右上side view+左下back view+右下detail closeup，
+素灰纯色背景，even soft light，no hard shadows，
+ultra-clear material texture，PBR材质渲染，{material gloss description}
+No text in image，
+No people in the image、手部、手指、肢体，道具不可处于被握持或佩戴状态
 
 ---
 

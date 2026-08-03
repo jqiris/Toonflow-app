@@ -150,20 +150,20 @@
 ## 八、提示词模板
 
 ```
-{性别}角色四视图扁平风格设定图，
-2d flat design，vector art，flat illustration，
-minimalist，clean lines，solid colors，
-{角色描述对应的五官特征 - 由角色描述自然推导}，{整体气质}，素颜无妆，
-{肤色}，单色皮肤，扁平肤色，solid skin color，
-{身高描述，如：170cm tall、tall slender woman}，{头身比，如：7.5 heads tall proportion}，{身材描述}，{体态描述}，
-{发色}{发长}，线条发型，{基础造型}，无发饰，
-{角色身份对应的常规着装，如：校服/职业便装/休闲常服}，基础色纯色填充，无复杂花纹，
-同一画面左至右并排：人像特写+正视图+侧视图+后视图，
-人像特写从头顶到锁骨完整展示，不裁切头顶，head to collarbone complete，
-全身立像从头顶到脚底完整展示，full body head to toe，不裁切头顶和脚部，
-自然站立，纯净中性灰背景，无光影，无渐变，
-四视图一致性，线条简洁，色块填充，
-图中不要有任何文字
+{gender} character four-view flat design character sheet,
+2d flat design, vector art, flat illustration,
+minimalist, clean lines, solid colors,
+{facial features corresponding to character description - naturally derived from character description}, {overall temperament}, bare-faced no makeup,
+{skin tone}, solid skin color, flat skin tone, solid skin color,
+{height description, e.g.: 170cm tall, tall slender woman}, {head-to-body ratio, e.g.: 7.5 heads tall proportion}, {body description}, {posture description},
+{hair color}{hair length}, line-designed hair, {basic style}, no hair accessories,
+{regular clothing corresponding to character identity, e.g.: school uniform / professional casual wear / casual clothes}, base color solid fill, no complex patterns, face clean no facial markings, no stains, no blood,
+Same frame left to right: portrait closeup + front view + side view + back view,
+Portrait closeup complete from crown to collarbone, no cropping of crown, head to collarbone complete,
+Full body standing pose complete from crown to toe, full body head to toe, no cropping of crown or feet,
+Natural standing, pure neutral gray background, no light and shadow, no gradients,
+Four-view consistency, simple lines, block color fill,
+No text in image
 ```
 
 ---

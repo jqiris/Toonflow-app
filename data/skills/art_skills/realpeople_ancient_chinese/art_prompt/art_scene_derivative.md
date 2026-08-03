@@ -112,23 +112,23 @@
 ## 六、提示词模板
 
 ```
-古风衍生场景图，基于参考图，
+Traditional Chinese scene derivative map, based on reference image,
 real photography，photorealistic，shot on ARRI Alexa，35mm film grain，
 RAW photo，ultra realistic，hyper detailed，
 shallow depth of field，natural lens vignette，subtle chromatic aberration，bokeh，
-真实摄影质感，胶片颗粒感，自然光照，物理光影，
+realistic photography，film grain，natural lighting，physical light and shadow，
 scene derivative design sheet，environment concept art，no people，no characters，no human figures，
-保持场景空间结构一致，
-{目标角度（如有）}，{景别视角（如有）}，{时段描述（如有）}，{天候描述（如有）}，
-{前景}，{中景}，{后景}，
-{色调描述}，{景深描述（如有）}，{天空色调变化（如有）}，{氛围调整（如有）}，
-{天候视觉特征（如有）}，{材质表面变化（如有）}，{植被适配描述（如有）}，
-材质自然磨损痕迹，岁月包浆，青苔风化，布料自然垂褶，
-自然光漫射，体积光，丁达尔效应，焦散投影，
-空气透视，纹理细节超清晰，
-单画面构图，与参考图保持建筑结构/材质/色调/光线一致，仅按目标角度切换视点，
-画面中无任何人物
-图中不要有任何文字
+Maintain scene spatial structure consistency，
+{target angle (if any)}，{perspective (if any)}，{time description (if any)}，{weather description (if any)}，
+{foreground}，{middle ground}，{background}，
+{color description}，{depth of field description (if any)}，{sky color change (if any)}，{atmosphere adjustment (if any)}，
+{weather visual features (if any)}，{material surface change (if any)}，{vegetation adaptation description (if any)}，
+natural material wear traces，age patina，moss weathering，natural fabric draping，
+natural light diffusion，volumetric lighting，God rays，caustic projection，
+atmospheric perspective，ultra-clear texture details，
+Single frame composition，maintain building structure/material/color/lighting consistent with reference image，switch perspective only according to target angle，
+No people in the image
+No text in the image
 ```
 
 > **使用说明**：根据用户提供的信息自行判断需要应用的变化维度（角度/景别/时段/天候），未提及的维度对应字段留空省略即可。无需为每种变体单独生成模板。

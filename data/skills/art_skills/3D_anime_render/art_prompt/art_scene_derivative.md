@@ -112,24 +112,24 @@
 
 ## 六、提示词模板
 ```
-3D 动画渲染，电影级打光，活力赛璐珞质感，高细节材质，愉悦治愈氛围，卡通都市风，高细节卡通材质，适度卡通比例，暖色调配色，8K 超高清，电影级构图，柔和光影层次，明快卡通渲染风格，温馨治愈，衍生场景图，基于参考图，
+3D animation render, film lighting, vibrant cel-shaded quality, high-detail materials, joyful healing atmosphere, cartoon urban style, high-detail cartoon materials, moderate cartoon proportions, warm color palette, 8K ultra HD, cinematic composition, soft light and shadow layers, cheerful cartoon rendering style, warm healing, derivative scene image, based on reference image,
 anime style, cel-shaded, 3D animation render,
 film lighting, warm sunset lighting,
 scene derivative design sheet, environment concept art, no people, no characters, no human figures,
-保持场景空间结构一致，
-{目标角度（如有）}，{景别视角（如有）}，{时段描述（如有）}，{天候描述（如有）}，
-{前景}，{中景}，{后景}，
-{色调描述}，{景深描述（如有）}，{天空色调变化（如有）}，{氛围调整（如有）}，
-{天候视觉特征（如有）}，{材质表面变化（如有）}，{植被适配描述（如有）}，
-材质自然使用痕迹，生活感磨损，布料自然垂褶（赛璐珞化），
-自然光漫射，体积光，赛璐珞光效，赛璐珞投影，
-空气透视，纹理清晰，赛璐珞化处理，
-单画面构图，与参考图保持建筑结构/材质/色调/光线一致，仅按目标角度切换视点，
-画面中无任何人物，
-赛璐珞渲染风格，柔和光影，适度卡通比例，高细节卡通材质，
-暖色调配色，黄昏霞光氛围，愉悦治愈氛围，
-8K 超高清，电影级构图，
-图中不要有任何文字
+Maintain scene spatial structure consistency,
+{target angle (if any)}, {shot angle (if any)}, {time period description (if any)}, {weather description (if any)},
+{Foreground}, {Midground}, {Background},
+{Color tone description}, {Depth of field description (if any)}, {Sky color change (if any)}, {Atmosphere adjustment (if any)},
+{Weather visual features (if any)}, {Material surface changes (if any)}, {Vegetation adaptation description (if any)},
+Material natural use traces, life atmosphere, natural wear, fabric natural draping (cel-shaded),
+Natural light diffusion, volumetric light, cel-shaded effects, cel-shaded projection,
+Atmospheric perspective, clear texture, cel-shaded processing,
+Single frame composition, consistent with reference image in architecture structure/material/color tone/lighting, only switch viewpoint per target angle,
+No people in image
+cel-shaded render style, soft light and shadow, moderate cartoon proportions, high-detail cartoon materials,
+Warm color palette, sunset glow atmosphere, joyful healing atmosphere,
+8K ultra HD, cinematic composition,
+No text in image
 ```
 
 > **使用说明**：根据用户提供的信息自行判断需要应用的变化维度（角度/景别/时段/天候），未提及的维度对应字段留空省略即可。无需为每种变体单独生成模板。

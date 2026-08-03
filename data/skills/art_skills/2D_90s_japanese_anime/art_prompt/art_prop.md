@@ -94,14 +94,14 @@
 
 ## 五、提示词模板
 ```
-90年代复古日系动画风格道具设定图，手绘平涂上色，柔和暖色调，精细流畅线条，电影感光影，
-{道具类型}，{材质描述}，{工艺/装饰描述}，{状态描述}，
-纯道具静物展示，道具独立陈列，无人持有，无人佩戴，
-同一画面四宫格（2×2）：左上正面图+右上侧面图+左下背面图+右下细节特写，
-暖调米白背景，柔和电影光，均匀柔光，无硬阴影，
-材质纹理超清晰，手绘质感，{材质光泽描述}
-图中不要有任何文字，
-画面中不能出现任何人物、手部、手指、肢体，道具不可处于被握持或佩戴状态
+90s retro Japanese anime style prop character sheet, hand-drawn flat coloring, soft warm tones, fine smooth lines, cinematic lighting,
+{prop type}, {material description}, {craft/decoration description}, {status description},
+Pure prop still life display, prop displayed independently, no person holding, no person wearing,
+Same frame four-panel (2x2): top-left front view + top-right side view + bottom-left back view + bottom-right detail closeup,
+Warm neutral background, soft cinematic light, even soft light, no hard shadows,
+Ultra-clear material texture, hand-drawn texture, {material sheen description}
+No text in image,
+No people, hands, fingers, or limbs in image, prop cannot be in held or worn state
 ```
 
 ---

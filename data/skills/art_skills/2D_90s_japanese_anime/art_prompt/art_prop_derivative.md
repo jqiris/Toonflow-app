@@ -80,16 +80,16 @@
 ### 单状态变体
 
 ```
-基于{道具名}设定图，90年代复古日系动画风格，手绘平涂上色，柔和暖色调，
-{道具类型}，{材质描述}，
-当前状态：{状态名}，{状态视觉描述}，
-{材质表面变化描述}，
-纯道具静物展示，道具独立陈列，无人持有，无人佩戴，
-同一画面四宫格（2×2）：左上正面图(front view)+右上侧面图(side view)+左下背面图(back view)+右下细节特写(detail closeup)，
-暖调米白背景，柔和电影光，均匀柔光，无硬阴影，
-材质纹理超清晰，手绘质感，状态细节可辨
-图中不要有任何文字，
-画面中不能出现任何人物、手部、手指、肢体，道具不可处于被握持或佩戴状态
+Based on {prop name} character sheet, 90s retro Japanese anime style, hand-drawn flat coloring, soft warm tones,
+{prop type}, {material description},
+Current state: {state name}, {state visual description},
+{material surface change description},
+Pure prop still life display, prop displayed independently, no person holding, no person wearing,
+Same frame four-panel (2x2): top-left front view(front view)+top-right side view(side view)+bottom-left back view(back view)+bottom-right detail closeup(detail closeup),
+Warm neutral background, soft cinematic light, even soft light, no hard shadows,
+Ultra-clear material texture, hand-drawn texture, state details discernible
+No text in image,
+No people, hands, fingers, or limbs in image, prop cannot be in held or worn state
 ```
 
 ---

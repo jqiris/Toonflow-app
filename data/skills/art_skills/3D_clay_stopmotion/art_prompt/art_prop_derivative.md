@@ -80,16 +80,16 @@
 ### 单状态变体
 
 ```
-基于{道具名}设定图，黏土定格动画古风道具衍生状态，定格动画风格，3D卡通渲染，暖调光影，
-{道具类型}，{材质描述}，
-当前状态：{状态名}，{状态视觉描述}，
-{材质表面变化描述}，
-纯道具静物展示，道具独立陈列，无人持有，无人佩戴，
-同一画面四宫格（2×2）：左上正面图(front view)+右上侧面图(side view)+左下背面图(back view)+右下细节特写(detail closeup)，
-纯净中性灰背景，暖调柔光，无硬阴影，
-材质纹理超清晰，黏土哑光质感，状态细节可辨
-图中不要有任何文字，
-画面中不能出现任何人物、手部、手指、肢体，道具不可处于被握持或佩戴状态
+基于{prop name}设定图，clay stop-motion animationTraditional Chinese prop衍生状态，定格动画风格，3D卡通渲染，暖调光影，
+{prop type}，{material description}，
+Current state：{state name}，{state visual description}，
+{material surface change description}，
+纯prop still life展示，prop displayed independently，no one holding，no one wearing，
+同一画面2x2 grid（2×2）：左上front view(front view)+右上side view(side view)+左下back view(back view)+右下detail closeup(detail closeup)，
+pure neutral gray background，暖调柔光，no hard shadows，
+ultra-clear material texture，黏土哑光质感，状态细节可辨
+No text in image，
+No people in the image、手部、手指、肢体，道具不可处于被握持或佩戴状态
 ```
 
 ---

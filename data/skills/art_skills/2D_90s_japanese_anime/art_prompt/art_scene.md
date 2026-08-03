@@ -102,19 +102,19 @@
 
 ## 六、提示词模板
 ```
-90年代复古日系动画风格场景主视图概念图，
-90s anime style，手绘平涂上色，柔和暖色调，精细流畅线条，电影感光影，
-scene design sheet，environment concept art，no people，no characters，no human figures，
-90年代复古风格，怀旧治愈氛围，
-{室内/室外}，{场景类型}，{季节+时间}，
-前景：{元素}，中景：{元素}，后景：{元素}，
-{色调描述}，{天候/氛围元素}，
-{材质描述}，空气透视，线条细节超清晰，
-线条流畅、块面阴影、使用痕迹，
-柔和电影光、背景光晕、自然光照，
-单画面构图，自然观察视角，构图能代表场景主体并展示前/中/后景层次，
-画面中无任何人物
-图中不要有任何文字
+90s retro Japanese anime style scene main view concept art,
+90s anime style, hand-drawn flat coloring, soft warm tones, fine smooth lines, cinematic lighting,
+scene design sheet, environment concept art, no people, no characters, no human figures,
+90s retro style, nostalgic healing atmosphere,
+{indoor/outdoor}, {scene type}, {season+time},
+Foreground: {elements}, Midground: {elements}, Background: {elements},
+{color tone description}, {weather/atmosphere elements},
+{material description}, atmospheric perspective, ultra-clear line details,
+Smooth lines, cel shading, wear traces,
+Soft cinematic light, background glow, natural lighting,
+Single frame composition, natural observation angle, composition represents scene subject and shows foreground/midground/background layers,
+No people in image
+No text in image
 ```
 
 ---

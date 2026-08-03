@@ -239,19 +239,19 @@
 
 
 ```
-以角色基础形象图为底图，img2img叠加服化妆造，
-扁平古风{性别}角色四视图设定图，
-2d flat design，vector art，flat illustration，
-minimalist，clean lines，solid colors，
-保持基础形象轮廓不变，{整体气质}，
-【L1·妆容】根据用户线索决策：{基础妆/轻妆/正式妆}；使用 {妆容风格}，单色皮肤，扁平肤色，{眉妆}，{眼妆}，{唇妆}，
-【L2·发型】{造型类型}，线条发型，{发饰描述}，
-【L3+L4·服饰】{主色}{款式}，{材质}，{装饰工艺}，线条清晰，色块分明，
-【L5·配饰】{头饰}，{耳饰}，{项饰}，{腰饰}，
-同一画面左至右并排：人像特写+正视图+侧视图+后视图，
-自然站立，纯净中性灰背景，无光影，无渐变，
-四视图一致性，线条简洁，色块填充，
-图中不要有任何文字
+Based on character base image, img2img overlay clothing/makeup/hair,
+Flat ancient-style {gender} character four-view character sheet,
+2d flat design, vector art, flat illustration,
+minimalist, clean lines, solid colors,
+Maintain base character outline unchanged, {overall temperament},
+【L1·Makeup】Decision based on user clues: {basic makeup / light makeup / formal makeup}; using {makeup style}, solid skin color, flat skin tone, {eyebrow makeup}, {eye makeup}, {lip makeup},
+【L2·Hairstyle】{style type}, line-designed hair, {hair accessory description},
+【L3+L4·Clothing】{main color}{style}, {material}, {decorative craft}, clear lines, distinct color blocks, face clean no facial markings, no stains, no blood,
+【L5·Accessories】{headwear}, {earrings}, {neckwear}, {waistwear},
+Same frame left to right: portrait closeup + front view + side view + back view,
+Natural standing, pure neutral gray background, no light and shadow, no gradients,
+Four-view consistency, simple lines, block color fill,
+No text in image
 ```
 
 

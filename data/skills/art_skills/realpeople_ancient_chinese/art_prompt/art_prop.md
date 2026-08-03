@@ -95,14 +95,14 @@
 ## 五、提示词模板
 
 ```
-古风道具设定图，真人写实摄影风格，古风写实纪实，强对比度，极致细节，
-{道具类型}，{材质描述}，{工艺/装饰描述}，{状态描述}，
-纯道具静物展示，道具独立陈列，无人持有，无人佩戴，
-同一画面四宫格（2×2）：左上正面图+右上侧面图+左下背面图+右下细节特写，
-纯净中性灰背景，均匀柔光，无硬阴影，
-材质纹理超清晰，质感写实，{材质光泽描述}
-图中不要有任何文字，
-画面中不能出现任何人物、手部、手指、肢体，道具不可处于被握持或佩戴状态
+Traditional Chinese prop design map, realistic photography style, traditional realistic, high contrast, extreme detail,
+{prop type}，{material description}，{craft/decoration description}，{state description}，
+Pure prop still life display，prop displayed independently，no one holding，no one wearing，
+Single frame 2×2 grid: top-left front view + top-right side view + bottom-left back view + bottom-right detail closeup，
+Pure neutral gray background，even soft light，no hard shadows，
+Ultra-clear material texture，realistic texture，{material gloss description}
+No text in the image，
+No people，hands，fingers，limbs in the image，prop must not be held or worn
 ```
 
 ---

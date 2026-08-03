@@ -49,8 +49,8 @@
 | 项目 | 约束 |
 |---|---|
 | 背景 | 纯净中性灰 `#E8E8E8`（与设定图一致） |
-| 光线 | 均匀照明，无硬阴影 |
-| 角度 | 与原设定图正面图一致 |
+| 光线 | 均匀照明，no hard shadows |
+| 角度 | 与原设定图front view一致 |
 | 比例 | 道具占画面主体 70%+ |
 
 ### 状态对比图
@@ -58,7 +58,7 @@
 | 项目 | 约束 |
 |---|---|
 | 布局 | 同一画面并排展示 2-3 种状态 |
-| 标注 | 每种状态下方标注状态名 |
+| 标注 | 每种状态下方标注state name |
 | 一致性 | 角度/光线/背景完全一致，仅状态不同 |
 
 ---
@@ -80,21 +80,21 @@
 
 ### 单状态变体
 
-基于{道具名}设定图，
-anime style，cel shading，modern urban style，
-cinematic composition，ultra detailed，8K，high quality，
-shallow depth of field，画面颗粒感，镜头暗角，
-赛璐璐动画风格，现代都市风，戏剧化低调光影，
-prop derivative design sheet，item concept art，no people，no characters，no human figures，
-{道具类型}，{材质描述}，
-当前状态：{状态名}，{状态视觉描述}，
-{材质表面变化描述}，
-纯道具静物展示，道具独立陈列，无人持有，无人佩戴，
-同一画面四宫格（2×2）：左上正面图(front view)+右上侧面图(side view)+左下背面图(back view)+右下细节特写(detail closeup)，
-纯净中性灰背景，均匀柔光，无硬阴影，
-材质纹理超清晰，赛璐璐质感，状态细节可辨
-图中不要有任何文字，
-画面中不能出现任何人物、手部、手指、肢体，道具不可处于被握持或佩戴状态
+Based on {prop name} character sheet,
+anime style, cel shading, modern urban style,
+cinematic composition, ultra detailed, 8K, high quality,
+shallow depth of field, film grain texture, lens vignette,
+cel-shaded anime style, modern urban aesthetic, dramatic low-key lighting,
+prop derivative design sheet, item concept art, no people, no characters, no human figures,
+{prop type}, {material description},
+Current state: {state name}, {state visual description},
+{material surface change description},
+Pure prop still life display, prop displayed independently, no person holding, no person wearing,
+Same frame four-panel (2x2): top-left front view(front view)+top-right side view(side view)+bottom-left back view(back view)+bottom-right detail closeup(detail closeup),
+Pure neutral gray background, even soft light, no hard shadows,
+Ultra-clear material texture, cel-shaded quality, state details discernible
+No text in image,
+No people, hands, fingers, or limbs in image, prop cannot be in held or worn state
 
 ---
 
@@ -106,8 +106,8 @@ prop derivative design sheet，item concept art，no people，no characters，no
 |---|---|
 | R1 | 道具核心造型/轮廓在所有状态中可识别 |
 | R2 | 状态变化须符合物理逻辑 |
-| R3 | 必须使用四宫格（2×2）布局：左上正面图+右上侧面图+左下背面图+右下细节特写 |
-| R4 | 必须指定「纯净中性灰背景」，均匀柔光，无硬阴影 |
+| R3 | 必须使用2x2 grid（2×2）布局：左上front view+右上side view+左下back view+右下detail closeup |
+| R4 | 必须指定「pure neutral gray background」，even soft light，no hard shadows |
 | R5 | 必须包含「二次元动画风格」关键词（anime style / cel shading） |
 | R6 | 必须包含景深特征（shallow depth of field / vignette 至少一项），保持动画赛璐璐风格 |
 
@@ -121,5 +121,5 @@ prop derivative design sheet，item concept art，no people，no characters，no
 | X4 | 出现任何人物形象，包括全身、半身、局部（手、手指、手臂等肢体） |
 | X5 | 道具处于被持有、握持、佩戴、使用中的状态 |
 | X6 | 出现暗示人物存在的元素（如手持痕迹、佩戴视角、使用姿态） |
-| X7 | 使用真人写实/摄影/3D渲染相关词 |
+| X7 | 使用human realistic/摄影/3D渲染相关词 |
 | X8 | 高饱和荧光色/霓虹色 |

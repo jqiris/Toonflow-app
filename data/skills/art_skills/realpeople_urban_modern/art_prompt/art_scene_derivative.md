@@ -116,19 +116,19 @@
 real photography，photorealistic，shot on ARRI Alexa，35mm film grain，
 RAW photo，ultra realistic，hyper detailed，
 shallow depth of field，natural lens vignette，subtle chromatic aberration，bokeh，
-真实摄影质感，胶片颗粒感，自然光照，物理光影，
+realistic photography，film grain感，natural lighting，physical light and shadow，
 scene derivative design sheet，environment concept art，no people，no characters，no human figures，
 保持场景空间结构一致，
-{目标角度（如有）}，{景别视角（如有）}，{时段描述（如有）}，{天候描述（如有）}，
-{前景}，{中景}，{后景}，
-{色调描述}，{景深描述（如有）}，{天空色调变化（如有）}，{氛围调整（如有）}，
-{天候视觉特征（如有）}，{材质表面变化（如有）}，{植被适配描述（如有）}，
-材质自然磨损痕迹，使用痕迹，墙面剥落，金属氧化，
-自然光漫射，体积光，丁达尔效应，焦散投影，
-空气透视，纹理细节超清晰，
-单画面构图，与参考图保持建筑结构/材质/色调/光线一致，仅按目标角度切换视点，
-画面中无任何人物
-图中不要有任何文字
+{目标角度（如有）}，{景别视角（如有）}，{时段描述（如有）}，{weather描述（如有）}，
+{foreground}，{middle ground}，{background}，
+{color描述}，{景深描述（如有）}，{天空color变化（如有）}，{atmosphere调整（如有）}，
+{weather视觉特征（如有）}，{材质表面变化（如有）}，{植被适配描述（如有）}，
+natural material wear traces，使用痕迹，墙面剥落，金属氧化，
+自然光漫射，volumetric lighting，丁达尔效应，焦散投影，
+atmospheric perspective，ultra-clear texture details，
+Single frame composition，与参考图保持建筑结构/材质/color/光线一致，仅按目标角度切换视点，
+No people in the image
+No text in image
 ```
 
 

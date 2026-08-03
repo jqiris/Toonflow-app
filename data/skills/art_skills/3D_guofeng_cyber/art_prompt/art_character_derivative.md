@@ -309,19 +309,19 @@ metaData: art_skills
 ### 完整服化叠加（四视图·双场景一键适配）
 
 ```
-以角色基础形象图为底图，img2img叠加服化妆造，
-3D国风赛博风格，{场景体系：古风/都市赛博}，高精度建模，PBR材质，中式美学核心，{古风轻量融合/都市机能融合}，电影级光影，
-国风赛博{性别}角色四视图设定图，3D渲染，高精建模，8K，超保真
+Based on the character base image, img2img overlay clothing/makeup/hair,
+3D cyber guofeng style, {scene system: traditional/cyber}，high-precision modeling，PBR materials，Chinese aesthetics core，{traditional lightweight integration/urban functional integration}，film-grade lighting,
+cyber guofeng {gender} character four-view character sheet，3D rendered，high-precision modeling，8K，ultra-faithful
 character design sheet, character turnaround,
-保持基础形象面容完全一致、自然站立姿态不变，{整体气质},
-【L1·妆容】根据用户线索决策：{基础妆/轻妆/正式妆/都市通勤妆/商务妆/赛博机能妆}；使用 {妆容风格}, PBR材质渲染, {眉妆}, {眼妆}, {唇妆}, {可控微霓虹光效/贴肤电路暗纹（按需添加）},
-【L2·发型】{造型类型}, 高精度发丝清晰, {发饰描述}, 国风形制核心,
-【L3+L4·服饰】{主色}{款式}, {材质}, {装饰工艺}, {传统纹样/传统纹样与电路纹理融合}, 衣服质感清晰, PBR材质渲染, {内嵌可控微霓虹光带（按需添加）},
-【L5·配饰】{头饰}, {耳饰}, {项饰}, {腰饰}, {手饰}, 国风形制核心, 与服化风格统一,
-同一画面左至右并排：人像特写+正视图+侧视图+后视图,
-自然站立, 素灰纯色背景, 均匀柔光, 无硬阴影, {赛博光效可控不刺眼（按需添加）},
-四视图面容/妆容/发型/服饰/配饰/纹样/光效完全一致, 3D国风赛博建模清晰, 高精度建模清晰,
-图中不要有任何文字
+maintain base model facial features completely unchanged，natural standing pose fixed，{overall temperament}，face clean no facial markings, no stains, no blood，
+【L1·Makeup】Decision based on user clues: {basic makeup / light makeup / formal makeup / urban commercial makeup / business makeup / cyber function makeup}; using {makeup style}, PBR material rendering, {eyebrow makeup}, {eye makeup}, {lip makeup}, {controllable micro neon effect/skin-adhered circuit dark pattern (optional)},
+【L2·Hairstyle】{hairstyle type}, high-precision hair strands clear, {hair accessories description}, Chinese style core,
+【L3+L4·Clothing】{main color}{garment style}, {material}, {decorative craft}, {traditional patterns/traditional patterns fused with circuit texture}, clear garment texture, PBR material rendering, {embedded controllable micro neon light strip (optional)},
+【L5·Accessories】{headpieces}, {earrings}, {necklaces}, {waist ornaments}, {hand ornaments}, Chinese style core, unified with makeup and clothing style,
+Same frame left to right: portrait closeup + front view + side view + back view,
+natural standing, plain gray solid background, even soft light, no hard shadows, {cyber light effect controllable and non-glaring (optional)},
+Four-view face/makeup/hairstyle/clothing/accessories/patterns/lighting effects completely consistent, 3D cyber guofeng modeling clear, high-precision modeling clarity,
+No text in image
 ```
 
 ---

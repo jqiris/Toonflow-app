@@ -11,7 +11,7 @@ metaData: art_skills
 ## 一、叠加原则
 
 1. **面容不变** — 叠加后五官必须与底模完全一致，禁止面容偏移
-2. **姿态不变** — 保持底模自然站立姿态，禁止任何姿态/动作/体态变化
+2. **姿态不变** — 保持底模natural standing姿态，禁止任何姿态/动作/体态变化
 3. **逐层可控** — 每层独立描述，便于按层替换（换装不换妆）
 4. **风格统一** — 所有服化元素服从同一美学体系
 5. **质感不降** — 叠加后质感标准不低于底模
@@ -30,7 +30,7 @@ metaData: art_skills
 | L4 | 外衣/主服 | 古风华服/礼服/常服等 |
 | L5 | 配饰 | 头饰/耳饰/项饰/腰饰/手饰 |
 
-> **范畴边界**：人物衍生资产仅包含 L0–L5 层级（服化妆造），不包含道具（伞/剑/扇/书/灯笼等手持物）、场景环境（室内/室外/天气等）、姿态动作（行走/回眸/举手等）。这些属于其他资产类型的范畴。
+> **范畴边界**：人物衍生资产仅包含 L0–L5 层级（服化妆造），不包含道具（伞/剑/扇/书/灯笼等手持物）、场景环境（indoor/outdoor/天气等）、姿态动作（行走/回眸/举手等）。这些属于其他资产类型的范畴。
 
 ---
 
@@ -76,7 +76,7 @@ metaData: art_skills
 |---|---|---|
 | 质感 | 赛璐璐平涂、自然透亮 | 赛璐璐质感、自然光泽、柔和质感 |
 | 白度 | 粉白基调、通透不惨白 | 粉白基调、白皙透亮 |
-| 内透光 | 从内向外柔光感 | 内透光感、皮肤通透发光 |
+| 内透光 | 从内向外柔光感 | 内透光感、translucent glowing skin |
 | 禁止 | 哑光/死白/蜡感/油光/过曝 | — |
 
 ### 基础妆细化（默认档）
@@ -148,7 +148,7 @@ metaData: art_skills
 
 | 项目 | 约束 | 提示词 |
 |---|---|---|
-| 主色 | 中国传统色调为默认 | 中国传统色调衣服、精致服饰 |
+| 主色 | 中国传统color为默认 | 中国传统color衣服、精致服饰 |
 | 材质 | 丝绸 + 刺绣 + 珠光面料 | 丝绸质感、刺绣细节 |
 | 质感 | 纹理必须超清晰 | 衣服质感清晰、纹理超清晰 |
 | 肩部 | 披帛/云肩/装饰 | 云肩华美、肩头有装饰 |
@@ -213,7 +213,7 @@ metaData: art_skills
 > | 发型 | 日常/闺中→半扎发或堕马髻；正式/亮相→高髻云鬓；私密/夜晚→披发；行动→束发马尾 |
 > | 服饰 | 情感戏/日常→古装长裙（轻柔飘逸）；权力/正式→宫廷礼服；行动/武斗→轻便常服 |
 > | 配饰繁度 | 日常→中等；正式→极繁（珠翠发饰+璎珞+腰饰）；私密/休闲→简；行动→简 |
-> | 色调倾向 | 中国传统色为锚（霜白/月白/朱砂/靛蓝）；夜景/私密→降饱和；喜庆→暖红+金 |
+> | color倾向 | 中国传统色为锚（霜白/月白/朱砂/靛蓝）；夜景/私密→降饱和；喜庆→暖红+金 |
 
 ## 八、四视图设定图规范
 
@@ -234,9 +234,9 @@ metaData: art_skills
 |---|---|
 | 布局 | 同一画面从左至右并排四视图 |
 | 背景 | 月白纯色 #E8EAF5 |
-| 站姿 | 自然站立、双脚平行微分、双臂自然下垂或微展（**禁止任何姿态变化**） |
+| 站姿 | natural standing、双脚平行微分、双臂自然下垂或微展（**禁止任何姿态变化**） |
 | 表情 | 符合妆容风格的微表情（如清雅素妆→淡然、桃花妆→含笑），仅限面部微表情，不涉及肢体动作 |
-| 光线 | 均匀柔光，前方主光 + 双侧补光，无硬阴影 |
+| 光线 | even soft light，前方主光 + 双侧补光，no hard shadows |
 | 一致性 | 四视图的面容/妆容/发型/发饰/服饰/配饰完全一致 |
 | 画面比例 | 建议 4:1 或 3:1 |
 
@@ -252,24 +252,24 @@ metaData: art_skills
 | 禁止输出 | 速查表、分层构建方案、视觉约束表、禁止事项表、衍生方案、输出建议、核心要素表等一切非提示词内容 |
 | 禁止场景 | 人物衍生资产**不包含场景/环境描述**，不输出任何场景/环境/天气/背景叙事内容（场景属于场景资产范畴） |
 | 禁止道具 | **不包含任何道具交互**，不输出伞/剑/扇/书/灯笼/酒杯等手持物或交互物（道具属于道具资产范畴） |
-| 禁止姿态变化 | **不改变底模姿态**，不输出行走/回眸/举手/侧身/奔跑等任何动作或体态变化，保持自然站立 |
+| 禁止姿态变化 | **不改变底模姿态**，不输出行走/回眸/举手/侧身/奔跑等任何动作或体态变化，保持natural standing |
 | 格式 | 直接输出可用的提示词代码块，无需标题、表格、解释、方案对比 |
 
 ### 完整服化叠加（四视图）
 
-以角色基础形象图为底图，img2img叠加服化妆造，
-国风二次元，新国潮美学，日式动画渲染，赛璐璐平涂，细腻笔触，
-古风{性别}角色四视图设定图，国风二次元，赛璐璐上色，8K，超保真
+Based on character base image, img2img overlay clothing/makeup/hair,
+Chinese-style 2D animation, new Chinese aesthetic, Japanese animation rendering, cel-shaded flat coloring, fine brushstrokes,
+Ancient-style {gender} character four-view character sheet, Chinese-style 2D, cel-shaded coloring, 8K, ultra-faithful
 character design sheet, character turnaround,
-保持基础形象面容不变，{整体气质},
-【L1·妆容】根据用户线索决策：{基础妆/轻妆/正式妆}；使用 {妆容风格}, 赛璐璐平涂, {眉妆}, {眼妆}, {唇妆},
-【L2·发型】{造型类型}, 细腻发丝清晰, {发饰描述},
-【L3+L4·服饰】{主色}{款式}, {材质}, {装饰工艺}, 衣服质感清晰, 赛璐璐平涂,
-【L5·配饰】{头饰}, {耳饰}, {项饰}, {腰饰},
-同一画面左至右并排：人像特写+正视图+侧视图+后视图,
-自然站立, 月白纯色背景, 均匀柔光, 无硬阴影,
-四视图一致性, 国风二次元造型清晰, 细腻线条清晰,
-图中不要有任何文字
+Maintain base character face unchanged, {overall temperament}, face clean no facial markings, no stains, no blood,
+【L1·Makeup】Decision based on user clues: {basic makeup / light makeup / formal makeup}; using {makeup style}, cel-shaded flat coloring, {eyebrow makeup}, {eye makeup}, {lip makeup},
+【L2·Hairstyle】{style type}, fine hair strands clear, {hair accessory description},
+【L3+L4·Clothing】{main color}{style}, {material}, {decorative craft}, clear clothing texture, cel-shaded flat coloring,
+【L5·Accessories】{headwear}, {earrings}, {neckwear}, {waistwear},
+Same frame left to right: portrait closeup + front view + side view + back view,
+Natural standing, pale moonlight solid background, even soft light, no hard shadows,
+Four-view consistency, clear Chinese-style 2D character design, fine lines clear,
+No text in image
 
 ---
 
@@ -284,12 +284,12 @@ character design sheet, character turnaround,
 | R3 | 女性配饰必须「华丽精致 + 工艺精细」 |
 | R4 | 妆容/发型/服饰/配饰风格统一 |
 | R5 | 必须输出四视图设定图（人像特写+正视图+侧视图+后视图） |
-| R6 | 必须指定「月白纯色背景」 |
-| R7 | 必须指定「四视图一致性」 |
+| R6 | 必须指定「pale moonlight solid background」 |
+| R7 | 必须指定「four-view consistency」 |
 | R8 | **仅输出提示词**——禁止输出速查表/分层方案/视觉约束/禁止事项/衍生方案/输出建议等任何非提示词内容 |
 | R9 | **禁止包含场景描述**——人物衍生资产不涉及场景/环境/天气/背景叙事，场景属于独立资产类型 |
 | R10 | **禁止道具交互**——不包含任何手持物/交互物（伞/剑/扇/书等），道具属于独立资产类型 |
-| R11 | **姿态保持不变**——必须保持底模自然站立姿态，禁止任何动作/体态/姿势变化 |
+| R11 | **姿态保持不变**——必须保持底模natural standing姿态，禁止任何动作/体态/姿势变化 |
 | R12 | **L1 必须先分析再决策**——先解析用户面部线索，再确定基础妆/轻妆/正式妆 |
 | R13 | **所有衍生资产均需妆造**——正常情况不保持素颜，至少使用基础妆 |
 | R14 | **上妆强度受控**——即使上妆也需克制，不得出现现代浓妆/夸张彩妆效果 |

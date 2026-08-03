@@ -80,16 +80,16 @@
 ### 单状态变体
 
 ```
-基于{道具名}设定图，真人写实摄影风格，古风写实纪实，强对比度，极致细节，
-{道具类型}，{材质描述}，
-当前状态：{状态名}，{状态视觉描述}，
-{材质表面变化描述}，
-纯道具静物展示，道具独立陈列，无人持有，无人佩戴，
-同一画面四宫格（2×2）：左上正面图(front view)+右上侧面图(side view)+左下背面图(back view)+右下细节特写(detail closeup)，
-纯净中性灰背景，均匀柔光，无硬阴影，
-材质纹理超清晰，质感写实，状态细节可辨
-图中不要有任何文字，
-画面中不能出现任何人物、手部、手指、肢体，道具不可处于被握持或佩戴状态
+Based on {prop name} design map, realistic photography style, traditional realistic, high contrast, extreme detail,
+{prop type}，{material description}，
+Current state: {state name}，{state visual description}，
+{material surface change description}，
+Pure prop still life display，prop displayed independently，no one holding，no one wearing，
+Single frame 2×2 grid: top-left front view (front view) + top-right side view (side view) + bottom-left back view (back view) + bottom-right detail closeup (detail closeup)，
+Pure neutral gray background，even soft light，no hard shadows，
+Ultra-clear material texture，realistic texture，state details visible
+No text in the image，
+No people，hands，fingers，limbs in the image，prop must not be held or worn
 ```
 
 ---

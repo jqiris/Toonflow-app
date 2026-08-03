@@ -97,14 +97,14 @@
 ## 五、提示词模板
 
 ```
-现代都市道具设定图，真实摄影风格，都市写实纪实，强对比度，极致细节，
-{道具类型}，{材质描述}，{工艺/装饰描述}，{状态描述}，
-纯道具静物展示，道具独立陈列，无人持有，无人佩戴，
-同一画面四宫格（2×2）：左上正面图+右上侧面图+左下背面图+右下细节特写，
-纯净中性灰背景，均匀柔光，无硬阴影，
-材质纹理超清晰，质感写实，{材质光泽描述}
-图中不要有任何文字，
-画面中不能出现任何人物、手部、手指、肢体，道具不可处于被握持或佩戴状态
+现代都市prop design图，真实摄影风格，都市写实纪实，强对比度，极致细节，
+{prop type}，{material description}，{craft/decoration description}，{state description}，
+纯prop still life展示，prop displayed independently，no one holding，no one wearing，
+同一画面2x2 grid（2×2）：左上front view+右上side view+左下back view+右下detail closeup，
+pure neutral gray background，even soft light，no hard shadows，
+ultra-clear material texture，realistic texture，{material gloss description}
+No text in image，
+No people in the image、手部、手指、肢体，道具不可处于被握持或佩戴状态
 ```
 
 ---

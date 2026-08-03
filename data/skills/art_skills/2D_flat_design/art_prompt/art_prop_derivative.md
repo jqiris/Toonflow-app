@@ -80,18 +80,18 @@
 ### 单状态变体
 
 ```
-基于{道具名}设定图，
-2d flat design，vector art，flat illustration，
-minimalist，clean lines，solid colors，
-{道具类型}，{材质描述}，
-当前状态：{状态名}，{状态视觉描述}，
-{材质表面变化描述}，
-纯道具静物展示，道具独立陈列，无人持有，无人佩戴，
-同一画面四宫格（2×2）：左上正面图(front view)+右上侧面图(side view)+左下背面图(back view)+右下细节特写(detail closeup)，
-纯净中性灰背景，无光影，无渐变，
-线条清晰，色块分明，状态细节可辨
-图中不要有任何文字，
-画面中不能出现任何人物、手部、手指、肢体，道具不可处于被握持或佩戴状态
+Based on {prop name} character sheet,
+2d flat design, vector art, flat illustration,
+minimalist, clean lines, solid colors,
+{prop type}, {material description},
+Current state: {state name}, {state visual description},
+{material surface change description},
+Pure prop still life display, prop displayed independently, no person holding, no person wearing,
+Same frame four-panel (2x2): top-left front view(front view)+top-right side view(side view)+bottom-left back view(back view)+bottom-right detail closeup(detail closeup),
+Pure neutral gray background, no light and shadow, no gradients,
+Clear lines, distinct color blocks, state details discernible
+No text in image,
+No people, hands, fingers, or limbs in image, prop cannot be in held or worn state
 ```
 
 

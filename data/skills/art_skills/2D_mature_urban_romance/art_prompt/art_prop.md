@@ -52,7 +52,7 @@
 | 材质 | 木材/玻璃/金属/布料 | 木质书套、玻璃灯罩 |
 | 质感 | 材质纹理清晰、边缘自然 | 木纹清晰、玻璃通透 |
 | 风格 | 简约现代/温馨居家 | 简约现代、温馨居家 |
-| 提示词 | 现代{道具}，材质清晰，氛围协调 | — |
+| 提示词 | 现代{道具}，材质清晰，atmosphere协调 | — |
 
 ---
 
@@ -62,18 +62,18 @@
 
 | 位置 | 视图 | 角度 | 要求 | 提示词 |
 |---|---|---|---|---|
-| 左上 | 正面图 | 正面 0° | 道具完整正面形态 | front view |
-| 右上 | 侧面图 | 侧面 90° | 厚度/轮廓/结构清晰 | side view |
-| 左下 | 背面图 | 背面 180° | 道具背部结构/装饰 | back view |
-| 右下 | 细节特写 | 局部放大 | 材质纹理/工艺细节 | detail closeup |
+| 左上 | front view | 正面 0° | 道具完整正面形态 | front view |
+| 右上 | side view | 侧面 90° | 厚度/轮廓/结构清晰 | side view |
+| 左下 | back view | 背面 180° | 道具背部结构/装饰 | back view |
+| 右下 | detail closeup | 局部放大 | 材质纹理/工艺细节 | detail closeup |
 
 ### 画面规范
 
 | 项目 | 约束 |
 |---|---|
-| 布局 | 同一画面四宫格（2×2），上下左右四视角 |
+| 布局 | 同一画面2x2 grid（2×2），上下左右四视角 |
 | 背景 | 纯净中性灰 `#E8E8E8` |
-| 光线 | 均匀柔光，无硬阴影 |
+| 光线 | even soft light，no hard shadows |
 | 比例 | 每格道具占格内主体 70%+ |
 | 投影 | 允许自然地面微投影 |
 | 画面比例 | 建议 1:1 |
@@ -96,19 +96,19 @@
 
 ## 五、提示词模板
 
-二次元道具设定图，
-anime style，cel shading，modern urban style，
-cinematic composition，ultra detailed，8K，high quality，
-shallow depth of field，画面颗粒感，镜头暗角，
-赛璐璐动画风格，现代都市风，戏剧化低调光影，
-prop design sheet，item concept art，no people，no characters，no human figures，
-{道具类型}，{材质描述}，{工艺/装饰描述}，{状态描述}，
-纯道具静物展示，道具独立陈列，无人持有，无人佩戴，
-同一画面四宫格（2×2）：左上正面图+右上侧面图+左下背面图+右下细节特写，
-纯净中性灰背景，均匀柔光，无硬阴影，
-材质纹理超清晰，赛璐璐质感，{材质光泽描述}
-图中不要有任何文字，
-画面中不能出现任何人物、手部、手指、肢体，道具不可处于被握持或佩戴状态
+2D anime-style prop character sheet,
+anime style, cel shading, modern urban style,
+cinematic composition, ultra detailed, 8K, high quality,
+shallow depth of field, film grain texture, lens vignette,
+cel-shaded anime style, modern urban aesthetic, dramatic low-key lighting,
+prop design sheet, item concept art, no people, no characters, no human figures,
+{prop type}, {material description}, {craft/decoration description}, {status description},
+Pure prop still life display, prop displayed independently, no person holding, no person wearing,
+Same frame four-panel (2x2): top-left front view + top-right side view + bottom-left back view + bottom-right detail closeup,
+Pure neutral gray background, even soft light, no hard shadows,
+Ultra-clear material texture, cel-shaded quality, {material sheen description}
+No text in image,
+No people, hands, fingers, or limbs in image, prop cannot be in held or worn state
 
 ---
 
@@ -118,7 +118,7 @@ prop design sheet，item concept art，no people，no characters，no human figu
 
 | 编号 | 规则 |
 |---|---|
-| R1 | 必须指定「纯净中性灰背景」 |
+| R1 | 必须指定「pure neutral gray background」 |
 | R2 | 必须明确道具材质与工艺 |
 | R3 | 道具造型必须符合现代都市言情世界观 |
 | R4 | 必须包含「二次元动画风格」关键词（anime style / cel shading） |
@@ -133,6 +133,6 @@ prop design sheet，item concept art，no people，no characters，no human figu
 | X3 | 出现任何人物形象，包括全身、半身、局部（手、手指、手臂等肢体） |
 | X4 | 道具处于被持有、握持、佩戴、使用中的状态 |
 | X5 | 出现暗示人物存在的元素（如手持痕迹、佩戴视角、使用姿态） |
-| X6 | 使用真人写实/摄影/3D渲染相关词 |
+| X6 | 使用human realistic/摄影/3D渲染相关词 |
 | X7 | 高饱和荧光色/霓虹色 |
 | X8 | 古风/奇幻/科幻等与现代都市言情世界观冲突的元素 |
