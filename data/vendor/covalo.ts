@@ -145,7 +145,7 @@ const vendor: VendorConfig = {
     baseUrl: "http://192.168.1.2:52415/v1",
   },
   models: [
-    // 初始为空，等待用户手动添加或通过 /v1/models 自动发现
+    { name: "Qwen3.6 27B Fable", modelName: "qwen3.6-27b-fable", type: "text", think: false },
   ],
 };
 
