@@ -13,7 +13,7 @@ import initializePlugins from "@/utils/plugins/initialize";
 import { languageRequest, resolveRequestLocale, runWithLocale, setLocaleFallback, translateError, translateMessage } from "@/lib/i18n";
 import { detectLocale, normalizeLocale } from "@toonflow/i18n";
 
-const autoInstallProviders = ["tfRouter.ts", "apiMart.ts", "metaso.ts", "compshare.ts"];
+const autoInstallProviders = ["tfRouter.ts", "apiMart.ts", "metaso.ts", "compshare.ts", "freevideo.ts"];
 
 export async function createApp({
   webRoot,
@@ -54,7 +54,8 @@ export async function createApp({
   if (dataDirectory && providersRoot) {
     const sourceDirectory = resolve(providersRoot, "media");
     let providerRevision = pluginRevision;
-    if (providerRevision === undefined) {
+    // ACT: dev 构建的版本标识固定为 "dev"，恒定不变会永远跳过同步；改为内容哈希，源码变化即重新同步。
+    if (providerRevision === undefined || providerRevision === "dev") {
       const hash = createHash("sha256");
       for (const name of autoInstallProviders) {
         const source = await readFile(resolve(sourceDirectory, name)).catch((error: NodeJS.ErrnoException) => {

@@ -176,7 +176,10 @@ export async function generateMedia(
   const generate = mediaType === "image" ? provider.generateImage : mediaType === "video" ? provider.generateVideo : provider.generateAudio;
   if (typeof generate !== "function") invalid(t`此供应商不支持${translateMessage({ image: "图片", video: "视频", audio: "音频" }[mediaType])}生成`);
   const rules = Array.isArray(provider.rules) ? provider.rules : [];
-  if (rules.some(rule => rule.field === "apiKey") && (typeof provider.config.apiKey !== "string" || !provider.config.apiKey.trim())) invalid("请先在媒体模型设置中配置供应商 API Key");
+  const apiKeyRule = rules.find(rule => rule.field === "apiKey");
+  if (apiKeyRule && (typeof provider.config.apiKey !== "string" || !provider.config.apiKey.trim())) {
+    invalid(typeof apiKeyRule.missingMessage === "string" && apiKeyRule.missingMessage.trim() ? apiKeyRule.missingMessage : "请先在媒体模型设置中配置供应商 API Key");
+  }
   const prepared = await prepareRequest(directory, mediaType, request, readReference, signal);
   signal?.throwIfAborted();
   const finish = beginGeneration(provider);

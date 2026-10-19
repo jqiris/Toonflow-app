@@ -28,6 +28,8 @@ interface ProviderModel {
 interface ProviderFormRule {
   field: string;
   value: unknown;
+  /** 配置值为空时宿主优先使用的报错文案；目前仅 apiKey 字段生效。 */
+  missingMessage?: string;
 }
 
 type ProviderConfig<TRules extends readonly ProviderFormRule[]> = {
