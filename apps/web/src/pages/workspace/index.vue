@@ -187,6 +187,7 @@ function setDocumentPanel(value: Element | ComponentPublicInstance | null) {
   if (value && directory) documentPanelCache.value = { directory, instance: value as InstanceType<typeof documentPanel> };
 }
 provide("canvas", () => canvasPanelRef.value?.getCanvasContext());
+provide("agentCanvas", () => canvasPanelRef.value?.getAgentCanvasContext());
 provide("mentionCanvas", () => canvasPanelRef.value?.mentionSource);
 provide("activateCanvasPanel", () => switchPanel("canvas"));
 provide("performWorkspaceFileAction", (directory: string, action: "copy" | "rename" | "move" | "delete", path: string, target?: string, entryType: "canvas" | "directory" = "canvas") =>

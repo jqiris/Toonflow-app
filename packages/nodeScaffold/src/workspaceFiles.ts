@@ -1,4 +1,4 @@
-import { inject, ref, toValue, watch, type MaybeRefOrGetter } from "vue";
+import { inject, nextTick, ref, toValue, watch, type MaybeRefOrGetter } from "vue";
 import type { NodeMediaValue } from "./values";
 import { useNodePreviewReady } from "./useNodePreviewReady";
 
@@ -67,8 +67,12 @@ export function useNodeFiles() {
       let shared: ReturnType<NonNullable<WorkspaceFiles["acquireUrl"]>> | undefined;
       onCleanup(() => {
         cancelled = true;
-        shared?.release();
-        if (url) URL.revokeObjectURL(url);
+        // ACT: 先摘下 src 再释放 blob。若边释放边让 <video>/<img> 重新加载，
+        // 元素可能已不在 document 里（面板切换、节点卸载），isUrlInUse 兜不住，
+        // 在途加载会被 revoke 打断并报 ERR_FILE_NOT_FOUND。
+        fileUrl.value = "";
+        nextTick(() => shared?.release());
+        if (url) nextTick(() => URL.revokeObjectURL(url));
       });
       fileUrl.value = "";
       if (!value || !ready) return;

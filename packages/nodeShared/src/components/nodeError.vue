@@ -91,10 +91,18 @@ async function explainError() {
 <style lang="scss">
 .nodeErrorNotification {
   width: min(440px, calc(100vw - 32px));
+  /* ACT: 通知是常驻的，又浮在画布右上角，整块吃指针事件就把下面的画布控件变成死区
+     （实测「全屏编辑」按钮的坐标被通知标题命中，真实鼠标点不中）。外壳、标题、图标和内边距放行指针，
+     只有正文文本与按钮复原，避免为了能点按钮而丢掉通知本身的可用性。 */
+  pointer-events: none;
 
   .el-notification__group {
     min-width: 0;
     flex: 1;
+  }
+
+  .el-notification__closeBtn {
+    pointer-events: auto;
   }
 
   .nodeErrorContent {
@@ -111,10 +119,16 @@ async function explainError() {
       overflow: auto;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
+      pointer-events: auto;
     }
 
     .explainControls {
       margin-top: 12px;
+
+      .el-select,
+      .explainButton {
+        pointer-events: auto;
+      }
 
       .explainButton {
         margin-top: 8px;
@@ -131,6 +145,7 @@ async function explainError() {
         overflow: auto;
         white-space: pre-wrap;
         overflow-wrap: anywhere;
+        pointer-events: auto;
       }
 
       .explanationHint {

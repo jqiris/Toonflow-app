@@ -1,4 +1,5 @@
-// ACT: 字符串优先精确匹配，正则按列表顺序匹配；两项上限均优先于用户配置和 Pi 内置模型目录。
+// ACT: 字符串优先精确匹配，正则按列表顺序匹配；本表只补用户没填的上限，用户填了就以用户为准
+// （中转站常把官方上限截小，例如 sensenova 的 deepseek 只到 384000，覆盖成 393216 会被供应商 400 拒掉）。
 // 单位为 token；2026-09-20 核对官方标准 API 上限，不采用批处理或 Beta 专属上限。
 const modelContextLimits: { id: string | RegExp; contextWindow: number; maxTokens: number }[] = [
   // TF-Router

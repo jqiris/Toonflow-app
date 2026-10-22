@@ -206,6 +206,17 @@ function getCanvasContext() {
   return props.active ? activeInstance.value?.getCanvasContext() : undefined;
 }
 
+/**
+ * 供文档面板内的多轨编辑器派工使用：不要求画布面板处于 active，只要画布实例已就绪就返回上下文。
+ * `getCanvasContext` 的 active 判断服务于对话输入框（避免未激活画布被当作当前画布），多轨在文档面板内
+ * 永远不满足 active，需要这条独立入口；未就绪时返回 undefined，由调用方提示而不是另起生成路径。
+ */
+function getAgentCanvasContext() {
+  const instance = activeInstance.value;
+  if (!instance?.canvasReady) return undefined;
+  return instance.getCanvasContext();
+}
+
 async function flushSave(action?: () => Promise<void>) {
   const panels = entries.value.map(entry => instances.get(entry.key)).filter((panel): panel is CanvasInstance => !!panel);
   if (!action) {
@@ -403,7 +414,7 @@ const mentionSource: MentionCanvasSource = {
   },
 };
 
-defineExpose({ canvasId, canvasReady, canvasListReady, getCanvasContext, readDocumentNode, readDocumentNodes, focusDocumentNode, saveDocumentNode, mountDocumentNode, observeDocumentNode, resolveDocumentNodeFile, performFileAction, flushSave, cancelSave,
+defineExpose({ canvasId, canvasReady, canvasListReady, getCanvasContext, getAgentCanvasContext, readDocumentNode, readDocumentNodes, focusDocumentNode, saveDocumentNode, mountDocumentNode, observeDocumentNode, resolveDocumentNodeFile, performFileAction, flushSave, cancelSave,
   addNodeAtPointer: () => activeInstance.value?.addNodeAtPointer(),
   mentionSource,
   get saveBusy() { return fileActionBusy || [...instances.values()].some(panel => panel.saveBusy); },

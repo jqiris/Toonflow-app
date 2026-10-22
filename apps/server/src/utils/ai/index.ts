@@ -33,11 +33,15 @@ export const providerSchema = z.object({
 const builtinModels = getBuiltinProviders().flatMap(provider => getBuiltinModels(provider));
 
 export function getModelLimits(providerId: string, model: z.infer<typeof providerSchema>["models"][number]) {
-  const limits = modelContextLimits.find(item => item.id === model.id)
-    ?? modelContextLimits.find(item => item.id instanceof RegExp && model.id.search(item.id) !== -1);
-  if (limits) return { contextWindow: limits.contextWindow, maxTokens: limits.maxTokens };
+  // ACT: 用户显式填写的供应商实限优先——中转站常把官方上限截小（如 sensenova 的 deepseek 只到 384000），
+  // 内置表只补缺、不覆盖已填值；两项都没填时才完全落到表或 Pi 内置目录。
   if (model.contextWindow != null && model.maxOutputTokens != null) {
     return { contextWindow: model.contextWindow, maxTokens: model.maxOutputTokens };
+  }
+  const limits = modelContextLimits.find(item => item.id === model.id)
+    ?? modelContextLimits.find(item => item.id instanceof RegExp && model.id.search(item.id) !== -1);
+  if (limits) {
+    return { contextWindow: model.contextWindow ?? limits.contextWindow, maxTokens: model.maxOutputTokens ?? limits.maxTokens };
   }
   const matches = builtinModels.filter(item => item.id === model.id);
   const exact = matches.find(item => item.provider === providerId);

@@ -81,7 +81,7 @@ export const canvasOperations = [
   { name: "addCanvas", label: "新增画布", description: "在当前工作区创建空白画布 JSON 并切换到新画布。name 可选且不含 .json 扩展名；省略时自动使用未占用的画布N，同名文件不会被覆盖。返回新画布状态，本轮后续调用可继续新增节点。", parameters: canvasSchemas.addCanvas },
   { name: "switchCanvas", label: "切换画布", description: "先从 getCanvas({include:['canvases']}) 分页获取 canvasId，再切换激活画布。等待当前修改保存，返回新画布概览，本轮后续操作继续作用于新画布。", parameters: canvasSchemas.switchCanvas },
   { name: "renameCanvas", label: "重命名画布", description: "重命名当前工作区画布，同时修改对应 JSON 文件名。省略 canvasId 时重命名激活画布；name 不含 .json 扩展名。不会覆盖已有文件，返回操作后的激活画布概览。", parameters: canvasSchemas.renameCanvas },
-  { name: "addNode", label: "新增节点", description: "在激活画布的画布坐标 position 新增节点，type 必须来自 getCanvas({include:['nodeTypes']}) 的 availableNodeTypes。返回新增节点信息；节点函数通过 getNodeTools 按需查询。", parameters: canvasSchemas.addNode },
+  { name: "addNode", label: "新增节点", description: "在激活画布的画布坐标 position 新增节点，type 必须来自 getCanvas({include:['nodeTypes']}) 的 availableNodeTypes。多轨编辑器（remote-multitrackNode）经本工具添加时带 agent 标记且同一画布仅允许一个：已存在 agent 添加的实例时新增会报错，应改用 findCanvasNodes 查找并复用已有节点。返回新增节点信息；节点函数通过 getNodeTools 按需查询。", parameters: canvasSchemas.addNode },
   { name: "deleteNodes", label: "删除节点", description: "从激活画布批量删除指定 nodeIds 的节点及其连接边；同一批次内的父子节点可以一起删除，任一节点校验失败则整体不执行。返回 removedEdgeCount、最多 100 项 removedEdgeIds 及 truncated；截断只影响删除回执，不代表仅删除了部分连线。", parameters: canvasSchemas.deleteNodes },
   { name: "moveNodes", label: "移动节点", description: "将激活画布指定节点批量移动到各自的画布坐标 position，一次可传入多个节点，任一项校验失败则整体不执行。", parameters: canvasSchemas.moveNodes },
   { name: "renameNodes", label: "重命名节点", description: "批量修改激活画布指定节点的显示名称，一次可传入多个节点，任一项校验失败则整体不执行。", parameters: canvasSchemas.renameNodes },

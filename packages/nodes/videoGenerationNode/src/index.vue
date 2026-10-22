@@ -206,14 +206,35 @@ watch([selectedModel, () => data.value.duration], ([choice]) => {
   if (choice.audio !== "optional") data.value.generateAudio = choice.audio === true;
 }, { flush: "sync" });
 const modelGroups = computed(() => groupNodeModels(models.value));
-const generationPrompt = computed(() =>
-  [
-    data.value.prompt.trim(),
+// {{ref N}} 的 N 是画布引用列表的全局序号（含文本），而 H3 的 <Picture N> 按类型各自编号，
+// 必须在此按 refList 逐项换算，否则混入文本或视频参考时编号会整体错位。
+function referenceTags(list: readonly { dataType: string | string[] }[]) {
+  const tags = new Map<number, string>();
+  let picture = 0;
+  let video = 0;
+  let audio = 0;
+  list.forEach((item, index) => {
+    if (item.dataType === "IMAGE") tags.set(index + 1, `<Picture ${++picture}>`);
+    else if (item.dataType === "VIDEO") tags.set(index + 1, `<Video ${++video}>`);
+    else if (item.dataType === "AUDIO") tags.set(index + 1, `<Audio ${++audio}>`);
+    else if (item.dataType === "STRING") tags.set(index + 1, `参考 ${index + 1}`);
+  });
+  return tags;
+}
+const generationPrompt = computed(() => {
+  const text = data.value.prompt.trim();
+  // ACT: <Picture N> 是 MiniMax-H3 的参考标签语法，仅对 freevideo 生效；其他供应商保持原始提及。
+  const tags = selectedModel.value?.providerId === "freevideo" ? referenceTags(refList.value) : undefined;
+  // ACT: 正文若直接写了 {{Picture N}} / {{Video N}} / {{Audio N}}（未按规范写 {{ref N}}），wire 层兜底归一化成 H3 标签，避免双花括号字面量漏进提示词。
+  const prompt = (tags ? text.replace(/\{\{\s*ref\s*(\d+)\s*\}\}/gi, (mention, n: string) => tags.get(Number(n)) ?? mention) : text)
+    .replace(/\{\{\s*(picture|video|audio)\s*(\d+)\s*\}\}/gi, (_mention, kind: string, n: string) => `<${kind[0].toUpperCase()}${kind.slice(1).toLowerCase()} ${n}>`);
+  return [
+    prompt,
     ...refList.value.flatMap((item, index) => (item.dataType === "STRING" && item.value?.trim() ? [`参考 ${index + 1}：\n${item.value.trim()}`] : [])),
   ]
     .filter(Boolean)
-    .join("\n\n")
-);
+    .join("\n\n");
+});
 const generationInput = computed<Omit<NodeVideoRequest, "directory"> | undefined>(() => {
   const choice = selectedModel.value;
   if (!choice) return;

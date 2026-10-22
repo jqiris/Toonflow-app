@@ -44,6 +44,7 @@ description: 通过 Toonflow MCP 操作工作区、实时画布、节点、文�
 
 ## 生成媒体
 
+- 触发视频生成前先判工程形态：画布存在多轨编辑器节点（`remote-multitrackNode`）或工作区存在 `plan/story.mtrack` 时，视频生成经多轨节点的 `node:dispatchGenerate` 后台派工、或按内置生成 SOP（runbook §十三逐镜流程）执行，二选一，产物回写 mtrack；不回写 mtrack 的直调生成会造成状态漂移。函数细节与 SOP 见 Toonflow 内置 assetCard 技能文档，这里不展开。
 - 从模型列表和节点工具 schema 获取可用模型、比例、分辨率、时长和声音选项，不自行猜测供应商参数。
 - 按用户请求配置提示词和引用，再触发生成。返回“已开始”只代表任务已启动，不能宣布图片或视频已生成。
 - 使用节点提供的 `node:getGenerationStatus` 确认完成、输出路径或错误；需要停止时调用 `node:cancelGeneration`，参数以节点返回的 schema 为准。其他节点未暴露这些能力时，如实报告已开始和当前可见结果，不反复触发生成充当查询。

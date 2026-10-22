@@ -141,8 +141,20 @@ export function useCanvasTools(options: {
         const args = canvasSchemas.addNode.parse(request.args);
         const type = options.availableNodes.value.find(node => node.type === args.type);
         if (!type) throw new Error("节点类型未启用或尚未加载，请先查询 getCanvas");
+        // ACT: 多轨编辑器的 agent 实例同画布唯一：已有 agent 添加的实例时直接报错引导复用；菜单/拖拽添加的人工实例不受限。
+        if (args.type === "remote-multitrackNode") {
+          const existing = flow.getNodes.value.find(node => node.type === "remote-multitrackNode" && node.data?.agentCreated);
+          if (existing) throw new Error(`画布已存在 agent 添加的多轨编辑器节点：${existing.data?.label || existing.id}，请直接复用该节点`);
+        }
         const id = crypto.randomUUID();
-        flow.addNodes({ id, type: type.type, position: nodePosition(args.position), data: { label: args.label ?? type.label } });
+        flow.addNodes({
+          id,
+          type: type.type,
+          position: nodePosition(args.position),
+          data: args.type === "remote-multitrackNode"
+            ? { label: args.label ?? type.label, agentCreated: true }
+            : { label: args.label ?? type.label },
+        });
         await nextTick();
         signal.throwIfAborted();
         return nodeInfo(id);

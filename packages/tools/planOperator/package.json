@@ -1,0 +1,21 @@
+{
+  "name": "@toonflow/tool-plan-operator",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./composite": "./src/composite.ts",
+    "./compositeRun": "./src/compositeRun.ts"
+  },
+  "scripts": {
+    "build": "bun build.ts",
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "@toonflow/ffmpeg": "workspace:*",
+    "zod": "^4.6.2"
+  },
+  "devDependencies": {
+    "@toonflow/tools-scaffold": "workspace:*"
+  }
+}

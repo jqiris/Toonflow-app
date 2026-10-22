@@ -18,7 +18,7 @@ const rules = [
   },
 ] as const;
 
-const version = "1.0.0";
+const version = "1.1.1";
 const agentSuffix = "/freevideo/agent/v1";
 
 function object(value: unknown): Record<string, unknown> {
@@ -141,7 +141,7 @@ async function download(context: ProviderContext, token: string, origin: string,
   return new Uint8Array(await response.arrayBuffer());
 }
 
-/** 提交任务并轮询到终态；失败/取消/中断抛友好错误。 */
+/** 提交任务并轮询到终态；失败/取消抛友好错误，interrupted 自动续拍（最多 2 次）。 */
 async function runJob(context: ProviderContext, token: string, agent: string, spec: Record<string, unknown>, signal: AbortSignal): Promise<Record<string, unknown>> {
   const submit = await context.tool.fetch(`${agent}/jobs`, {
     method: "POST",
@@ -154,6 +154,7 @@ async function runJob(context: ProviderContext, token: string, agent: string, sp
   const job = object(answer.job ?? answer);
   const jobId = typeof job.id === "string" ? job.id : "";
   if (!jobId) throw new Error("未返回任务ID");
+  let resumeTries = 0;
   while (true) {
     const response = await context.tool.fetch(`${agent}/jobs/${jobId}?wait=25`, { headers: { Authorization: `Bearer ${token}` }, signal });
     if (!response.ok) throw new Error(context.tool.errorMessage?.(await response.json().catch(() => ({}))) || `轮询失败：HTTP ${response.status}`);
@@ -161,14 +162,29 @@ async function runJob(context: ProviderContext, token: string, agent: string, sp
     const current = object(answer.job ?? answer);
     const status = String(current.status);
     if (status === "succeeded") return current;
-    if (status === "failed" || status === "cancelled" || status === "interrupted") {
+    if (status === "failed" || status === "cancelled") {
       throw new Error(context.tool.errorMessage?.(current) || `生成${status === "cancelled" ? "已取消" : "失败"}`);
+    }
+    if (status === "interrupted") {
+      // ACT: 仅 interrupted 自动续拍，上限 2——failed 多需换提示词/参数、cancelled 是用户意图，都不自动恢复；已成功块保留由引擎侧完成，供应商无需分段记账。
+      if (resumeTries >= 2) throw new Error("生成中断，自动续拍两次仍未成功；请检查 FreeVideo 引擎状态后重试本镜头");
+      resumeTries++;
+      const resume = await context.tool.fetch(`${agent}/jobs/${jobId}/resume`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: "{}",
+        signal,
+      });
+      const resumeAnswer = await resume.json().catch(() => ({}));
+      if (!resume.ok) throw new Error(context.tool.errorMessage?.(resumeAnswer) || `续拍失败：HTTP ${resume.status}`);
+      object(resumeAnswer);
+      continue;
     }
     await wait(signal, Math.max(500, Number(current.poll_after_ms) || 2000));
   }
 }
 
-/** 幂等键：每次生成一个，重试同一请求可恢复原任务；含时间戳+随机后缀。 */
+/** 每次调用生成新 ref；不复用——spec 含每次不同的上传文件名，内容哈希幂等会把「同参数再抽一次」误合并回旧任务。需要断线找回时应在请求级持有同一 ref 重发（当前无此需求）。 */
 function makeRef(model: string, request: { prompt?: string; duration?: number; images?: MediaInput[]; videos?: MediaInput[]; firstFrame?: MediaInput }) {
   const hint = model;
   const salt = Math.random().toString(36).slice(2, 8);
@@ -188,6 +204,10 @@ export default {
 - Token 来自 FreeVideo 安装目录的 \`agent/token\` 文件（Comfy-Desktop 安装下在
 \`%LOCALAPPDATA%\\Comfy-Desktop\\ComfyUI-Installs\\comfyui\\ComfyUI\\FreeVideo-engine\\agent\\token\`）。
 - 视频：文生 / 首帧 / 首尾帧 / 参考图、视频、音频，原生带同步音轨；2-60 秒，768P / 2K。
+- 参考图最多 4 张为 Toonflow 侧限制；引擎单块默认支持到 9 张，30 秒及以上自动分块时实限 3 张（超限由引擎报错）。
+- ≥30 秒的片段自动分块时开启 first_frame_reference，减少跨块的取景与人物漂移；单段视频不受影响。
+- 提示词按 FreeVideo 约定拼装：有参考图时六段（subject_definitions → summary → retention_analysis → detailed_description → overall_soundscape → non_diegetic_music），无参考时三段，段首写字段名、段间空一行。
+- 生成中断（引擎重启、显存波动）时自动尝试续拍，最多 2 次，已生成部分保留；续拍仍失败会明确报错。
 - 图像：文生图 / 单参考 / 多参考（最多 4 张），1K / 2K。
 - 生成耗时为分钟级（本机 GPU），请耐心等待；取消生成会同时取消本机任务。`,
   rules,
@@ -196,6 +216,7 @@ export default {
       id: "MiniMax-H3",
       label: "MiniMax-H3（本地 FreeVideo）",
       type: "video",
+      // ACT: imageReference:4 为 Toonflow 产品限制（V8）；引擎单块默认支持到 9 张参考，≥30s 自动分块时实限 3（422），供应商不预拦（维持裁决）。
       mode: ["text", "startFrameOptional", ["imageReference:4", "videoReference:1", "audioReference:1"]],
       audio: "optional",
       durationResolutionMap: [{ duration: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60], resolution: ["768P", "2K"] }],
@@ -257,15 +278,19 @@ export default {
     for (const audio of request.audios ?? []) references.push(await upload(this, token, agent, audio, signal));
     if (references.length) media.references = references;
 
+    const seconds = clampSeconds(request.duration);
+    // ACT: first_frame_reference 只在 ≥30s 自动分块时减少跨块漂移；单段视频不受影响，
+    // 运镜大/需要变化的场景规范建议关闭——保守取「≥30s 才开」，不引入开关面。
     const job = await runJob(this, token, agent, {
       kind: "generate",
       label: jobLabel(request, "video"),
       ref: makeRef('vid', request),
       prompt: request.prompt,
-      seconds: clampSeconds(request.duration),
+      seconds,
       quality: "light",
       ...(request.ratio ? { aspect: request.ratio } : {}),
       ...(request.resolution ? { megapixels: megapixels(request.resolution) } : {}),
+      ...(seconds >= 30 ? { first_frame_reference: true } : {}),
       ...(Object.keys(media).length ? { media } : {}),
     }, signal);
     const result = object(job.result ?? {});

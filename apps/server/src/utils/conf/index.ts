@@ -1,5 +1,5 @@
 import conf from "conf";
-import { mkdirSync, readdirSync, realpathSync } from "@toonflow/file";
+import { mkdirSync, readFile, readdirSync, realpathSync, writeAtomic } from "@toonflow/file";
 import { resolve } from "node:path";
 import tfRouter from "@toonflow/providers/language/tfRouter";
 import type { RemoteTeam } from "@/utils/teams";
@@ -13,6 +13,16 @@ const dataDirectory = process.env.TOONFLOW_DATA_DIR ?? resolve(import.meta.dirna
 mkdirSync(dataDirectory, { recursive: true });
 const configDirectory = realpathSync(dataDirectory);
 process.env.TOONFLOW_DATA_DIR = configDirectory;
+
+// ACT: conf 直接让第三方库 JSON.parse，settings.json 若被外部工具（如 PowerShell 的 utf8 写出）带上 BOM，
+// 整个进程会在启动时崩在「Unrecognized token '锘?」。这里按仓库既有惯例先剥掉前缀再实例化（同一份容错
+// 见 personalization.ts、agent/runtime/resources.ts、routes/skills/save.ts）；conf 之后的自身重写不含 BOM，等于自愈。
+const settingsPath = resolve(configDirectory, "settings.json");
+const rawSettings = await readFile(settingsPath, "utf8").catch((error: NodeJS.ErrnoException) => {
+  if (error.code === "ENOENT") return null;
+  throw error;
+});
+if (rawSettings?.startsWith("\uFEFF")) await writeAtomic(settingsPath, rawSettings.slice(1), { mode: 0o600 });
 
 const config = new conf<{ settings: Record<string, unknown>; disabledSkills: string[]; toolConfigs: Record<string, Record<string, unknown>>; nodeConfigs: Record<string, Record<string, unknown>>; extConfigs: Record<string, Record<string, unknown>>; remoteConnections: Record<string, RemoteTeam>; a2a: A2aSettings; desktopUpdateAttempt: desktopUpdateAttempt; mobileLink: MobileLinkConfig }>({
   cwd: configDirectory,

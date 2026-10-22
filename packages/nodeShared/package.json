@@ -11,7 +11,11 @@
     "./showNodeError": "./src/showNodeError.ts",
     "./useNodeReferences": "./src/useNodeReferences.ts",
     "./useNodeGeneration": "./src/useNodeGeneration.ts",
-    "./groupNodeModels": "./src/groupNodeModels.ts"
+    "./groupNodeModels": "./src/groupNodeModels.ts",
+    "./mtrack/multitrackEditor": "./src/mtrack/multitrackEditor.vue",
+    "./mtrack/mtrackProject": "./src/mtrack/mtrackProject.ts",
+    "./mtrack/mtrackEdit": "./src/mtrack/mtrackEdit.ts",
+    "./mtrack/directDispatch": "./src/mtrack/directDispatch.ts"
   },
   "scripts": {
     "typecheck": "vue-tsc --noEmit"

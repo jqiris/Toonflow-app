@@ -59,7 +59,8 @@
 import { computed, inject, onBeforeUnmount, ref, watch } from "vue";
 import { useNode, useVueFlow, type Node } from "@vue-flow/core";
 import { ElButton, ElInputNumber, ElMessage, ElPopover } from "element-plus";
-import { uploadNodeFile, useNodeFiles } from "@toonflow/nodes-scaffold/runtime";
+import { uploadNodeFile, useNodeFiles, type WorkspaceFiles } from "@toonflow/nodes-scaffold/runtime";
+import { assetIndexPath, createClip, defaultProjectPath, ratioOptions, type AssetIndex, type AssetIndexCard, type MtrackClip, type MtrackProject } from "@toonflow/node-shared/mtrack/mtrackProject";
 import { showNodeError } from "@toonflow/node-shared/showNodeError";
 
 const props = defineProps<{ src: string; disabled?: boolean; active: boolean }>();
@@ -79,6 +80,8 @@ const imageSize = ref({ width: 0, height: 0 });
 const validGrid = computed(() => [rows.value, columns.value].every(value => Number.isInteger(value) && value >= 1 && value <= 10));
 const canSplit = computed(() => validGrid.value && rows.value * columns.value > 1 && imageSize.value.width >= columns.value && imageSize.value.height >= rows.value);
 let splitController: AbortController | undefined;
+// ACT: 切分面板没有比例设置，工程统一按竖屏 9:16 建（与多轨编辑器新建空白工程一致），分辨率沿用 createClip 的 768P，用户可在编辑器里改。
+const splitRatio = ratioOptions[0];
 
 watch(() => props.src, () => {
   splitController?.abort();
@@ -108,6 +111,63 @@ function readSize(event: Event) {
   imageSize.value = { width: image.naturalWidth, height: image.naturalHeight };
 }
 
+/** 切分不覆盖用户已编辑的计划文件：默认工程或资产索引任一被占用就直接拒绝，不追加也不合并。 */
+async function requireNewPlanFiles(workspace: WorkspaceFiles) {
+  const paths = await workspace.list("plan")
+    .then(({ entries }) => entries.map(entry => entry.path))
+    // 计划目录还不存在属正常（全新项目）；其余读取失败照常抛出，不把未知状态当成可写。
+    .catch((reason: { response?: { data?: { data?: { code?: string } } } }): string[] => {
+      if (reason.response?.data?.data?.code === "ENOENT") return [];
+      throw reason;
+    });
+  for (const path of [defaultProjectPath, assetIndexPath]) {
+    if (paths.includes(path)) throw new Error(`${path} 已存在，未覆盖`);
+  }
+}
+
+/** 独占写：目标已存在一律映射成同一条中文提示，绝不覆盖。 */
+async function writeExclusive(workspace: WorkspaceFiles, path: string, data: unknown) {
+  await workspace.writeJson(path, data, true).catch((reason: { response?: { data?: { data?: { code?: string } } } }) => {
+    if (reason.response?.data?.data?.code === "EEXIST") throw new Error(`${path} 已存在，未覆盖`);
+    throw reason;
+  });
+}
+
+/** 每格一镜落多轨工程与资产索引：只建工程、不派工，每镜的参考指向该格图片节点。 */
+async function writeSplitProject(workspace: WorkspaceFiles, tiles: Node[]) {
+  // 工作区写入不建父目录，全新项目里没有 plan/，先补建单层目录；EEXIST（目录已存在）属正常。
+  await workspace.mkdir("plan").catch((reason: { response?: { data?: { data?: { code?: string } } } }) => {
+    if (reason.response?.data?.data?.code !== "EEXIST") throw reason;
+  });
+  const clips: MtrackClip[] = [];
+  const cards: AssetIndexCard[] = [];
+  tiles.forEach((tile, index) => {
+    // ACT: 卡片 id 沿用既有 C01 习惯，编号与镜号同序（从左到右、逐行）。
+    const cardId = `C${String(index + 1).padStart(2, "0")}`;
+    const title = String(tile.data.label || "");
+    // 卡片形状按 AssetIndexCard：id/name/textOnly/nodeId；切图不分类别，故不写 kind。
+    cards.push({ id: cardId, name: title, textOnly: false, nodeId: tile.id });
+    clips.push({ ...createClip(index, splitRatio), title, referenceIds: [cardId] });
+  });
+  const index: AssetIndex = { version: "assetIndex-v1", cards };
+  const project: MtrackProject = {
+    version: 1,
+    projectId: `mtrack-${Date.now()}`,
+    updatedAt: new Date().toISOString(),
+    global: { ratio: splitRatio },
+    clips,
+  };
+  // 先写索引再写工程：工程里的 referenceIds 只有索引已落盘时才能被 connectReferences 解析。
+  await writeExclusive(workspace, assetIndexPath, index);
+  try {
+    await writeExclusive(workspace, defaultProjectPath, project);
+  } catch (error) {
+    // ACT: 工程写失败时删掉刚建的索引（独占写成功才走到这里，删的是本次产物），不留半截现场堵住重试。
+    await workspace.remove(assetIndexPath).catch(() => {});
+    throw error;
+  }
+}
+
 async function splitImage() {
   if (splitting.value || props.disabled || !canSplit.value) return;
   if (!nodeTypes?.value?.["remote-imageNode"]) return void ElMessage.error("请先启用图片节点插件");
@@ -124,6 +184,7 @@ async function splitImage() {
   let committed = false;
   try {
     workspace = files.getWorkspaceFiles();
+    await requireNewPlanFiles(workspace);
     source.src = props.src;
     await source.decode();
     controller.signal.throwIfAborted();
@@ -175,8 +236,9 @@ async function splitImage() {
       addNodes(nodes);
       committed = true;
     });
+    await writeSplitProject(workspace, nodes);
     visible.value = false;
-    ElMessage.success(`已切分为 ${nodes.length} 个图片节点`);
+    ElMessage.success(`已切分为 ${nodes.length} 个图片节点，并创建多轨工程 ${defaultProjectPath} 与资产索引 ${assetIndexPath}`);
   } catch (error) {
     if (!controller.signal.aborted) showNodeError(error, "宫格切分失败");
   } finally {

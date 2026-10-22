@@ -10,6 +10,19 @@ const client = axios.create({ baseURL: "/api/workspaces/files", headers: { "x-to
 registerApiLanguage(client);
 const fileUrls = new Map<string, { directory: string; path: string; url: Promise<string>; users: number }>();
 
+/**
+ * DOM 里是否还有媒体元素正在用这个 blob URL。
+ * teleport 移动、面板切换会把 <video> 离档再入档，此时引用计数可能已归零但元素仍在加载/播放，
+ * 提前 revoke 会让它触发 error（MEDIA_ERR_SRC_NOT_SUPPORTED）。
+ */
+function isUrlInUse(url: string) {
+  if (!url) return false;
+  for (const element of document.querySelectorAll<HTMLMediaElement | HTMLImageElement>("video, audio, img, source")) {
+    if (element.src === url || element.getAttribute("src") === url) return true;
+  }
+  return false;
+}
+
 function cachePath(path: string) {
   return path.replaceAll("\\", "/").split("/").filter(part => part && part !== ".").join("/").toLowerCase();
 }
@@ -69,8 +82,12 @@ export default function useWorkspaceFiles(directory?: MaybeRefOrGetter<string | 
         released = true;
         if (--current.users) return;
         if (fileUrls.get(key) === current) fileUrls.delete(key);
-        // 等待中的读取也要在最后一个使用者离开后释放，不撤销其他节点仍使用的 URL。
-        void current.url.then(url => URL.revokeObjectURL(url), () => {});
+        // 撤销前检查 DOM 里是否还有 <video>/<img> 等元素引用这个 URL。
+        // teleport 移动、面板切换会把视频元素离档再入档，此时引用计数可能已归零，
+        // 但元素仍在播放这个 blob；提前 revoke 会触发 error 事件并弹出错误提示。
+        void current.url.then(url => {
+          if (!isUrlInUse(url)) URL.revokeObjectURL(url);
+        }, () => {});
       },
     };
   }

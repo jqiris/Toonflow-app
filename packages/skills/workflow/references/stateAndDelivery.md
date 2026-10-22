@@ -56,6 +56,8 @@
 
 用户已经明确采用的旧资产直接复用，不要求为新模板重新做图。缺少台账时可从用户指定材料和实时画布重建已知索引；未知的确认、生成参数或来源写未知，不凭名称“最终版”、修改时间或最大版本号猜选。
 
+**多轨项目口径**：状态真源 = `story.mtrack` 的 `clip.status`（`pending`/`generating`/`generated`/`failed`，`accepted` 只能由用户验收产生，写入入口与 Agent 代写禁令见下文「核验与采用」末段；`generated` ≠ 交付完成）。本文台账在多轨项目中只记非 mtrack 范围与版本快照，不重复登记 mtrack 已管的镜头状态；合成交付以 `planOperator` `composite` 为准（只拼 `accepted` 段），细则见 [生成 SOP runbook](../../assetCard/references/generationRunbook.md) §九（V14 合成条目）与 assetCard 生成闭环第 7 步，本文不复写。
+
 ## 核验与采用
 
 读取图片时检查身份、数量、必要视角、服装与物件、环境关系及可读文字。仅工具成功并不证明成图符合要求；用户已明确接受的适用素材不重复要求采用。
@@ -67,6 +69,8 @@
 连续片段要有实际依据：人物位置和朝向、持物与动作进度、已发生事件、外观变化及持续声音。使用可查看视频、真实接戏帧或用户反馈，不用计划末态冒充实际末态。将它们写成下一段明确的初始事实；当前结果错误先处理当前段，不把穿帮升级成新剧情。
 
 只有真实需要且工具支持时才抽帧或挂前段媒体；不要为了流程要求用户额外做无用途截图。无时空依赖的片段可按已确认计划和具体批次授权推进，结果仍分别核验与采用。
+
+**多轨项目口径**：`clip.status = "accepted"` 由**用户在编辑器里点“验收”按钮**写入，不由 Agent 主动回写。验收入口是 `packages/nodeShared/src/mtrack/components/clipEditor.vue:7` 的验收按钮：只有 `generated` 可验收、`accepted` 可再点“取消验收”打回 `generated`，其它状态按钮禁用（`:10` 的 `:disabled`）；点击发出 `accept` 事件，由 `packages/nodeShared/src/mtrack/multitrackEditor.vue:724` 的 `acceptClip` 再做一次状态守卫（只允许 `generated`→`accepted`、`accepted`→`generated`），再经该文件 `onPatch`（`:683`）改内存态并由编辑器保存链落盘到 `story.mtrack`。Agent 侧虽有技术途径——`node:editProject` 的 `clipPatchSchema.status` 枚举包含 `accepted`（`packages/nodes/multitrackNode/src/index.vue:321`），`planOperator` `mtrackUpdate` 的 `clipUpdateSchema.status` 同样包含它（`packages/tools/planOperator/src/index.ts:100`）——但 **禁止 Agent 代写 `accepted`**，尤其禁止为了让 `planOperator` `composite` 跑通而把未验收镜头批量改成 `accepted`；`generated` 只表示已生成，不等于验收通过。唯一例外：用户逐段明确认可后按指示批量回写，且必须在汇报里注明每段依据（哪一段由哪句用户确认）。台账在此只补充验收依据与版本快照，不另造状态语义。
 
 ## 按实际完成范围交付
 

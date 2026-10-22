@@ -52,6 +52,10 @@ for (const script of mode === "dev" ? ["dev:plugins"] : [
 ]) {
   await $`${process.execPath} run ${script}`.cwd(projectDir);
 }
+// ACT: dev 下把技能源同步进 data/skills：initializePlugins 不传 revision（生产要保护用户修改），
+// marker 一旦存在就永久跳过，源码里改过的技能在开发运行时不会生效。这里只在 dev 覆盖同步，
+// 生产链路一行不动。目录里原本就有用户新增/修改的技能也一并保留，只覆盖同名条目。
+if (mode === "dev") cpSync(resolve(projectDir, "packages/skills"), resolve(projectDir, "data/skills"), { recursive: true, force: true });
 await $`${process.execPath} run --filter @toonflow/web build`.cwd(projectDir);
 await $`${process.execPath} run --filter @toonflow/mcp build`.cwd(projectDir);
 const agentDirectory = dirname(realpathSync(Bun.resolveSync("@earendil-works/pi-coding-agent", resolve(projectDir, "apps/server"))));

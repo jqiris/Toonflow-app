@@ -108,8 +108,10 @@ export async function createApp({
   // 错误处理
   app.use((err: Error & { status?: number }, request: Request, response: Response, next: NextFunction) => {
     if (response.headersSent) return next(err);
-    console.error(err);
     const body = errorFromCause(err);
+    // ACT: 4xx 是预期内的客户端错误（例如读取尚未生成的 plan/assetReport.json 等派生产物时的 ENOENT），
+    // 响应体已经带了可读 message，再打印一次堆栈只会淹没真正的服务端故障。
+    if (body.code >= 500) console.error(err);
     response.status(body.code).json(body);
   });
 
