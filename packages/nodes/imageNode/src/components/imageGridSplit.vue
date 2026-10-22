@@ -63,6 +63,11 @@ import { uploadNodeFile, useNodeFiles, type WorkspaceFiles } from "@toonflow/nod
 import { assetIndexPath, createClip, defaultProjectPath, ratioOptions, type AssetIndex, type AssetIndexCard, type MtrackClip, type MtrackProject } from "@toonflow/node-shared/mtrack/mtrackProject";
 import { showNodeError } from "@toonflow/node-shared/showNodeError";
 
+type SplitGridTile = { nodeId: string; cardId: string; path: string };
+type SplitGridResult = { tiles: SplitGridTile[]; projectPath: string; assetIndexPath: string };
+/** 待落盘的一格：图片节点 + 该格在节点素材目录里的路径。 */
+type SplitTile = { node: Node; path: string };
+
 const props = defineProps<{ src: string; disabled?: boolean; active: boolean }>();
 const { node } = useNode();
 const { addNodes, findNode, getNodes, getSelectedNodes, nodeTypes, onNodeDragStart, onSelectionStart, onMoveStart } = useVueFlow();
@@ -76,8 +81,11 @@ const columns = ref(3);
 const splitting = ref(false);
 const completed = ref(0);
 const imageSize = ref({ width: 0, height: 0 });
-// ACT: 每轴最多 10 格（100 张），逐张编码上传以控制内存；更大批量需加入分批任务后再放开。
-const validGrid = computed(() => [rows.value, columns.value].every(value => Number.isInteger(value) && value >= 1 && value <= 10));
+/** ACT: 每轴最多 10 格（100 张），逐张编码上传以控制内存；更大批量需加入分批任务后再放开。 */
+function isValidGrid(rowCount: number, columnCount: number) {
+  return [rowCount, columnCount].every(value => Number.isInteger(value) && value >= 1 && value <= 10);
+}
+const validGrid = computed(() => isValidGrid(rows.value, columns.value));
 const canSplit = computed(() => validGrid.value && rows.value * columns.value > 1 && imageSize.value.width >= columns.value && imageSize.value.height >= rows.value);
 let splitController: AbortController | undefined;
 // ACT: 切分面板没有比例设置，工程统一按竖屏 9:16 建（与多轨编辑器新建空白工程一致），分辨率沿用 createClip 的 768P，用户可在编辑器里改。
@@ -104,7 +112,7 @@ function open(event: MouseEvent) {
   visible.value = !visible.value;
 }
 
-defineExpose({ open, splitting });
+defineExpose({ open, splitting, splitGrid });
 
 function readSize(event: Event) {
   const image = event.currentTarget as HTMLImageElement;
@@ -134,20 +142,22 @@ async function writeExclusive(workspace: WorkspaceFiles, path: string, data: unk
 }
 
 /** 每格一镜落多轨工程与资产索引：只建工程、不派工，每镜的参考指向该格图片节点。 */
-async function writeSplitProject(workspace: WorkspaceFiles, tiles: Node[]) {
+async function writeSplitProject(workspace: WorkspaceFiles, tiles: SplitTile[]): Promise<SplitGridResult> {
   // 工作区写入不建父目录，全新项目里没有 plan/，先补建单层目录；EEXIST（目录已存在）属正常。
   await workspace.mkdir("plan").catch((reason: { response?: { data?: { data?: { code?: string } } } }) => {
     if (reason.response?.data?.data?.code !== "EEXIST") throw reason;
   });
   const clips: MtrackClip[] = [];
   const cards: AssetIndexCard[] = [];
-  tiles.forEach((tile, index) => {
+  const results: SplitGridTile[] = [];
+  tiles.forEach(({ node: tile, path }, index) => {
     // ACT: 卡片 id 沿用既有 C01 习惯，编号与镜号同序（从左到右、逐行）。
     const cardId = `C${String(index + 1).padStart(2, "0")}`;
     const title = String(tile.data.label || "");
     // 卡片形状按 AssetIndexCard：id/name/textOnly/nodeId；切图不分类别，故不写 kind。
     cards.push({ id: cardId, name: title, textOnly: false, nodeId: tile.id });
     clips.push({ ...createClip(index, splitRatio), title, referenceIds: [cardId] });
+    results.push({ nodeId: tile.id, cardId, path });
   });
   const index: AssetIndex = { version: "assetIndex-v1", cards };
   const project: MtrackProject = {
@@ -166,26 +176,29 @@ async function writeSplitProject(workspace: WorkspaceFiles, tiles: Node[]) {
     await workspace.remove(assetIndexPath).catch(() => {});
     throw error;
   }
+  return { tiles: results, projectPath: defaultProjectPath, assetIndexPath };
 }
 
-async function splitImage() {
-  if (splitting.value || props.disabled || !canSplit.value) return;
-  if (!nodeTypes?.value?.["remote-imageNode"]) return void ElMessage.error("请先启用图片节点插件");
+/** 切图主流程：面板按钮与 node:splitGrid 共用，成功返回新增节点与落盘路径，失败一律抛出。 */
+async function runSplit(rowCount: number, columnCount: number, src: string, signal?: AbortSignal): Promise<SplitGridResult> {
   splitting.value = true;
   completed.value = 0;
   const controller = splitController = new AbortController();
-  const rowCount = rows.value;
-  const columnCount = columns.value;
+  // node:splitGrid 的单次调用有 120 秒超时，外部中断要能停掉逐张上传；面板按钮只依赖组件内 controller。
+  const abort = () => controller.abort();
+  signal?.addEventListener("abort", abort, { once: true });
+  if (signal?.aborted) controller.abort();
   const source = new Image();
   const canvas = document.createElement("canvas");
   const pendingIds: string[] = [];
-  const nodes: Node[] = [];
+  const tiles: SplitTile[] = [];
   let workspace: ReturnType<typeof files.getWorkspaceFiles> | undefined;
   let committed = false;
   try {
+    controller.signal.throwIfAborted();
     workspace = files.getWorkspaceFiles();
     await requireNewPlanFiles(workspace);
-    source.src = props.src;
+    source.src = src;
     await source.decode();
     controller.signal.throwIfAborted();
     const { naturalWidth: width, naturalHeight: height } = source;
@@ -207,11 +220,14 @@ async function splitImage() {
         pendingIds.push(id);
         const path = await uploadNodeFile(workspace, id, new File([blob], "tile.png", { type: "image/png" }));
         controller.signal.throwIfAborted();
-        nodes.push({
-          id,
-          type: "remote-imageNode",
-          position: { x: 0, y: 0 },
-          data: { label: `${node.data.label || "图片"} · ${row + 1}-${column + 1}`, outputs: { image: { dataType: "IMAGE", value: { url: path, mimeType: "image/png" } } } },
+        tiles.push({
+          path,
+          node: {
+            id,
+            type: "remote-imageNode",
+            position: { x: 0, y: 0 },
+            data: { label: `${node.data.label || "图片"} · ${row + 1}-${column + 1}`, outputs: { image: { dataType: "IMAGE", value: { url: path, mimeType: "image/png" } } } },
+          },
         });
         completed.value++;
       }
@@ -228,20 +244,17 @@ async function splitImage() {
         y = position.y + other.dimensions.height + 40;
       }
     }
-    nodes.forEach((item, index) => {
+    tiles.forEach(({ node: item }, index) => {
       item.position = { x: x + index % columnCount * (tileWidth + 40), y: y + Math.floor(index / columnCount) * 320 };
     });
     await batchHistory(async () => {
       controller.signal.throwIfAborted();
-      addNodes(nodes);
+      addNodes(tiles.map(({ node: item }) => item));
       committed = true;
     });
-    await writeSplitProject(workspace, nodes);
-    visible.value = false;
-    ElMessage.success(`已切分为 ${nodes.length} 个图片节点，并创建多轨工程 ${defaultProjectPath} 与资产索引 ${assetIndexPath}`);
-  } catch (error) {
-    if (!controller.signal.aborted) showNodeError(error, "宫格切分失败");
+    return await writeSplitProject(workspace, tiles);
   } finally {
+    signal?.removeEventListener("abort", abort);
     source.removeAttribute("src");
     canvas.width = canvas.height = 0;
     if (!committed && workspace) {
@@ -252,6 +265,27 @@ async function splitImage() {
     }
     splitting.value = false;
     splitController = undefined;
+  }
+}
+
+/** node:splitGrid 入口：与面板按钮同一套切图与落盘逻辑，只是不依赖面板打开、预览尺寸与按钮状态。 */
+async function splitGrid(rowCount: number, columnCount: number, src = props.src, signal?: AbortSignal): Promise<SplitGridResult> {
+  if (splitting.value) throw new Error("正在切分，请稍后重试");
+  if (!isValidGrid(rowCount, columnCount)) throw new Error("行数与列数需为 1 到 10 的整数");
+  if (rowCount * columnCount <= 1) throw new Error("行数 × 列数需大于 1");
+  if (!src) throw new Error("节点没有图片，无法切分");
+  return runSplit(rowCount, columnCount, src, signal);
+}
+
+async function splitImage() {
+  if (splitting.value || props.disabled || !canSplit.value) return;
+  if (!nodeTypes?.value?.["remote-imageNode"]) return void ElMessage.error("请先启用图片节点插件");
+  try {
+    const result = await runSplit(rows.value, columns.value, props.src);
+    visible.value = false;
+    ElMessage.success(`已切分为 ${result.tiles.length} 个图片节点，并创建多轨工程 ${result.projectPath} 与资产索引 ${result.assetIndexPath}`);
+  } catch (error) {
+    if (!(error instanceof DOMException && error.name === "AbortError")) showNodeError(error, "宫格切分失败");
   }
 }
 </script>

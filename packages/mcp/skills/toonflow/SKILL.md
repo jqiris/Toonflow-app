@@ -50,6 +50,31 @@ description: 通过 Toonflow MCP 操作工作区、实时画布、节点、文�
 - 使用节点提供的 `node:getGenerationStatus` 确认完成、输出路径或错误；需要停止时调用 `node:cancelGeneration`，参数以节点返回的 schema 为准。其他节点未暴露这些能力时，如实报告已开始和当前可见结果，不反复触发生成充当查询。
 - 失败时先读取错误并修正原因。网络超时不能证明任务未提交；重试前先确认当前状态，避免重复生成导致额外消耗算力。
 
+## 多轨工程（mtrack）
+
+- 入口先探针：用 `getCanvas` 或 `findCanvasNodes` 定位 `remote-multitrackNode`，拿到节点 ID 后调 `getNodeTools` 读取它真实注册的函数与完整 schema，共 15 个——13 个由节点自身注册，2 个由 `useNodeReferences` 自动注册（`node:getReferenceOrder`、`node:setReferenceOrder`）。清单里没有的函数不调用，参数不猜。画布上暂时没有多轨节点、但工作区存在 `plan/story.mtrack` 时，工程已经存在却没有可派工的画布节点，先向用户确认是否新增多轨节点并绑定该工程，不直接改 mtrack 文件绕过节点校验。
+- 十三个节点函数按下列顺序使用，全部经 `nodeTools` 调用：
+
+1. `node:getStatus`：无参数，入口探针。返回 `bound`、`projectPath`、`clipCount`、`totalSeconds`、`statusCounts`、`dirty`、`saving`、`dispatching`、`activeBatchId`、`batchClipIds` 等；`activeBatchId` 为空不代表没有批次在跑，按 runbook §十五·五从 `planOperator` 的 `attempts` 找回真实批次号。
+2. `node:bindProject`：`{ mode: "open" | "new", path? }`。`open` 必须给工作区相对路径的 `.mtrack` 文件；`new` 缺省顺延 `plan/story[-N].mtrack`，以 exclusive 写入、绝不覆盖已有工程；同一路径重复绑定幂等，已绑定其他路径时报错，需新建节点或重新加载。
+3. `node:readClips`：`{ from?, to? }`，按分镜号读取（含端点），省略即全量。读前已对磁盘，返回的 `updatedAt` 是后续 `planOperator mtrackUpdate` 与本节点保存链的 CAS 基线；`conflict=true` 表示磁盘已被其他操作改过且本节点有未保存修改，先 `node:saveProject` 或 `node:reloadProject` 再继续。
+4. `node:editProject`：`{ operations: [1..100], save? }`。六种 op——`add`、`patch`、`duplicate`、`move`、`remove`、`setGlobal`；整批原子，任一 op 校验失败整批拒收，问题在 `issues` 返回、不抛错。真源字段可写，但生成前仍必须跑 `planOperator validate` 且 error 清零。
+5. `node:saveProject`：无参数，强制落盘并返回 `{ saved: updatedAt }`。与 800ms 防抖自动保存共用同一条 CAS 保存链，磁盘被其他操作改过时报冲突而不是覆盖。
+6. `node:reloadProject`：`{ discard? }`，从磁盘重新加载。有未保存修改且未传 `discard=true` 时报错不重载。
+7. `node:dispatchGenerate`：`clipIds`（1–200 个分镜号）或 `from` + `to` 二选一，`includeFinished` 默认 `false`。立即返回 `{ batchId, skipped }`，不等待生成；进度看 `node:getStatus.batchClipIds` 或 `planOperator mtrackRead`。
+8. `node:cancelBatch`：`{ batchId? }`，缺省取当前 `activeBatchId`。abort 本地轮询并对批次内在跑镜头逐个 `node:cancelGeneration`，立即返回 `{ cancellationRequested, batchId }`；取消成功不等于供应商退费或撤销任务。
+9. `node:refreshOutput`：无参数。重读 `plan/composite.json`，`executed` 为真时把成片挂到节点 `video` 输出端口，否则清空输出。
+10. `node:pauseBatch`：无参数，等价 UI「本镜结束后暂停」。这是**软闸门**——在跑的镜头不中断，本镜生成结束后不再开始下一镜；不 abort、不取消供应商任务，整批中止用 `node:cancelBatch`。返回编辑器状态快照，`batchPaused` 是闸门状态、`batchClipIds` 是待续镜头。
+11. `node:resumeBatch`：`{ clips: [1..200], includeFinished? }`，等价 UI「继续生成」。沿用同一 `batchId` 续跑 `clips` 里的镜头（取 `node:getStatus.batchClipIds` 中尚未完成的那些），`attempts` 标记与批次行都不变；`includeFinished=false` 默认只跑 pending/failed。已有派工操作在跑时被拒。
+12. `node:retryClip`：`{ clipId }`，等价 UI「单镜重试」。只派这一镜并强制覆盖已生成/失败的旧结果，不连带同批其他镜头；`dispatching` 或 `batchRunning` 为真时被拒，先 `node:pauseBatch` 等当前镜结束或 `node:cancelBatch`。
+
+- `node:rewritePrompt`：`{ clipId?, rules? }`，等价 UI「整理提示词」。只调文本模型整理单镜提示词，返回 `{ text, requiresReview }`；**不改工程、不写编辑器的待采用区块**。结果需用户确认后，由你用 `node:editProject` 的 `patch` 把整理稿写回该镜 `prompt.integratedMultimodalDescription`（`prompt` 三字段整组提交）。生成中调用会返回服务端 409 原文，错误原样抛出、不重试。
+
+- 硬纪律一：`node:dispatchGenerate` 与逐镜 SOP（runbook §十三）二选一。本会话正在按 SOP 逐镜生成时绝不再调它，同一批镜头绝不双重执行，否则双份算力、双重回写。
+- 硬纪律二：`accepted` 只能由用户在多轨界面点「验收」写入，agent 不得代写；`generating` 只表示已开始，不是可信终态，先按 runbook §15.5 对账再汇报。
+- 硬纪律三：合成成片只拼 `accepted` 镜头，`generated` 不参与。先 `planOperator { action: "composite", execute: false }` 出清单交用户确认，确认后再发 `execute: true`，最后用 `node:refreshOutput` 把成片挂回画布。
+- 界面能力、批量面板、重启后对账、合成成片、九宫格拆图、整理本镜提示词的细节见 Toonflow 内置 assetCard 技能 runbook §15（§15.1 界面能力表 / §15.4 批量面板 / §15.5 重启对账 / §15.6 合成成片 / §15.7 九宫格拆图 / §15.8 整理本镜提示词），这里不展开。
+
 ## 文件与文档
 
 - 文件工具的路径相对于绑定的工作区；以工具返回的规范化目录为准。

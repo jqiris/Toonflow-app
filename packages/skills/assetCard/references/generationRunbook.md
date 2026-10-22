@@ -29,10 +29,10 @@
 | 步 | 动作 | 要点 |
 |---|---|---|
 | 1 | **校验该镜（已实现 V1/V2/V4/V7/V8/V9/V11–V15）** | 用 `planOperator` 的 `validate` 读当前工程与画布快照，error 级发现清零才继续。**失败即停，不创建节点**；warning 可继续但须向用户说明。校验器**没有**实现 V3/V5/V6/V10，这四条靠本表后面几步人工核对兜住（见 §九） |
-| 1.5 | **判定节点分支** | 读同一份 `dispatch` 返回的 `currentState.nodeId`（`packages/tools/planOperator/src/index.ts:376`；顶层同源字段 `:356-358`）：**非空 → 走「复用分支」**，不 `addNode`，后续只对该 `nodeId` 做 `node:getConfig`/`node:setPrompt`/`node:setConfig`（重生成换提示词与配置，不换节点）；**空 → 走「新建分支」**，按步 2 建节点。复用分支下步 11 回写的 `nodeId` 与旧值相同——`mtrackUpdate` 只允许写 `status`/`nodeId`/`assetPath`/`attempts` 四项（`packages/tools/planOperator/src/index.ts:86-101`、`:301`），不会产生新 id。**没有 dispatch 返回时先按 §十三.1 出清单再进门** |
+| 1.5 | **判定节点分支** | 读同一份 `dispatch` 返回的 `currentState.nodeId`（`packages/tools/planOperator/src/index.ts:393`）：**非空 → 走「复用分支」**，不 `addNode`，后续只对该 `nodeId` 做 `node:getConfig`/`node:setPrompt`/`node:setConfig`（重生成换提示词与配置，不换节点）；**空 → 走「新建分支」**，按步 2 建节点。复用分支下步 11 回写的 `nodeId` 与旧值相同——`mtrackUpdate` 只允许写 `status`/`nodeId`/`assetPath`/`attempts` 四项（`packages/tools/planOperator/src/index.ts:86-108`、`:301`），不会产生新 id。**没有 dispatch 返回时先按 §十三.1 出清单再进门** |
 | 2 | **建节点** `addNode` | 视频生成节点；`label` 用 `场<场景号>·片段<片段号>·视频`（1–200 字符）。已有 `nodeId` 的重生成**复用该节点**，不新建 |
 | 3 | **接线** `connectNodes` | 资产图节点 → 视频节点 `in` 端口，**严格按 `referenceIds` 数组顺序**逐条连 |
-| 4 | **核对顺序** `getCanvasNodes` | `fields: ["ports"]`、`dataKeys: ["referenceOrder", "mode", "model"]`，比对实际引用顺序与 `referenceIds` 是否逐位一致；不一致先修连线，不进入下一步。**这一步是人工核对，不是等校验器报错**：V15 只在 `validate` 收到 `snapshot`（`packages/tools/planOperator/src/index.ts:78-82`，形如 `{ nodes, incomingEdges, referenceOrder? }`，其中 `nodes[]` 只接受 `id`/`type`/`status`/`outputs`）时才生效，不传快照它一句话都不会说；V6（画布入边数 = 参考数）在 `planValidator.ts` 里根本没有实现，只能靠这里逐位比对 |
+| 4 | **核对顺序** `getCanvasNodes` | `fields: ["ports"]`、`dataKeys: ["referenceOrder", "mode", "model"]`，比对实际引用顺序与 `referenceIds` 是否逐位一致；不一致先修连线，不进入下一步。**这一步是人工核对，不是等校验器报错**：V15 只在 `validate` 收到 `snapshot`（`packages/tools/planOperator/src/index.ts:80-84`，形如 `{ nodes, incomingEdges, referenceOrder? }`，其中 `nodes[]` 只接受 `id`/`type`/`status`/`outputs`）时才生效，不传快照它一句话都不会说；V6（画布入边数 = 参考数）在 `planValidator.ts` 里根本没有实现，只能靠这里逐位比对 |
 | 5 | **读配置** `node:getConfig` | 读当前 `matchingModes`、可用 `duration`、`resolution`、`ratio`。**不许跳过本步**——模式按当前实际参考集合决定（见 §三） |
 | 6 | **下发配置** `node:setConfig` | `{ providerId: "freevideo", modelId: "MiniMax-H3", duration: <seconds>, resolution: <768P\|2K>, ratio, generateAudio, mode }`；`duration` 必须等于 `seconds` 且为 **2–60 的整数** |
 | 7 | **写提示词** `node:setPrompt` | 三字段拼装 + 段尾参考顺序声明，格式见 §四 |
@@ -182,7 +182,7 @@ non_diegetic_music: <配乐>
 | 本 SOP 步骤 | 校验规则 |
 |---|---|
 | 步 1 校验（非全量） | V1、V2、V4、V7、V8、V9、V11、V12、V13、V14、V15（V3/V5/V6/V10 未实现） |
-| 步 1.5 节点分支判定 | 无校验规则，纯人工判定：`dispatch` 的 `currentState.nodeId` 非空走复用、空走新建（`packages/tools/planOperator/src/index.ts:376`、`:301`） |
+| 步 1.5 节点分支判定 | 无校验规则，纯人工判定：`dispatch` 的 `currentState.nodeId` 非空走复用、空走新建（`packages/tools/planOperator/src/index.ts:393`、`:301`） |
 | 步 4 顺序核对 | 人工核对：V15 仅在 `validate` 传入 `snapshot` 时生效，否则自己用 `getCanvasNodes` 逐位比对 `referenceOrder`；V6 未实现，同一步手工比入边数 |
 | 步 6 配置下发 | V8（参考数不超实际模式上限）、V12（`seconds`/`resolution`/`ratio`）；**V10 未实现**——`data.mode` 是否被静默切走要在这一步用 `node:getConfig` 的 `matchingModes` 人工核对 |
 | 步 7 提示词 | V7（`{{ref N}}` 在 `1..参考数` 内且每个 N 至少出现一次） |
@@ -195,7 +195,7 @@ non_diegetic_music: <配乐>
 
 ## 十、能力边界（执行前如实告知）
 
-与 [SKILL.md](../SKILL.md) 的降级表一致，本节只列与生成直接相关的内容：无 VAE identity 通道（靠多图参考 + 强约束文案）、无原生 context latent 续接（`continue` 走 `firstFrame` 降级，且本轮未实现）、调度器/LoRA/二采不可控。**降级项由本节文字列出，`validate` 当前不输出 `capabilityDegraded` 字段**——`packages/tools/planOperator/src/index.ts:208-218` 的返回只有 `errors`/`warnings`/`findings` 加 resolved、mtrackClips，没有降级清单；不要把本节的告知义务当成工具会自动吐的东西。
+与 [SKILL.md](../SKILL.md) 的降级表一致，本节只列与生成直接相关的内容：无 VAE identity 通道（靠多图参考 + 强约束文案）、无原生 context latent 续接（`continue` 走 `firstFrame` 降级，且本轮未实现）、调度器/LoRA/二采不可控。**降级项由本节文字列出，`validate` 当前不输出 `capabilityDegraded` 字段**——`packages/tools/planOperator/src/index.ts:221-236` 的返回只有 `errors`/`warnings`/`findings` 加 resolved、mtrackClips，没有降级清单；不要把本节的告知义务当成工具会自动吐的东西。
 
 ---
 
@@ -231,8 +231,8 @@ non_diegetic_music: <配乐>
 
 **批次编排在 agent 层，工具内没有循环。** 三处依据：
 
-1. `planOperator` 的 `dispatch` 只返回逐镜清单，不执行任何生成——源码注释原文「只出逐镜派工清单，不执行生成」（`packages/tools/planOperator/src/index.ts:320` 是这行注释，`:321` 才是 `if (action === "dispatch")`）；
-2. `planOperator` 的 `executionMode` 是 `"sequential"`（`packages/tools/planOperator/src/index.ts:174`），一次工具调用只跑一趟；
+1. `planOperator` 的 `dispatch` 只返回逐镜清单，不执行任何生成——源码注释原文「只出逐镜派工清单，不执行生成」（`packages/tools/planOperator/src/index.ts:337` 是这行注释，`:338` 才是 `if (action === "dispatch")`）；
+2. `planOperator` 的 `executionMode` 是 `"sequential"`（`packages/tools/planOperator/src/index.ts:191`），一次工具调用只跑一趟；
 3. 首镜实跑 **738.5 秒（12.3 分钟）/ RTX 3090 / quality light**（本文 §十一 记录表「提交时长」行）。一个 N 镜的同步循环必然超时，工具内循环等于让一次工具调用挂十几分钟。
 
 所以：**agent 每镜一次调用、逐镜汇报；工具只负责算清单与回写状态。**
@@ -253,15 +253,15 @@ non_diegetic_music: <配乐>
 
 ## 十三、按起止分镜号批量生成（agent 编排）
 
-> 入口：`planOperator` 的 `dispatch`。它**必须同时给 `from` 与 `to`**（`packages/tools/planOperator/src/index.ts:324` 缺一即报「dispatch 需要 from 与 to（如 S001 / S003）」），不像 `mtrackRead` 可以省略。
-> 分镜号格式 `^S\d{3}$`（`packages/tools/planOperator/src/index.ts:104`），**含端点**。
+> 入口：`planOperator` 的 `dispatch`。它**必须同时给 `from` 与 `to`**（`packages/tools/planOperator/src/index.ts:341` 缺一即报「dispatch 需要 from 与 to（如 S001 / S003）」），不像 `mtrackRead` 可以省略。
+> 分镜号格式 `^S\d{3}$`（`packages/tools/planOperator/src/index.ts:110`），**含端点**。
 
 ### 13.0 批次开工前（四条，缺一条就停）
 
 1. **校验清零**：`planOperator` `{ action: "validate", mtrackPath: "plan/story.mtrack" }`，error 级发现必须为 0。`dispatch` 不做校验，它只出清单——把校验省掉等于带着 `{{ref N}}` 越界上场。注意校验器只覆盖 V1/V2/V4/V7/V8/V9/V11–V15（见 §九），V10 的 mode 漂移这一轮仍要自己盯。
 2. **参考结算存在**：`plan/assetIndex.json` 必须已由 `resolve`/`build` 产出。缺它时 `dispatch` 仍返回清单，但每镜的 `referencePlan[].kind` 变成 `"未知"`、`nodeId` 为 `null`，并在文本尾追加 `参考结算缺 <refId>（建议先跑 resolve/build）`（`packages/tools/planOperator/src/index.ts:338`）。
 3. **定批次号**：`batch:<uuid>`，全批次唯一。多轨界面发起时由界面生成（`packages/nodeShared/src/mtrack/multitrackEditor.vue` 的 `generateSelection` 内 `crypto.randomUUID()`），会话内发起时自建；`node:dispatchGenerate` 派发的批次号由编辑器生成并在返回里给出（§十五·五）。
-4. **确认 `allowBuild` 没被关**：`mtrackUpdate` 受它限制，关闭时报「mtrackUpdate 不可用：allowBuild 已关闭」（`packages/tools/planOperator/src/index.ts:14` 的默认值 `true`、`packages/tools/planOperator/src/index.ts:285` 的门禁）。`mtrackRead`/`dispatch`/`assemble` 是只读，不受影响——但批量生成要靠 `mtrackUpdate` 回写，关了就只能出清单一轮游。
+4. **确认 `allowBuild` 没被关**：`mtrackUpdate` 受它限制，关闭时报「mtrackUpdate 不可用：allowBuild 已关闭」（`packages/tools/planOperator/src/index.ts:16` 的默认值 `true`、`packages/tools/planOperator/src/index.ts:302` 的门禁）。`mtrackRead`/`dispatch`/`assemble` 是只读，不受影响——但批量生成要靠 `mtrackUpdate` 回写，关了就只能出清单一轮游。
 
 ### 13.1 出清单
 
@@ -269,7 +269,7 @@ non_diegetic_music: <配乐>
 planOperator { action: "dispatch", path: "plan/story.mtrack", from: "S003", to: "S007" }
 ```
 
-期望返回（`packages/tools/planOperator/src/index.ts:379-386`）：`{ path, from, to, generatedAt, updatedAt, clips[] }`，每个 `clips[]` 项含：
+期望返回（`packages/tools/planOperator/src/index.ts:396-403`）：`{ path, from, to, generatedAt, updatedAt, clips[] }`，每个 `clips[]` 项含：
 
 | 字段 | 用途 |
 |---|---|
@@ -277,12 +277,12 @@ planOperator { action: "dispatch", path: "plan/story.mtrack", from: "S003", to: 
 | `status` / `nodeId` / `assetPath` / `currentState.lastAttempt` | 是否要新建节点、是否重生成 |
 | `prompt` | 三字段原文，写进 `node:setPrompt` 时逐字取用（§四） |
 | `referencePlan[]` | 每项 `{ refId, kind, name, textOnly, nodeId }`，`nodeId` 是**已存在的资产图节点**，可直接连线 |
-| `generationParams` | `duration`/`resolution`/`ratio`/`generateAudio` 是定值；`providerId`/`modelId`/`mode` 一律是「待 node:getConfig 决定」（`packages/tools/planOperator/src/index.ts:366-368`），**不得写死** |
+| `generationParams` | `duration`/`resolution`/`ratio`/`generateAudio` 是定值；`providerId`/`modelId`/`mode` 一律是「待 node:getConfig 决定」（`packages/tools/planOperator/src/index.ts:378-386`），**不得写死** |
 
 范围里有编号空洞时：`missing` 语义同 `mtrackRead`——清单照出、文本尾附「未命中分镜：…」，**不整体报错**；向用户说明缺哪几号，不要静默补镜。
 
 失败怎么办：
-- `dispatch 失败：多轨工程不存在（<path>）` / `…不是合法 JSON（<path>）：<原因>` / `…起始分镜号 S007 不得晚于结束分镜号 S003`（`packages/tools/planOperator/src/index.ts:538`、`:550`、`:558`）→ 改参数或先修工程，不重试同参数。
+- `dispatch 失败：多轨工程不存在（<path>）` / `…不是合法 JSON（<path>）：<原因>` / `…起始分镜号 S007 不得晚于结束分镜号 S003`（`packages/tools/planOperator/src/index.ts:592`、`:604`、`:612`）→ 改参数或先修工程，不重试同参数。
 
 ### 13.2 逐镜执行（每镜一轮，按 §一 的 11 + 1.5 步）
 
@@ -290,7 +290,7 @@ planOperator { action: "dispatch", path: "plan/story.mtrack", from: "S003", to: 
 
 | 步 | 动作 | 关键参数 / 期望 |
 |---|---|---|
-| a | `mtrackUpdate` 先占位 | `{ action: "mtrackUpdate", expectedUpdatedAt: <13.1 的 updatedAt>, updates: [{ clipId, status: "generating", nodeId: <复用或新建>, attempts: [<原有全部 attempts>, { at: <ISO>, nodeId, status: "generating", error: "batch:<批次号>" }] }] }`。**`attempts` 是整数组替换**（`packages/tools/planOperator/src/index.ts:101`），必须把读到的旧记录一起带上，否则历史被抹掉 |
+| a | `mtrackUpdate` 先占位 | `{ action: "mtrackUpdate", expectedUpdatedAt: <13.1 的 updatedAt>, updates: [{ clipId, status: "generating", nodeId: <复用或新建>, attempts: [<原有全部 attempts>, { at: <ISO>, nodeId, status: "generating", error: "batch:<批次号>" }] }] }`。**`attempts` 是整数组替换**（`packages/tools/planOperator/src/index.ts:107`），必须把读到的旧记录一起带上，否则历史被抹掉 |
 | b | 建节点（`currentState.nodeId` 为空时） | 画布 `addNode`，`type` 取 `getCanvas({ include: ["nodeTypes"] })` 里真实存在的类型（真实类型带 `remote-` 前缀，见 `apps/web/src/pages/workspace/panels/canvas/canvasDrop.ts:106`）；`label` 用 `场<场景号>·片段<片段号>·视频`。**已有 `nodeId` 的重生成复用该节点，跳过本步** |
 | c | 接线 | `connectNodes`，按 `referencePlan` 顺序把资产节点 → 视频节点 `in` 端口；单批上限 64 条（`packages/tools/canvas/src/runtime.ts:61`） |
 | d | 核对参考顺序 | `nodeTools` `node:getReferenceOrder`（`packages/nodeShared/src/useNodeReferences.ts:52`）；不一致用 `node:setReferenceOrder`（`packages/nodeShared/src/useNodeReferences.ts:67`）按 `referencePlan` 顺序重写。`{{ref N}}` 的编号**只由 `referenceOrder` 决定**，不看连线手势 |
@@ -347,10 +347,10 @@ planOperator { action: "mtrackRead", path: "plan/story.mtrack" }   // 读全量�
 
 要点：
 
-1. `clip.status` **只能**取 `pending`/`generating`/`generated`/`accepted`/`failed` 五值之一（`packages/tools/planOperator/src/index.ts:98` 的 enum 就是这五个）。`"cancelled"` 不是 `ClipStatus`，只允许出现在 `attempts[].status`（那里是自由字符串，`packages/tools/planOperator/src/index.ts:92`）。
+1. `clip.status` **只能**取 `pending`/`generating`/`generated`/`accepted`/`failed` 五值之一（读盘口径；`packages/nodeShared/src/mtrack/mtrackProject.ts` 的 `ClipStatus`）。但**写入路径只收四态**——`planOperator` `mtrackUpdate` 的 `clipUpdateSchema.status`（`packages/tools/planOperator/src/index.ts:104`）与 `node:editProject` 的 `clipPatchSchema.status` 都不含 `accepted`：验收是用户点「验收」的人工判定，Agent 代写会被 zod 校验直接拒。`"cancelled"` 不是 `ClipStatus`，只允许出现在 `attempts[].status`（那里是自由字符串，`packages/tools/planOperator/src/index.ts:95`）。
 2. `attempts` 整数组替换：先 `mtrackRead` 拿旧数组，再追加，一次 `mtrackUpdate` 写回。
-3. 一次 `updates` 最多 500 条（`packages/tools/planOperator/src/index.ts:132`），超了分批。
-4. 冲突重试：`mtrackUpdate 冲突：多轨工程已被其他操作修改（expected <a>，实际 <b>），请重新读取后重派`（`packages/tools/planOperator/src/index.ts:291`）→ 重新 `mtrackRead` 再派，不硬覆盖。
+3. 一次 `updates` 最多 500 条（`packages/tools/planOperator/src/index.ts:138`），超了分批。
+4. 冲突重试：`mtrackUpdate 冲突：多轨工程已被其他操作修改（expected <a>，实际 <b>），请重新读取后重派`（`packages/tools/planOperator/src/index.ts:308`）→ 重新 `mtrackRead` 再派，不硬覆盖。
 
 ---
 
@@ -463,6 +463,8 @@ data: { manifestPath: "plan/composite.json", source, output, executed, segments,
 ### 15.7 九宫格拆图 → 自动建多轨工程（图片节点「宫格切分」面板）
 
 > 入口不是多轨编辑器：是**图片节点**的宫格切分面板（`packages/nodes/imageNode/src/components/imageGridSplit.vue:137-169` 的 `writeSplitProject`，面板本体在同文件 template 的「宫格切分」弹层）。用户在图片节点上选 2×2～5×5（或自定义行列，每轴 1–10、总量需 >1）点「切分为图片节点」，除了逐格建 `remote-imageNode` 图片节点之外，还会**独占写**出两份计划文件，直接得到一个可派工的多轨工程。
+>
+> **Agent 等价入口**：`node:splitGrid`（`packages/nodes/imageNode/src/index.vue:153-181`，图片节点的节点函数）。参数 `{ rows, columns }` 各 1–10 且乘积 >1，语义与面板按钮完全一致（复用 `imageGridSplit.vue` 的 `splitGrid(rows, columns, src, signal)`，同一套切图/落盘/拒绝覆盖逻辑），返回 `{ tiles: [{ nodeId, cardId, path }], projectPath, assetIndexPath }`。节点没有图片时报「节点没有图片，无法切分」；节点不在视口内也能调（内部自行读工作区图片生成 objectURL 并在结束后 revoke）。所以「先有图片节点、再要一个可派工的多轨工程」这条链，agent 不必等用户点面板。
 
 写什么（与 `mtrackProject.ts` 的 `createClip`/`ratioOptions` 同源，逐字段核对过）：
 
@@ -522,9 +524,9 @@ success data: { text: string, requiresReview: true }   // :100
 
 ---
 
-## 十五·五、对话 Agent 直接操作画布多轨节点（11 个 `node:` 函数）
+## 十五·五、对话 Agent 直接操作画布多轨节点（15 个 `node:` 函数）
 
-多轨能力除了文档面板里的独立界面（§十五），还以**画布节点**形态提供（`packages/nodes/multitrackNode`，节点类型 `remote-multitrackNode`）。对话 Agent 可对这类节点直接调用以下 11 个节点函数，命令式完成绑定/读/批量编辑/保存/重载/派工/取消/刷成片。其中 9 个由节点自身注册（`packages/nodes/multitrackNode/src/index.vue`），2 个引用函数由 `useNodeReferences()` 自动注册（`packages/nodeShared/src/useNodeReferences.ts`），内部全部薄代理 `packages/nodeShared/src/mtrack/multitrackEditor.vue` 暴露的编辑器 API。
+多轨能力除了文档面板里的独立界面（§十五），还以**画布节点**形态提供（`packages/nodes/multitrackNode`，节点类型 `remote-multitrackNode`）。对话 Agent 可对这类节点直接调用以下 15 个节点函数，命令式完成绑定/读/批量编辑/保存/重载/派工/取消/暂停/继续/单镜重试/整理提示词/刷成片。其中 13 个由节点自身注册（`packages/nodes/multitrackNode/src/index.vue`），2 个引用函数由 `useNodeReferences()` 自动注册（`packages/nodeShared/src/useNodeReferences.ts`），内部全部薄代理 `packages/nodeShared/src/mtrack/multitrackEditor.vue` 暴露的编辑器 API。
 
 **调用纪律**：和其他节点函数一样，先 `getNodeTools({ nodeIds })` 查该节点真实提供的函数名与参数 schema，再经 `nodeTools` 调用；清单里没有就不调，不猜参数。
 
@@ -538,6 +540,10 @@ success data: { text: string, requiresReview: true }   // :100
 | `node:reloadProject` | `{ discard? = false }` | 重载后的工程状态 | 从磁盘重读。有未保存修改且未传 `discard: true` 时报错不重载 |
 | `node:dispatchGenerate` | `{ clipIds?: [1..200] }` 或 `{ from, to }`；`includeFinished? = false` | `{ batchId, skipped }` **立即返回** | UI「生成选中段」按钮的等价物（复用 `generateSelection` 的本地校验、`agentCanvas` 桥与 `beginDirectDispatch`）：编辑器自己经画布 nodeTools 逐镜生成，**不经过对话模型**。**与 §十三 逐镜 SOP 二选一**——若本会话正在按 §十三 逐镜生成，绝不要再调它，否则同一批镜头双重执行、双份算力。拿到 `batchId` 就汇报进度看 `node:getStatus.batchClipIds` / `planOperator mtrackRead`，停手用 `node:cancelBatch`。ACT 边界：单次节点调用有 120 秒超时约束，故只发起不待流；生成循环随节点卸载中断（删节点即断轮询），供应商侧任务留在画布节点上，重开画布可继续看状态 |
 | `node:cancelBatch` | `{ batchId? }`（缺省取 `activeBatchId`） | `{ cancellationRequested: true, batchId }` | UI「取消批次」等价物：abort 本地轮询，再对批次内在跑镜头逐个 `node:cancelGeneration` 并回写 `pending` + `attempts` 追加 `cancelled`。同样**立即返回不等待**；取消成功不等于供应商退费或撤销任务 |
+| `node:pauseBatch` | 无 | 编辑器状态快照（`batchPaused` 为闸门状态、`batchClipIds` 为待续镜头、`batchRunning` 为在跑标记） | UI「本镜结束后暂停」等价物：**软闸门**——在跑的镜头不中断，本镜生成结束后不再开始下一镜；不 abort、不取消供应商任务，整批中止用 `node:cancelBatch`。没有在跑的批次时闸门不置位、`batchPaused` 仍为 false；续跑交 `node:resumeBatch` |
+| `node:resumeBatch` | `{ clips: [1..200], includeFinished? = false }` | 编辑器状态快照 | UI「继续生成」等价物：沿用同一 `batchId` 续跑 `clips` 里的镜头（取 `node:getStatus.batchClipIds` 中尚未完成的那些），`attempts` 标记与批次行都不变；`includeFinished=false` 默认只跑 pending/failed。**被拒时直接抛错**（如「已有派工操作正在进行，请等待结束」或派工失败原文），不返回成功快照——拿到错误即视为未受理，不要重试同一批 |
+| `node:retryClip` | `{ clipId }` | 编辑器状态快照 | UI「单镜重试」等价物：只派这一镜、强制覆盖已生成/失败的旧结果，不连带同批其他镜头；`dispatching` 或 `batchRunning` 为真时**直接抛错**（不返回成功快照），先 `node:pauseBatch` 等当前镜结束或 `node:cancelBatch` |
+| `node:rewritePrompt` | `{ clipId?, rules? }`（`clipId` 缺省取当前选中镜；`rules` 覆盖内置整理规则，≤20000 字） | `{ text, requiresReview }` | UI「整理提示词」等价物：**只调文本模型，不改工程、不写编辑器的待采用区块**。结果需用户确认后，由 agent 用 `node:editProject` 的 `patch` 写回 `prompt.integratedMultimodalDescription`（`prompt` 三字段整组提交）；生成中调用返回服务端 409 原文，错误原样抛出、不重试 |
 | `node:refreshOutput` | 无 | `{ hasOutput, url? }` | 重新读取 `plan/composite.json` 合成清单：`executed` 为真时把成片挂到节点 `video` 输出端口并在卡片播放，否则清空输出。`planOperator composite execute=true` 之后调它刷新成片展示 |
 | `node:getReferenceOrder` | `{ handleId? }`（省略 = 节点默认端口） | `{ handleId, explicit, references, referenceMentions }` | 查询该端口的参考顺序：按当前生效顺序返回 references（含参考编号、来源节点与端口），并给出 `referenceMentions` 的 `{{ref N}}` 文本。未显式排序时按入边顺序。`{{ref N}}` 编号唯一落点的读取口 |
 | `node:setReferenceOrder` | `{ handleId?, sources[] }`（sources 须为该端口现有入边来源） | `{ handleId, order, appended }` | 按给定 sources 顺序重写该端口的参考顺序、写入 `referenceOrder`，参考编号 `{{ref N}}` 随之改变；未列出的入边保持在其后按原顺序追加。§十三.2 步 d 与下方资产接入三步第 2 步即用此函数 |
@@ -556,7 +562,7 @@ success data: { text: string, requiresReview: true }   // :100
 
 两步：`planOperator` 出计划（只算），`assembleCanvas` 落地（只写画布）。**不要自己算分层、不要自己排连线顺序。**
 
-**硬前置（缺了会静默丢参考边）**：`plan/assetIndex.json` 必须已存在。`assemble` 对每个 `clip.referenceIds` 查 `indexCards.get(refId)`（`packages/tools/planOperator/src/index.ts:460`），查不到时只把 `参考结算缺 <refId>` 记进 `warnings`、`references` 记 `"缺失"`（`:462-463`），**不产出这条片段参考边**，且 warnings 只追加在返回 JSON 文本尾（`:502-504`），不拦流程。没跑过 `resolve`/`build` 时资产卡自身 `refs` 边仍在（`:440-445`），但**片段→资产图的参考边会整批悬空**。所以顺序固定为：`validate` 清零 → `resolve`/`build` 产出 `plan/assetIndex.json` → `assemble`。
+**硬前置（缺了会静默丢参考边）**：`plan/assetIndex.json` 必须已存在。`assemble` 对每个 `clip.referenceIds` 查 `indexCards.get(refId)`（`packages/tools/planOperator/src/index.ts:477`），查不到时只把 `参考结算缺 <refId>` 记进 `warnings`、`references` 记 `"缺失"`（`:479-480`），**不产出这条片段参考边**，且 warnings 只追加在返回 JSON 文本尾（`:519-521`），不拦流程。没跑过 `resolve`/`build` 时资产卡自身 `refs` 边仍在（`:457-462`），但**片段→资产图的参考边会整批悬空**。所以顺序固定为：`validate` 清零 → `resolve`/`build` 产出 `plan/assetIndex.json` → `assemble`。
 
 ### 16.1 出装配计划
 
@@ -564,20 +570,20 @@ success data: { text: string, requiresReview: true }   // :100
 planOperator { action: "assemble", path: "plan/story.mtrack", assetCardsPath: "assets/assetCards.md", indexPath: "plan/assetIndex.json", from: "S001", to: "S007" }
 ```
 
-`from`/`to` 可省（省 = 全部 clips，`packages/tools/planOperator/src/index.ts:401-402`）。
+`from`/`to` 可省（省 = 全部 clips，`packages/tools/planOperator/src/index.ts:418-419`）。
 
-返回（`packages/tools/planOperator/src/index.ts:493-500`）：`{ generatedAt, updatedAt, layers[], assetNodes[], clipNodes[], connectOrder[] }`。
+返回（`packages/tools/planOperator/src/index.ts:510-517`）：`{ generatedAt, updatedAt, layers[], assetNodes[], clipNodes[], connectOrder[] }`。
 
 | 字段 | 内容 |
 |---|---|
-| `layers[]` | `{ layer, items: [{ cardId, kind }] }`，**只覆盖资产卡、不含任何片段节点**（`layerCount` 只从 `assetNodes` 推出，`packages/tools/planOperator/src/index.ts:449-453`）；`layer = 1 + max(其 refs 的 layer)`，无 ref 的卡 `layer = 0`（`packages/tools/planOperator/src/index.ts:416-422`） |
-| `assetNodes[]` | `{ cardId, kind, name, ratio, textOnly, layer, nodeType, data, refs, edges[{ fromNode, fromHandle, toNode, toHandle }] }`，按 layer 升序再按卡顺序排（`packages/tools/planOperator/src/index.ts:447`） |
-| `clipNodes[]` | `{ clipId, nodeType: "videoGenerationNode", data{ label, duration, resolution, ratio, generateAudio }, references, edges }`（`packages/tools/planOperator/src/index.ts:476`） |
-| `connectOrder[]` | `"C01->S003"` 形式的连线顺序，资产边在前、片段边在后（`packages/tools/planOperator/src/index.ts:489-492`） |
+| `layers[]` | `{ layer, items: [{ cardId, kind }] }`，**只覆盖资产卡、不含任何片段节点**（`layerCount` 只从 `assetNodes` 推出，`packages/tools/planOperator/src/index.ts:466-469`）；`layer = 1 + max(其 refs 的 layer)`，无 ref 的卡 `layer = 0`（`packages/tools/planOperator/src/index.ts:433-439`） |
+| `assetNodes[]` | `{ cardId, kind, name, ratio, textOnly, layer, nodeType, data, refs, edges[{ fromNode, fromHandle, toNode, toHandle }] }`，按 layer 升序再按卡顺序排（`packages/tools/planOperator/src/index.ts:441-464`） |
+| `clipNodes[]` | `{ clipId, nodeType: "videoGenerationNode", data{ label, duration, resolution, ratio, generateAudio }, references, edges }`（`packages/tools/planOperator/src/index.ts:473-504`） |
+| `connectOrder[]` | `"C01->S003"` 形式的连线顺序，资产边在前、片段边在后（`packages/tools/planOperator/src/index.ts:506-509`） |
 
-`kind → nodeType`：`character`/`scene`/`prop`/`keyframe` → `imageGenerationNode`；`sound` → `audioGenerationNode`；片段 → `videoGenerationNode`（`packages/tools/planOperator/src/index.ts:147`、`packages/tools/planOperator/src/index.ts:437`）。
+`kind → nodeType`：`character`/`scene`/`prop`/`keyframe` → `imageGenerationNode`；`sound` → `audioGenerationNode`；片段 → `videoGenerationNode`（`packages/tools/planOperator/src/index.ts:163-165` 的 `nodeTypeOf`、`:454` 调用）。
 
-拒绝条件：资产卡仍有 error 级发现 → `assemble 被拒绝：资产卡仍有 error 级发现（N 条），先跑 validate 清零`（`packages/tools/planOperator/src/index.ts:409`）。
+拒绝条件：资产卡仍有 error 级发现 → `assemble 被拒绝：资产卡仍有 error 级发现（N 条），先跑 validate 清零`（`packages/tools/planOperator/src/index.ts:426`）。
 
 ### 16.2 落地
 
@@ -597,7 +603,7 @@ assembleCanvas { plan: <16.1 返回的 { assetNodes, clipNodes, layers } 原样>
 
 返回：`{ created, layers[{ layer, nodeIds }], connected, referenceOrder, prompts, deferredSeeds, failures }`（`packages/tools/canvas/src/assembly.ts:277-285`）。
 
-**`layers` 的差别要注意**：`planOperator` 返回的 `layers` **只有资产层，一个片段节点都不含**（`packages/tools/planOperator/src/index.ts:449-453`）；`assembleCanvas` 返回的 `layers` 才多出 clip 层（`nodeIds` 是视频节点，`packages/tools/canvas/src/assembly.ts:275-279`）。**后续分层生成必须用 `assembleCanvas` 的 `layers`**，否则视频层永远轮不到。
+**`layers` 的差别要注意**：`planOperator` 返回的 `layers` **只有资产层，一个片段节点都不含**（`packages/tools/planOperator/src/index.ts:466-469`）；`assembleCanvas` 返回的 `layers` 才多出 clip 层（`nodeIds` 是视频节点，`packages/tools/canvas/src/assembly.ts:275-279`）。**后续分层生成必须用 `assembleCanvas` 的 `layers`**，否则视频层永远轮不到。
 
 失败怎么办：
 - 报「找不到与节点类型 X 匹配的可用节点类型」→ 先启用对应节点插件（图片/视频/音频生成节点），再重跑。
@@ -620,7 +626,7 @@ generateLayer { layers: <同上>, layer: 1, action: "start" }   // 上一层全�
 
 工具在 `packages/tools/canvas/src/index.ts:47`，实现在 `packages/tools/canvas/src/assembly.ts:325-401`。
 
-> **别混两套 action**：`start` / `status` / `cancel` 是**画布工具 `generateLayer` 自己的** `action` 取值（`packages/tools/canvas/src/assembly.ts:85` 的 `z.enum(["start", "status", "cancel"])`），不是 `planOperator` 的 action。`planOperator` 只有九个 action：`parse`/`resolve`/`validate`/`build`/`mtrackRead`/`mtrackUpdate`/`dispatch`/`assemble`/`composite`（`packages/tools/planOperator/src/index.ts:120`）。给 `planOperator` 传 `start` 会被 `.strict()` 之外的 enum 校验直接拒。
+> **别混两套 action**：`start` / `status` / `cancel` 是**画布工具 `generateLayer` 自己的** `action` 取值（`packages/tools/canvas/src/assembly.ts:85` 的 `z.enum(["start", "status", "cancel"])`），不是 `planOperator` 的 action。`planOperator` 只有九个 action：`parse`/`resolve`/`validate`/`build`/`mtrackRead`/`mtrackUpdate`/`dispatch`/`assemble`/`composite`（`packages/tools/planOperator/src/index.ts:126`）。给 `planOperator` 传 `start` 会被 `.strict()` 之外的 enum 校验直接拒。
 
 | 要点 | 细节 |
 |---|---|
@@ -700,25 +706,25 @@ Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue
 
 ## 十九、本节涉及的 action / 按钮 / 定位核对表
 
-写文档时逐处读文件核对过，复核用。**多轨编辑器相关引用已取消行号**：编辑器从旧 ext 插件目录迁入 `packages/nodeShared/src/mtrack/`（旧目录只剩挂载薄壳），行号随迁移与并行改动必然漂移，函数名才是稳定锚点，所以多轨相关一律按「文件 + 函数/字段名」定位、复核直接 grep 函数名。表内其他插件的行号是核对当时的真实行号，同样建议按函数名 grep 现查。
+写文档时逐处读文件核对过，复核用。**多轨编辑器相关引用已取消行号**：编辑器从旧 ext 插件目录迁入 `packages/nodeShared/src/mtrack/`（旧目录只剩挂载薄壳），行号随迁移与并行改动必然漂移，函数名才是稳定锚点，所以多轨相关一律按「文件 + 函数/字段名」定位、复核直接 grep 函数名。表内其他插件的行号是核对当时的真实行号，同样建议按函数名 grep 现查。**`planOperator` 尤其注意**：写入路径的 `clipUpdateSchema.status` 收紧为四态时新增了 ACT 注释块，`src/index.ts` 全表行号整体下移（`requestSchema` 在 `:125`、`action` 枚举 `:126`、`clipUpdateSchema.status` `:104`、`mtrackRead` `:273`、`mtrackUpdate` `:301`、冲突抛错 `:308`、`dispatch` `:338`、`assemble` `:415`、`composite` `:529`），下表若与实测不符一律以函数名 grep 为准。
 
 | 引用对象 | 位置 | 核对结果 |
 |---|---|---|
-| 九个 action 枚举 | `packages/tools/planOperator/src/index.ts:122` | `parse`/`resolve`/`validate`/`build`/`mtrackRead`/`mtrackUpdate`/`dispatch`/`assemble`/`composite` 九项，逐字一致 |
-| `requestSchema` 仍是 strict | `packages/tools/planOperator/src/index.ts:138` | `}).strict();` |
-| `path` / `assetCardsPath` / `indexPath` 默认值 | `packages/tools/planOperator/src/index.ts:124`、`packages/tools/planOperator/src/index.ts:125`、`packages/tools/planOperator/src/index.ts:137` | `plan/story.mtrack` / `assets/assetCards.md` / `plan/assetIndex.json` |
-| `execute` / `compositeOutputPath` | `packages/tools/planOperator/src/index.ts:135`、`:136` | 均为 `.optional()`；`execute` 默认 `false`，`compositeOutputPath` 默认 `plan/composite.mp4` |
-| `from` / `to` / `expectedUpdatedAt` / `updates` | `packages/tools/planOperator/src/index.ts:131`、`:132`、`:133`、`:134` | 存在；`updates` `.min(1).max(500)` |
-| `mtrackRead` 实现 | `packages/tools/planOperator/src/index.ts:256` | 存在 |
-| `mtrackUpdate` 实现与 CAS | `packages/tools/planOperator/src/index.ts:284`、`packages/tools/planOperator/src/index.ts:291`、`packages/tools/planOperator/src/index.ts:309` | 存在；冲突文案逐字一致；`writeAtomic` |
-| `dispatch` 实现 | `packages/tools/planOperator/src/index.ts:320`、`packages/tools/planOperator/src/index.ts:321`、`packages/tools/planOperator/src/index.ts:324`、`packages/tools/planOperator/src/index.ts:338`、`packages/tools/planOperator/src/index.ts:366-368` | 只出清单；`from`/`to` 必填；缺失参考告警；`generationParams` 三项待定 |
-| `assemble` 实现 | `packages/tools/planOperator/src/index.ts:398`、`:401-402`、`:409`、`:416-422`、`:447`、`:489-500` | 分层、拒绝条件、返回结构逐项一致 |
+| 九个 action 枚举 | `packages/tools/planOperator/src/index.ts:126` | `parse`/`resolve`/`validate`/`build`/`mtrackRead`/`mtrackUpdate`/`dispatch`/`assemble`/`composite` 九项，逐字一致 |
+| `requestSchema` 仍是 strict | `packages/tools/planOperator/src/index.ts:142` | `}).strict();` |
+| `path` / `assetCardsPath` / `indexPath` 默认值 | `packages/tools/planOperator/src/index.ts:128`、`:129`、`:141` | `plan/story.mtrack` / `assets/assetCards.md` / `plan/assetIndex.json` |
+| `execute` / `compositeOutputPath` | `packages/tools/planOperator/src/index.ts:139`、`:140` | 均为 `.optional()`；`execute` 默认 `false`，`compositeOutputPath` 默认 `plan/composite.mp4` |
+| `from` / `to` / `expectedUpdatedAt` / `updates` | `packages/tools/planOperator/src/index.ts:135`、`:136`、`:137`、`:138` | 存在；`updates` `.min(1).max(500)` |
+| `mtrackRead` 实现 | `packages/tools/planOperator/src/index.ts:273` | 存在 |
+| `mtrackUpdate` 实现与 CAS | `packages/tools/planOperator/src/index.ts:301`（分支）、`:308`（冲突抛错）、`:326`（`writeAtomic`） | 存在；冲突文案逐字一致；`writeAtomic` |
+| `dispatch` 实现 | `packages/tools/planOperator/src/index.ts:338`（分支）、`:341`（`from`/`to` 必填报错）、`:396-403`（返回结构） | 只出清单；`from`/`to` 必填；缺失参考告警；`generationParams` 三项待定 |
+| `assemble` 实现 | `packages/tools/planOperator/src/index.ts:415`（分支）、`:510`（返回结构起点） | 分层、拒绝条件、返回结构逐项一致 |
 | V7 真正实现 | `packages/tools/planOperator/src/planValidator.ts:198-220` | 扫 prompt 三字段、正则 `/\{\{\s*ref\s*(\d+)\s*\}\}/gi`（`packages/tools/planOperator/src/planValidator.ts:207`，`ref` 两侧空白均可省略，`{{ref1}}` 也命中）、越界 `:212` 与缺失 `:217` 均 error |
 | 校验器实际覆盖的规则 | `packages/tools/planOperator/src/planValidator.ts` 全文 | 出现 `rule:` 的只有 V1/V2/V4/V7/V8/V9/V11/V12/V13/V14/V15；**V3/V5/V6/V10 没有 `rule:` 产出**。V3 由 `packages/tools/planOperator/src/referenceResolver.ts:148-149` 以 `backwardsOnly` 告警处理（不在 findings 里）；V5 的块在 `packages/tools/planOperator/src/planValidator.ts:133-141`（注释在 `packages/tools/planOperator/src/planValidator.ts:133`）只产出 V9 warning；V6 无实现；V10 无实现 |
-| `composite` 实现与执行段 | `packages/tools/planOperator/src/index.ts:524-560`（composite 分支）、`:672-705`（`runCompositeConcat`）、`:711-728`（`probeMedia`），清单与实测判定在 `packages/tools/planOperator/src/composite.ts`（`planComposite` `:159`、`verifySegmentSpecs` `:122`、`probeSignature` `:103`） | 默认只写 `plan/composite.json`（`executed:false`）；`execute=true` 先经 `context.ffmpeg` 走 `executeRemoteFfmpeg` 的 `input` + `ffprobe` 逐段实测规格（与首段不一致即抛），再走 `input` + `concat`，成功后改写 `executed:true`；输出目录不存在、输出已存在均报错 |
+| `composite` 实现与执行段 | `packages/tools/planOperator/src/index.ts:529-563`（composite 分支，`:548` 调 `concatComposite`），concat/ffprobe 实测已抽到 `packages/tools/planOperator/src/compositeRun.ts` 的 `concatComposite`（与服务端 `POST /api/mtrack/composite` 共用），清单与实测判定在 `packages/tools/planOperator/src/composite.ts`（`planComposite`、`verifySegmentSpecs`、`probeSignature`） | 默认只写 `plan/composite.json`（`executed:false`）；`execute=true` 先经 `context.ffmpeg` 走 `executeRemoteFfmpeg` 的 `input` + `ffprobe` 逐段实测规格（与首段不一致即抛），再走 `input` + `concat`，成功后改写 `executed:true`；输出目录不存在、输出已存在均报错 |
 | concat 规格不一致的真实行为 | 2026-10-20 实测（样本工程真实产出造变体，绕过探针直接调 fluent `concat`） | 尺寸不一致（640×360 + 1376×768）报 `ffmpeg exited with code 234 ... Conversion failed!`，**错误信息不含尺寸线索**；帧率不一致（30fps + 24fps）与音轨不一致（无音轨 + 有音轨）**均静默成功**，分别产出 30.175s / 30.167s 的错乱成片。这正是 `verifySegmentSpecs` 必须挡在编码之前的理由 |
-| `validate` 返回无降级字段 | `packages/tools/planOperator/src/index.ts:208-218` | 只返回 `errors`/`warnings`/`findings` + `resolved`/`mtrackClips`；`build` 的报告字段见 `:241-247`，同样无 `capabilityDegraded` |
-| `snapshot` 结构（V15 的开关） | `packages/tools/planOperator/src/index.ts:78-82`、`:126` | `{ nodes, incomingEdges, referenceOrder? }`，`.strict()`；节点只允许 `id`/`type`/`status`/`outputs`，**不接受 `data`**，所以 V10 想在快照里核对 `data.mode` 也做不到 |
+| `validate` 返回无降级字段 | `packages/tools/planOperator/src/index.ts:221-236` | 只返回 `errors`/`warnings`/`findings` + `resolved`/`mtrackClips`；`build` 的报告字段见 `:258-264`，同样无 `capabilityDegraded` |
+| `snapshot` 结构（V15 的开关） | `packages/tools/planOperator/src/index.ts:80-84`、`:132` | `{ nodes, incomingEdges, referenceOrder? }`，`.strict()`；节点只允许 `id`/`type`/`status`/`outputs`，**不接受 `data`**，所以 V10 想在快照里核对 `data.mode` 也做不到 |
 | V15 只在有 snapshot 时才跑 | `packages/tools/planOperator/src/planValidator.ts:246` | `if (snapshot && snapshot.referenceOrder)`——不传快照整段跳过 |
 | `data.mode` 会被 watch 静默改写 | `packages/nodes/videoGenerationNode/src/index.vue:190-197` | `flush: "sync"` 的 watch，引用集变化时把 `data.value.mode` 换成 `matches` 里第一个可用项 |
 | `assembleCanvas` / `generateLayer` 注册 | `packages/tools/canvas/src/index.ts:30`、`packages/tools/canvas/src/index.ts:47` | 存在 |
@@ -732,7 +738,7 @@ Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue
 | `agentCanvas` 入口 | `apps/web/src/pages/workspace/panels/canvas/canvasHost.vue:205-207`、`apps/web/src/pages/workspace/panels/canvas/canvasHost.vue:214-218`、`apps/web/src/pages/workspace/panels/canvas/canvasHost.vue:417`；`apps/web/src/pages/workspace/index.vue:190` | 存在 |
 | 批次号记账与取消判据 | `packages/nodeShared/src/mtrack/directDispatch.ts`（`beginDirectDispatch`/`beginDirectCancel`/`resolveCanvasBridge`/`buildPrompt`）、`packages/nodeShared/src/mtrack/multitrackEditor.vue`（`writeClipRun` 写 `batch:<uuid>`、`launchDispatch`/`launchCancel`） | 存在；`batch:<uuid>` 写在 `attempts[].error` |
 | `ClipStatus` 五值与 `attempts` 四字段 | `packages/nodeShared/src/mtrack/mtrackProject.ts`（`ClipStatus`、`ClipAttempt`） | 一致；`attempts` 无 `batchId` 字段 |
-| 编辑内核与节点函数落点（§十五·五） | `packages/nodeShared/src/mtrack/mtrackEdit.ts`（`applyClipOperations`/`validateClip`/`EditOp`）、`packages/nodeShared/src/mtrack/multitrackEditor.vue`（`status`/`bind`/`readRange`/`applyOperations`/`syncFromDisk`/`launchDispatch`/`launchCancel`，经 `defineExpose` 暴露）、`packages/nodes/multitrackNode/src/index.vue`（9 个多轨函数 `nodeTools.register` + `useNodeReferences()` 自动注册 2 个引用函数，共 11 个 `node:` 函数） | 冻结契约（t1/t2/t3），实现落地后由验证复核 |
+| 编辑内核与节点函数落点（§十五·五） | `packages/nodeShared/src/mtrack/mtrackEdit.ts`（`applyClipOperations`/`validateClip`/`EditOp`）、`packages/nodeShared/src/mtrack/multitrackEditor.vue`（`status`/`bind`/`readRange`/`applyOperations`/`syncFromDisk`/`launchDispatch`/`launchCancel`，经 `defineExpose` 暴露）、`packages/nodes/multitrackNode/src/index.vue`（13 个多轨函数 `nodeTools.register` + `useNodeReferences()` 自动注册 2 个引用函数，共 15 个 `node:` 函数） | 冻结契约（t1/t2/t3），实现落地后由验证复核 |
 | `cancelGeneration` 语义 | `packages/nodeShared/src/useNodeGeneration.ts:17-26`、`packages/nodeShared/src/useNodeGeneration.ts:39` | 只请求停止；取消后 `error` 为「生成已取消」 |
 | 首镜实跑 738.5s | 本文 §十一 记录表的「提交时长」行 | 一致 |
 | 批量执行纪律 1–2 个任务 | `docs/multitrackProductionPlan.md:259`（§4.5 批量执行） | 一致 |

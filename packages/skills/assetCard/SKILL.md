@@ -18,7 +18,7 @@ metadata:
 |---|---|
 | `workflow` | 剧本创作、资产设计判断、Seedance 分段提示词 |
 | `canvas` | 画布增删改连、节点函数调用 |
-| 画布多轨节点的 agent 操作 | 走 `canvas` 技能调用 `remote-multitrackNode` 的 11 个 `node:` 函数，语义与纪律见 [生成 SOP runbook](references/generationRunbook.md) 的「对话 Agent 直接操作画布多轨节点」节 |
+| 画布多轨节点的 agent 操作 | 走 `canvas` 技能调用 `remote-multitrackNode` 的 15 个 `node:` 函数（13 个自注册 + 2 个引用函数），语义与纪律见 [生成 SOP runbook](references/generationRunbook.md) 的「对话 Agent 直接操作画布多轨节点」节 |
 | **`assetCard`（本技能）** | 资产卡编号、参考关系解析、多轨工程契约、校验规则 |
 
 ## 何时读取哪份参考资料
@@ -29,7 +29,7 @@ metadata:
 | 声明参考关系、解析接线、判断是否允许接线 | [参考接线解析规则](references/referenceResolution.md) |
 | 把分镜稿接入多轨、写或改 `story.mtrack` | [多轨工程模板](references/multitrackTemplate.md) |
 | 逐分镜生成、批量派工与取消、装配分层 | [逐分镜生成 SOP](references/generationRunbook.md)（§一～§十七） |
-| 用对话直接操作画布多轨节点（`remote-multitrackNode` 的 11 个 `node:` 函数） | [逐分镜生成 SOP](references/generationRunbook.md) 的「对话 Agent 直接操作画布多轨节点」节（§十五·五） |
+| 用对话直接操作画布多轨节点（`remote-multitrackNode` 的 15 个 `node:` 函数，13 个自注册 + 2 个引用函数） | [逐分镜生成 SOP](references/generationRunbook.md) 的「对话 Agent 直接操作画布多轨节点」节（§十五·五） |
 | 整理本镜提示词（模型整理草稿 + 人工核对采用） | [逐分镜生成 SOP](references/generationRunbook.md) §15.8 |
 | 生成前出校验报告 | 使用 `planOperator` 工具的 `validate` |
 

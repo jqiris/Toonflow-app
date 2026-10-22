@@ -121,6 +121,7 @@ URI 结构为 `toonflow://skills/<技能名称编码>/<技能内文件路径分�
 | 委托内置 Agent | 按用户请求调用 `runAgent`，`args` 提供 `providerId`、`modelId`、`prompt`，可选 `sessionFile` 继续已有对话；等待本轮完成后返回回复及对话文件。调用会使用配置的模型。 |
 | 文件和媒体传输 | `workspaceFiles` 的 `action` 支持 `list`、`mkdir`、`rename`、`remove`、`readBinary`、`writeBinary`。二进制通过 Base64 传输，解码后不超过 20 MiB；写入默认 `exclusive: true`，不覆盖已有文件。文本读写复用已启用的文件工具。 |
 | 文档编辑 | 先 `getDocument` 取得 `text`，再 `writeDocument` 传入新 `text` 和原文 `expectedText`；原文不匹配时拒绝写入。已打开的画布和文档拒绝通过原始文件操作修改，应使用对应界面工具。 |
+| 多轨工程 | 经 canvas 的 `getNodeTools` + `nodeTools` 调用多轨节点的 13 个自注册函数（另有 2 个引用函数由 `useNodeReferences` 自动注册），见 `skills/toonflow/SKILL.md` 多轨工程节。 |
 
 管理结果中的供应商密钥等敏感字段显示为 `[REDACTED]`。不要将读到的脱敏对象整体回写；按操作 schema 提交需要修改的字段，必须提供密钥时填写真实值。
 

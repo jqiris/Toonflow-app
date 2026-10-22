@@ -111,7 +111,7 @@ pending ──提交生成──> generating ──成功──> generated ─�
 | `pending` | 编辑器 / Agent（经 `planOperator mtrackUpdate`）/ `build` | 待生成；参数已定稿 | 校验通过 → 提交生成 |
 | `generating` | 发起派工的一方：界面按钮或 `node:dispatchGenerate` → 编辑器；会话内逐镜 → Agent 经 `mtrackUpdate` | 已提交，供应商侧在跑 | 追终态 → `generated` / `failed` |
 | `generated` | 同上（须先读到真实产出，见下方硬门槛） | 视频已落地，**不等于交付完成** | 用户验收 → `accepted`；打回则改提示词后回 `pending` |
-| `accepted` | 人工作验收后写（单镜编辑器「验收」按钮，或用户明确确认后 Agent 经 `mtrackUpdate` 代写） | 唯一进入合成清单的状态 | M4 按顺序 concat（generationRunbook §15.6） |
+| `accepted` | **只能由用户**在多轨界面单镜编辑器点「验收」写入（`clipEditor.vue:13`）；Agent 的 `mtrackUpdate` / `node:editProject` 写入枚举都不含它，代写会被校验拒绝 | 唯一进入合成清单的状态 | M4 按顺序 concat（generationRunbook §15.6） |
 | `failed` | 发起派工的一方写 | 含 `attempts[].error` | 修参数 → `pending` 重试 |
 
 - **重生成**：把旧 `assetPath` 与旧 `status` 追加进 `attempts`，`status` 回 `pending`；同一 `clipId` **复用**自己的 `nodeId`，不新建节点（否则 `V13`/`V15` 会指向悬空引用）。

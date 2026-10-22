@@ -62,8 +62,8 @@
         :selectedIds="selectedIds"
         @start="startBatch"
         @pause="pauseBatch"
-        @resume="resumeBatch"
-        @retry="retryClip"
+        @resume="panelResume"
+        @retry="panelRetry"
         @cancel="cancelBatch"
         @reconcile="reconcileFromPanel"
       />
@@ -766,7 +766,34 @@ function firstTextModel(): TextModelOption | undefined {
 }
 
 /**
- * 整理本镜提示词：POST /api/mtrack/rewriteShot，结果只进「待采用」区块，绝不自动覆盖画面描述。
+ * 整理请求：POST /api/mtrack/rewriteShot 的公共请求体，UI 与命令式 rewritePrompt 共用。
+ * 失败原样抛出服务端文案（生成中的 409、模型未配置、模型报错），不包装成通用失败提示。
+ */
+async function requestRewrite(clip: MtrackClip, rules: string): Promise<{ text: string; requiresReview: boolean }> {
+  const model = firstTextModel();
+  if (!model) throw new Error("尚未配置可用的文本模型，请先在设置中启用模型供应商");
+  const trimmedRules = rules.trim();
+  const response = await fetch("/api/mtrack/rewriteShot", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-toonflow-workspace": "1" },
+    body: JSON.stringify({
+      directory: props.directory,
+      providerId: model.providerId,
+      modelId: model.modelId,
+      prompt: { ...clip.prompt },
+      referenceIds: clip.referenceIds,
+      ...(trimmedRules ? { rules: trimmedRules } : {}),
+    }),
+  });
+  const payload = await response.json().catch(() => undefined) as { data?: { text: string; requiresReview?: boolean }; message?: string } | undefined;
+  if (!response.ok || !payload?.data) throw new Error(payload?.message || `整理请求失败（HTTP ${response.status}）`);
+  const text = payload.data.text.trim();
+  if (!text) throw new Error("模型没有返回整理结果，请重试");
+  return { text, requiresReview: payload.data.requiresReview !== false };
+}
+
+/**
+ * 整理本镜提示词：结果只进「待采用」区块，绝不自动覆盖画面描述。
  * 环境声与配乐原样保留（服务端只整理画面描述段，不改这两段）。
  * rules 留空时不传该字段，由服务端回落到内置规则；传了就把本次整理规则一并记进 basis 供一致性守卫比对。
  */
@@ -775,34 +802,17 @@ async function rewriteClipPrompt(rules: string) {
   if (!clip) return;
   if (!props.directory) return ElMessage.warning("当前没有工作目录，无法整理提示词");
   if (rewriteBusy.value) return;
-  const model = firstTextModel();
-  if (!model) {
+  if (!firstTextModel()) {
     await loadTextModels(true);
     if (!firstTextModel()) return ElMessage.warning("尚未配置可用的文本模型，请先在设置中启用模型供应商");
   }
-  const chosen = firstTextModel()!;
   // 请求发出这一刻的快照：正文、原文画面描述、时长与规则一起定格，之后用户再改就由一致性守卫拦下旧稿。
   const prompt = { ...clip.prompt };
   const trimmedRules = rules.trim();
   const basis: RewriteBasis = { text: prompt.integratedMultimodalDescription, seconds: clip.seconds, rules: trimmedRules };
   rewriteBusy.value = true;
   try {
-    const response = await fetch("/api/mtrack/rewriteShot", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-toonflow-workspace": "1" },
-      body: JSON.stringify({
-        directory: props.directory,
-        providerId: chosen.providerId,
-        modelId: chosen.modelId,
-        prompt,
-        referenceIds: clip.referenceIds,
-        ...(trimmedRules ? { rules: trimmedRules } : {}),
-      }),
-    });
-    const payload = await response.json().catch(() => undefined) as { data?: { text: string; requiresReview?: boolean }; message?: string } | undefined;
-    if (!response.ok || !payload?.data) throw new Error(payload?.message || `整理请求失败（HTTP ${response.status}）`);
-    const text = payload.data.text.trim();
-    if (!text) throw new Error("模型没有返回整理结果，请重试");
+    const { text } = await requestRewrite(clip, rules);
     rewritePending.value = { clipId: clip.clipId, text, basis };
     ElMessage.success("已整理，请核对后采用");
   } catch (reason) {
@@ -810,6 +820,18 @@ async function rewriteClipPrompt(rules: string) {
   } finally {
     rewriteBusy.value = false;
   }
+}
+
+/**
+ * 命令式整理：与 UI 共用同一条请求，但只返回整理稿，不写待采用区块、不改工程，采用与否交给调用方。
+ * clipId 缺省取当前选中镜；错误原样抛出（含服务端「正在生成」的 409 与模型未配置文案）。
+ */
+async function rewritePrompt(args: { clipId?: string; rules?: string }): Promise<{ text: string; requiresReview: boolean }> {
+  if (!props.directory) throw new Error("当前没有工作目录，无法整理提示词");
+  const clip = args.clipId ? clips.value.find(item => item.clipId === args.clipId) : selectedClip.value;
+  if (!clip) throw new Error(args.clipId ? `未找到分镜 ${args.clipId}` : "当前没有选中的分镜，请先选中一镜或传入 clipId");
+  if (!firstTextModel()) await loadTextModels(true);
+  return requestRewrite(clip, args.rules ?? "");
 }
 
 /** 采用整理结果：只写回发起整理的那一镜（不看当前选中），写完清掉待采用稿。 */
@@ -1184,29 +1206,46 @@ function pauseBatch() {
   ElMessage.info("已请求暂停：当前镜头生成结束后不再开始下一镜");
 }
 
-/** 面板「继续生成」：沿用同一批次号续跑剩余镜头，attempts 标记与面板行都不变。 */
-async function resumeBatch(payload: { clips: string[]; includeFinished: boolean }) {
-  if (dispatching.value || batchHandle.value) return ElMessage.warning("已有派工操作正在进行，请等待结束");
+/**
+ * 面板「继续生成」：沿用同一批次号续跑剩余镜头，attempts 标记与面板行都不变。
+ * ACT: 被拒一律抛错（而不是只弹提示后返回 status 快照）——node:resumeBatch 代理本函数，
+ * 抛错才能让 agent 区分「已受理 / 被拒 / 失败」并拿到原因；界面侧的提示由 panelResume 兜。
+ */
+async function resumeBatch(payload: { clips: string[]; includeFinished: boolean }): Promise<{ batchId: string }> {
+  if (dispatching.value || batchHandle.value) throw new Error("已有派工操作正在进行，请等待结束");
   if (!payload.clips.length) {
     batchPaused.value = false;
-    return ElMessage.info("批次剩余镜头已全部完成");
+    throw new Error("批次剩余镜头已全部完成，没有需要续跑的镜头");
   }
   // 先开闸再发起：等 launchDispatch 返回后才清，会把「刚点继续就点暂停」的请求一起抹掉。
   batchPaused.value = false;
+  const { batchId } = await launchDispatch(payload.clips, { batchId: activeBatchId.value, includeFinished: payload.includeFinished });
+  return { batchId };
+}
+
+/** 面板「单镜重试」：只派这一镜，且强制 includeFinished 覆盖已生成/失败的旧结果。被拒同样抛错。 */
+async function retryClip(payload: { clipId: string }): Promise<{ batchId: string }> {
+  if (dispatching.value || batchHandle.value) throw new Error("生成进行中，请先暂停或取消后重试单镜");
+  return await launchDispatch([payload.clipId], { includeFinished: true });
+}
+
+/** 面板「继续生成」的界面入口：把 resumeBatch 的抛错翻成提示，行为与抛错前一致。 */
+async function panelResume(payload: { clips: string[]; includeFinished: boolean }) {
   try {
-    await launchDispatch(payload.clips, { batchId: activeBatchId.value, includeFinished: payload.includeFinished });
-    ElMessage.success(`批次 ${activeBatchId.value.slice(0, 8)} 已继续生成`);
+    const { batchId } = await resumeBatch(payload);
+    ElMessage.success(`批次 ${batchId.slice(0, 8)} 已继续生成`);
   } catch (reason) {
     if ((reason as { silent?: boolean })?.silent) return;
-    ElMessage.error(reason instanceof Error ? reason.message : "继续生成失败");
+    const message = reason instanceof Error ? reason.message : "继续生成失败";
+    if (message.includes("没有需要续跑的镜头")) ElMessage.info(message);
+    else ElMessage.error(message);
   }
 }
 
-/** 面板「单镜重试」：只派这一镜，且强制 includeFinished 覆盖已生成/失败的旧结果。 */
-async function retryClip(payload: { clipId: string }) {
-  if (dispatching.value || batchHandle.value) return ElMessage.warning("生成进行中，请先暂停或取消后重试单镜");
+/** 面板「单镜重试」的界面入口：同上。 */
+async function panelRetry(payload: { clipId: string }) {
   try {
-    const { batchId } = await launchDispatch([payload.clipId], { includeFinished: true });
+    const { batchId } = await retryClip(payload);
     ElMessage.success(`已重试 ${payload.clipId}，批次 ${batchId.slice(0, 8)}`);
   } catch (reason) {
     if ((reason as { silent?: boolean })?.silent) return;
@@ -1472,6 +1511,10 @@ defineExpose({
   syncFromDisk,
   launchDispatch,
   launchCancel,
+  pauseBatch,
+  resumeBatch,
+  retryClip,
+  rewritePrompt,
 });
 </script>
 

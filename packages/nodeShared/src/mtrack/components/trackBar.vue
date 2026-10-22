@@ -126,7 +126,7 @@ function selectClip(clip: MtrackClip, event: MouseEvent) {
 .trackBar {
   display: flex;
   flex-direction: column;
-  min-height: 84px;
+  min-height: 124px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--el-border-color-lighter);
 }

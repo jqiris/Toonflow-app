@@ -87,6 +87,7 @@ const snapshotSchema = z.object({
  * mtrackUpdate 的补丁形状：strictObject 让「禁写字段」在 z 层就被拒。
  * 可写只有 status / nodeId / assetPath / attempts 四项；seconds / prompt / referenceIds /
  * continuity / title / notes 等真源字段一律不在 schema 内，传了即校验失败。
+ * status 另限四态：accepted 属用户验收判定，写入路径不收（读盘仍保留磁盘上的 accepted）。
  */
 const updateAttemptSchema = z.object({
   at: z.string().describe("ISO 8601 时间戳"),
@@ -97,7 +98,10 @@ const updateAttemptSchema = z.object({
 
 const clipUpdateSchema = z.object({
   clipId: z.string().regex(/^S\d{3}$/).describe("片段 id，如 S001；仅作定位键，不可改"),
-  status: z.enum(["pending", "generating", "generated", "accepted", "failed"]).optional(),
+  // ACT: 与 node:editProject 的 clipPatchSchema 同一口径——写入路径不收 accepted。
+  // 验收是用户在多轨界面点「验收」的人工判定，Agent 不能把未验收的镜头标成 accepted 去凑合成条件；
+  // 读盘路径不受影响，磁盘上已有的 accepted 仍由 normalizeProject 原样接受。
+  status: z.enum(["pending", "generating", "generated", "failed"]).optional(),
   nodeId: z.string().nullable().optional(),
   assetPath: z.string().nullable().optional(),
   attempts: z.array(updateAttemptSchema).optional().describe("整数组替换，不是追加合并"),
@@ -180,7 +184,7 @@ export const plugin: ToolPlugin = {
         "快照必须完整：getCanvasNodes 有分页与截断，total/truncated 不完整时工具直接报错，不拿半份快照出结论。",
         "状态查询纪律：node:getGenerationStatus 的 idle 只表示本次打开节点后未发起生成，idle 不表示没有历史输出；跨轮或换会话前必须先用 getCanvasNodes({ fields: [\"outputs\"] }) 读该节点已产出的媒体，不能用 idle 推断未生成。",
         "本工具只做解析、结算、校验、多轨回写与计划产出：dispatch 只返回逐镜派工清单、assemble 只返回画布装配计划，生成与画布落盘由 agent 走画布工具（addNodes/connectNodes）与 nodeTools 执行；工具自身不执行生成、不连接画布节点、不调用供应商。用户也可能在多轨界面/节点直接派工，此时生成由编辑器自己执行，不要重复生成。",
-        "mtrackUpdate 只回写 status/nodeId/assetPath/attempts 四个生成侧字段，seconds/prompt/referenceIds/continuity 等真源字段归多轨编辑器与对话所有，禁写；回写前先用 mtrackRead 的 updatedAt 作为 expectedUpdatedAt 做乐观并发。",
+        "mtrackUpdate 只回写 status/nodeId/assetPath/attempts 四个生成侧字段，seconds/prompt/referenceIds/continuity 等真源字段归多轨编辑器与对话所有，禁写；status 只接受 pending/generating/generated/failed，accepted 是用户在多轨界面点「验收」的人工判定，Agent 不得代写（磁盘上已有的 accepted 读盘时原样保留）；回写前先用 mtrackRead 的 updatedAt 作为 expectedUpdatedAt 做乐观并发。",
         "composite 只拼接 status 为 accepted 的片段，按工程文件内顺序（即合成顺序）；没有 accepted 片段、V14 顺序不连续、assetPath 缺失或不可读、实测规格与首段不一致都会直接报错。默认只写 plan/composite.json（executed:false），execute=true 才真正调用宿主 ffmpeg 执行 concat，并在成功后把清单改写为 executed:true；执行前先逐段 ffprobe 实测尺寸/帧率/像素格式/音轨参数，与首段不一致就挡在编码之前，声明 seconds 与实测时长差超过 1s 只记规格提示。输出文件已存在时报错，不自动重命名、不覆盖；输出目录必须已存在，本工具不创建目录。",
       ],
       parameters: z.toJSONSchema(requestSchema, { io: "input", target: "draft-07" }),

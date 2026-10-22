@@ -313,7 +313,7 @@ nodeEvent.on("save", async () => {
 /** 复制/创建副本产生的节点算人工添加，不带 agent 标记。 */
 nodeEvent.on("copy", () => ({ agentCreated: false }));
 
-/** ============ agent 命令式操作入口：9 个公开节点函数，全部薄代理编辑器内核 API ============ */
+/** ============ agent 命令式操作入口：13 个公开节点函数，全部薄代理编辑器内核 API ============ */
 
 function requireEditor() {
   const editor = editorRef.value;
@@ -340,7 +340,10 @@ const clipPatchSchema = z.strictObject({
   }).optional(),
   referenceIds: z.array(z.string()).optional(),
   continuity: z.string().optional(),
-  status: z.enum(["pending", "generating", "generated", "accepted", "failed"]).optional(),
+  // ACT: 写入路径不收 accepted——验收是用户在多轨界面点「验收」的人工判定（clipEditor.vue:9-13 → multitrackEditor.vue 的 acceptClip），
+  // agent 经 node:editProject 只能把镜头改到 pending/generating/generated/failed，不能自己把未验收的镜头标成 accepted 去凑合成条件。
+  // 读盘路径不受影响：磁盘上已有的 accepted 仍由 mtrackProject 的 normalizeProject/readStatus 原样接受。
+  status: z.enum(["pending", "generating", "generated", "failed"]).optional(),
   nodeId: z.string().nullable().optional(),
   assetPath: z.string().nullable().optional(),
   attempts: z.array(z.strictObject({ at: z.string(), nodeId: z.string().nullable(), status: z.string(), error: z.string().optional() })).optional(),
@@ -403,7 +406,7 @@ nodeTools.register({
 
 nodeTools.register({
   name: "editProject",
-  description: "批量编辑工程（编辑器等价能力，内核 mtrackEdit.applyClipOperations）：operations 1–100 条，六种 op——add{clipId?,after?,patch?} / patch{clipId,patch} / duplicate{clipId} / move{clipId,to|after} / remove{clipId} / setGlobal{ratio?,style?,systemPrompt?,model?}。整批原子：任一 op 校验失败整批拒收，问题在 issues 返回、不抛错。真源字段可写，但生成前仍必须跑 planOperator validate 且 error 清零，本工具不代跑完整契约校验。save=true（默认）成功后立即落盘，不等防抖",
+  description: "批量编辑工程（编辑器等价能力，内核 mtrackEdit.applyClipOperations）：operations 1–100 条，六种 op——add{clipId?,after?,patch?} / patch{clipId,patch} / duplicate{clipId} / move{clipId,to|after} / remove{clipId} / setGlobal{ratio?,style?,systemPrompt?,model?}。整批原子：任一 op 校验失败整批拒收，问题在 issues 返回、不抛错。真源字段可写，但生成前仍必须跑 planOperator validate 且 error 清零，本工具不代跑完整契约校验。save=true（默认）成功后立即落盘，不等防抖。patch.status 只接受 pending/generating/generated/failed；accepted 由用户在界面验收产生，agent 不能代写",
   parameters: z.strictObject({
     operations: z.array(editOpSchema).min(1).max(100),
     save: z.boolean().default(true),
@@ -479,6 +482,59 @@ nodeTools.register({
     signal?.throwIfAborted();
     const launched = await requireEditor().launchCancel(args.batchId);
     return { cancellationRequested: true, batchId: launched.batchId };
+  },
+});
+
+nodeTools.register({
+  name: "pauseBatch",
+  description: "请求暂停当前生成批次（UI「本镜结束后暂停」等价物）：这是软闸门——正在跑的镜头不中断，等本镜生成结束后不再开始下一镜；不 abort、不取消供应商任务，整批中止用 node:cancelBatch。没有在跑的批次时闸门不置位，返回的 batchPaused 仍为 false。返回编辑器 status 快照（batchPaused 为闸门状态，batchClipIds 为待续镜头，续跑交 node:resumeBatch）",
+  parameters: z.strictObject({}),
+  execute(_args, { signal }) {
+    signal?.throwIfAborted();
+    const editor = requireEditor();
+    editor.pauseBatch();
+    return editor.status();
+  },
+});
+
+nodeTools.register({
+  name: "resumeBatch",
+  description: "继续已暂停的批次（UI「继续生成」等价物）：沿用同一 batchId 续跑 clips 里列出的镜头，attempts 标记与批次行都不变。clips 传 node:getStatus 里 batchClipIds 中尚未完成的镜头（1–200 个）；includeFinished=false 默认只跑 pending/failed，要连已生成/已确认的镜头一起重跑才传 true。被拒时直接抛错并带原因（已有派工在跑、clips 已全部完成），不返回状态快照；受理成功返回编辑器 status 快照",
+  parameters: z.strictObject({
+    clips: z.array(clipIdSchema).min(1).max(200),
+    includeFinished: z.boolean().default(false),
+  }),
+  async execute({ clips, includeFinished }, { signal }) {
+    signal?.throwIfAborted();
+    const editor = requireEditor();
+    await editor.resumeBatch({ clips, includeFinished });
+    signal?.throwIfAborted();
+    return editor.status();
+  },
+});
+
+nodeTools.register({
+  name: "retryClip",
+  description: "重试单个镜头（UI「单镜重试」等价物）：只派 clipId 这一镜，强制覆盖已生成/失败的旧结果，不连带同批其他镜头。生成进行中（dispatching 或 batchRunning 为真）时直接抛错并带原因，需先 node:pauseBatch 等当前镜结束或 node:cancelBatch；受理成功返回编辑器 status 快照",
+  parameters: z.strictObject({ clipId: clipIdSchema }),
+  async execute({ clipId }, { signal }) {
+    signal?.throwIfAborted();
+    const editor = requireEditor();
+    await editor.retryClip({ clipId });
+    signal?.throwIfAborted();
+    return editor.status();
+  },
+});
+
+nodeTools.register({
+  name: "rewritePrompt",
+  description: "整理单镜提示词（UI「整理提示词」等价物）：只调文本模型，不改工程、不写编辑器的待采用区块，返回 { text, requiresReview }。clipId 缺省取当前选中镜；rules 覆盖内置整理规则（≤20000 字）。结果需用户确认后由 agent 自行用 node:editProject 写回本镜 prompt.integratedMultimodalDescription；生成中整理会返回服务端 409 原文，错误原样抛出、不重试",
+  parameters: z.strictObject({ clipId: clipIdSchema.optional(), rules: z.string().max(20000).optional() }),
+  async execute(args, { signal }) {
+    signal?.throwIfAborted();
+    const result = await requireEditor().rewritePrompt(args);
+    signal?.throwIfAborted();
+    return result;
   },
 });
 

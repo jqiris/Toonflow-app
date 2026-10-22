@@ -321,7 +321,7 @@ export async function beginDirectDispatch(options: {...}): Promise<DispatchHandl
 - `mtrackEdit.ts` / `validateClip`：范围校验不属于编辑内核。
 - `MtrackProject` / `MtrackClip` schema：**不加 `batchId` 字段**（`generationRunbook.md` §十五 明确：批次号只记在 `attempts[].error`，不许新增字段）。
 - `planOperator`：面板不碰工具层。
-- `multitrackNode/src/index.vue` 的 11 个 node 函数：**一个都不改**（见 §6）。
+- `multitrackNode/src/index.vue` 的 node 函数：本设计**一个都不改**（见 §6）。后续需求已追加 `node:pauseBatch`/`node:resumeBatch`/`node:retryClip`/`node:rewritePrompt` 四个函数，现为 13 个自注册函数，见 §6 表对应行的更新注记。
 
 ---
 
@@ -331,7 +331,7 @@ export async function beginDirectDispatch(options: {...}): Promise<DispatchHandl
 |---|---|
 | 后端 job 队列 / 服务端批次表（LSC 的 `scene_video_jobs` 那一套） | 我们的生成由画布节点持有，供应商任务本来就挂在节点上；再建一层队列要先解决「谁持有轮询」的宿主级问题（audit P1-1），超出面板范围 |
 | 跨进程 / 重启恢复（把 `generating` 降级 `paused`） | 这是 audit 的 **P0-2**，需要 `getCanvasNodes({fields:["outputs"]})` 对账，是独立一项；面板只负责「本次打开期间」的暂停/继续 |
-| `node:pauseBatch` / `node:resumeBatch` 节点函数 | 暂停是人在环的交互（看进度决定停不停），对话侧要停手用既有的 `node:cancelBatch` 就够；多加两个函数等于给 runbook 加两页文档而没有实际调用方 |
+| ~~`node:pauseBatch` / `node:resumeBatch` 节点函数~~ **该 YAGNI 结论已被后续需求推翻（2026-10-22 更新）** | 原结论：暂停是人在环的交互（看进度决定停不停），对话侧要停手用既有的 `node:cancelBatch` 就够；多加两个函数等于给 runbook 加两页文档而没有实际调用方。**现口径**：`packages/nodes/multitrackNode/src/index.vue` 已注册 `node:pauseBatch`（软闸门：不 abort 在跑镜头，本镜结束后不再开始下一镜）、`node:resumeBatch`（沿用同一 `batchId` 续跑剩余镜头）、`node:retryClip`（只重试单镜、强制覆盖旧结果）、`node:rewritePrompt`（只调文本模型返回整理稿，不改工程，用户确认后用 `node:editProject` 写回）四个节点函数；本节点现为 13 个自注册函数 + 2 个引用函数 = 15 个 `node:` 函数，runbook §十五·五 已同步 |
 | 给 `dispatchGenerate` 加 `count` 参数 | 它已有 `from`/`to`（`multitrackNode/src/index.vue:373-380`），范围语义已覆盖；`count` 是给人输入的便利，不是新能力 |
 | 自动合并开关（LSC「完成后自动合并」） | 依赖 audit P0-3 的合成入口，先做面板会把合并链路的坑带进来 |
 | 单镜版本历史（LSC `previous_finals` / `history`） | 我们的 `attempts` 只记状态不记产物；做版本要改 schema，属独立需求 |

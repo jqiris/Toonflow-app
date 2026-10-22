@@ -150,6 +150,36 @@ nodeTools.register({
   },
 });
 
+nodeTools.register({
+  name: "splitGrid",
+  description: "宫格切图（九宫格等）：把此节点的图片按 rows×columns 切成多个图片节点，从左到右逐行；同时额外创建多轨工程 plan/story.mtrack 与资产索引 plan/assetIndex.json，每格一镜、只建工程不派工。rows/columns 各为 1–10 的整数且 rows×columns > 1；节点没有图片时报错；plan/story.mtrack 或 plan/assetIndex.json 已存在时拒绝覆盖。返回 { tiles: [{ nodeId, cardId, path }], projectPath, assetIndexPath }",
+  parameters: z.strictObject({
+    rows: z.number().int().min(1).max(10),
+    columns: z.number().int().min(1).max(10),
+  }).refine(args => args.rows * args.columns > 1, "rows × columns 需大于 1"),
+  async execute({ rows, columns }, { signal }) {
+    signal?.throwIfAborted();
+    if (uploading.value || editor.value?.busy || inpaintPrompt.value?.creating || lighting.value?.generating || multiAngle.value?.generating || panorama.value?.busy || gridSplit.value?.splitting) throw new Error("图片处理中，请稍后重试");
+    const output = outputFile.value;
+    if (!output?.url) throw new Error("节点没有图片，无法切分");
+    const splitter = gridSplit.value;
+    if (!splitter) throw new Error("宫格切分组件未就绪，请稍后重试");
+    // 预览按视口懒加载，节点不在视口内时自行读取工作区图片，agent 调用不依赖节点已显示。
+    let objectUrl = "";
+    let sourceUrl = previewUrl.value;
+    if (!sourceUrl) {
+      const content = await files.getWorkspaceFiles().read(output.url);
+      signal?.throwIfAborted();
+      sourceUrl = objectUrl = URL.createObjectURL(new Blob([content], { type: output.mimeType }));
+    }
+    try {
+      return await splitter.splitGrid(rows, columns, sourceUrl, signal);
+    } finally {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    }
+  },
+});
+
 async function resizeImage(event: Event) {
   const image = event.currentTarget as HTMLImageElement;
   if (!image.naturalWidth || !image.naturalHeight) return;
