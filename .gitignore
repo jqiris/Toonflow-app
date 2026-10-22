@@ -31,3 +31,7 @@ Thumbs.db
 *.keychain
 *.keychain-db
 .tmp/
+.agent-teams/
+.codeartsdoer/
+.tmpDevSync/
+nul
