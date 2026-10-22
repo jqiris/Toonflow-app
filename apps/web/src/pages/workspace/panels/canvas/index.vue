@@ -11,6 +11,7 @@
     @gestureend.capture="zoomCanvas"
     @pointerdown.capture="updateCanvasSelection"
     @click.capture="updateCanvasSelection"
+    @auxclick.capture="preventMiddleClick"
     @pointermove="pointerPosition = { x: $event.clientX, y: $event.clientY }; if (!$event.buttons) updateCanvasSelection($event)"
     @pointerleave="pointerPosition = undefined"
     @dragover="dragFilesOver"
@@ -142,6 +143,7 @@ import {
   SelectionMode,
   useVueFlow,
   wheelDelta,
+  isMacOs,
   isNode,
   type Node,
   type Edge,
@@ -290,6 +292,7 @@ function getCanvasContext() {
 const canvasReady = computed(() => !!canvasId.value && !nodeListLoading.value && nodeLoads.size === 0);
 provide("canvas", getCanvasContext);
 defineExpose({ canvasId, canvasReady, getCanvasContext, addNodeAtPointer, readDocumentNode, saveDocumentNode, mountDocumentNode, observeDocumentNode, prepareCanvasDelete, flushSave: flushCanvasSave, cancelSave: cancelCanvasSave,
+  openNodeSearch: () => nodeSearchRef.value?.open(),
   getCanvases: (signal?: AbortSignal) => {
     if (!canvasMenuRef.value) throw new Error("画布菜单尚未就绪");
     return canvasMenuRef.value.getCanvases(signal);
@@ -918,8 +921,14 @@ function zoomCanvas(event: WheelEvent | (Event & { scale: number })) {
       if (!event.ctrlKey) return;
       // 实体 Ctrl 未绑定缩放时，阻止 Vue Flow 和节点骨架将它误判为捏合。
       factor = 1;
+    } else if (pinching && gestureScale !== undefined) {
+      factor = 1;
+    } else if (pinching) {
+      factor = 2 ** (-event.deltaY * 0.02);
     } else {
-      factor = pinching && gestureScale !== undefined ? 1 : 2 ** (pinching ? -event.deltaY * 0.02 : wheelDelta(event));
+      // ACT: @vue-flow/core 的 wheelDelta 在 macOS 下若检测到 event.ctrlKey 会额外乘以 10（误判为捏合微步）；非捏合的实体 Ctrl 滚轮缩放需剔除该倍数，保留标准滚轮速度。
+      const delta = wheelDelta(event) / (event.ctrlKey && isMacOs() ? 10 : 1);
+      factor = 2 ** delta;
     }
     point = { x: event.clientX, y: event.clientY };
   }
@@ -933,6 +942,10 @@ function zoomCanvas(event: WheelEvent | (Event & { scale: number })) {
   if (!bounds) return;
   point ??= { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 };
   selection.call<[number, [number, number], Event]>(zoom.scaleBy, factor, [point.x - bounds.left, point.y - bounds.top], event);
+}
+
+function preventMiddleClick(event: MouseEvent) {
+  if (event.button === 1) event.preventDefault();
 }
 
 function updateCanvasSelection(event: MouseEvent | KeyboardEvent) {
@@ -1164,7 +1177,7 @@ async function loadRemoteNodes(reloadName?: string) {
 }
 
 const defaultEdgeOptions = markRaw({
-  type: "simple-bezier",
+  type: "simplebezier",
   animated: false,
   class: ({ sourceNode, targetNode }: GraphEdge) => {
     if (!sourceNode.selected && !sourceNode.dragging && !targetNode.selected && !targetNode.dragging) return "";
