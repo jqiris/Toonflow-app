@@ -37,7 +37,7 @@ description: 通过 Toonflow MCP 操作工作区、实时画布、节点、文�
 - 顶层 `nextCursor` 仅用于保持原参数继续节点分页。处理节点任一 `truncated` 时，仅查询所属节点，使用该项路径及偏移，不携带原 `cursor`：`text` 用该项 `path` 和 `nextOffset` 作为 `textOffset` 续读，`entries` 改用 `valueOffset`；没有 `nextOffset` 表示该路径已到末尾。`depth/budget` 沿该项 `path` 缩小范围重新查询，不携带旧 `cursor`。对象/数组的 `valueLimit` 最多 100，文本的 `textLimit` 最多 4000；正偏移必须提供 `path`。路径最多 64 层和 2048 JSON UTF-8 字节，每段最多 256 字符；`pathDepthLimit/pathBytesLimit/circular` 不可靠重复请求补齐，`keyTooLong` 可按返回的 `nextOffset` 作为 `valueOffset` 跳过该键继续，但被跳过的值仍未取得。不得把截断或省略字段当作完整内容。
 - 使用 `addCanvas`、`switchCanvas`、`addNode`、`connectNodes` 等实时工具。不要直接写入带 `toonflowCanvas` 标记的 JSON；否则会绕开节点校验、历史记录、素材清理和界面状态。
 - 提示词、模型和生成参数通过 `nodeTools` 调用节点注册的函数。先发现函数名和参数，再调用；不要猜测 `node:setPrompt` 或配置结构存在于所有节点。
-- 连接前用 `getCanvasNodes` 的 `fields: ["ports"]` 确认真实的 `sourceHandle`、`targetHandle` 和兼容的数据类型。图片或视频引用由连线提供；提示词中的引用标记应与节点实际引用顺序一致，需要核对时用 `getCanvasEdges` 查询目标入边、`getCanvasNodes` 读取目标 `data.referenceOrder` 和源节点输出。
+- 连接前用 `getCanvasNodes` 的 `fields: ["ports"]` 确认真实的 `sourceHandle`、`targetHandle` 和兼容的数据类型。图片或视频引用由连线提供；提示词中的引用标记应与节点实际引用顺序一致，需要核对时用 `getCanvasEdges` 查询目标入边、`getCanvasNodes` 读取目标 `data.referenceOrder` 和源节点输出。画布直连的视频节点沿用画布 mention chip `{{ref N}}`（节点在 wire 层按引用类型换算成 `<Picture N>` / `<Video N>` / `<Audio N>`）；多轨工程的镜头提示词由写作者直接按 MiniMax H3 官方 ref2va 六段（`subject_definitions` / `summary` / `retention_analysis` / `detailed_description` / `overall_soundscape` / `non_diegetic_music`）书写并写官方 `<Picture N>`（按图片参考各自从 1 编号，音频/视频各写 `<Audio N>`/`<Video N>`，与旧标记的全局序号不同），不写旧 `{{ref N}}`（旧工程标记只由引擎在生成时换算兼容）。
 - 批量操作优先使用支持数组的工具。只在用户需要整理整体布局时使用 `arrangeCanvas`，局部调整使用 `moveNodes`，查看内容使用 `fitCanvas`。
 - 整理、视口适配和删除的 ID 回执最多 100 项，另提供 `arrangedCount`、`nodeCount` 或 `removedEdgeCount`；`truncated` 不代表操作只完成了部分，不为获取完整回执而重执行。`nodeTools` 返回具体业务结果，不适用五个读取工具的 64 KiB 上限。
 - 断开、切换项目、切换画布或节点卸载后，重新发现状态，更新目标 ID，不向旧目标重试修改操作。
@@ -66,11 +66,13 @@ description: 通过 Toonflow MCP 操作工作区、实时画布、节点、文�
 9. `node:refreshOutput`：无参数。重读 `plan/composite.json`，`executed` 为真时把成片挂到节点 `video` 输出端口，否则清空输出。
 10. `node:pauseBatch`：无参数，等价 UI「本镜结束后暂停」。这是**软闸门**——在跑的镜头不中断，本镜生成结束后不再开始下一镜；不 abort、不取消供应商任务，整批中止用 `node:cancelBatch`。返回编辑器状态快照，`batchPaused` 是闸门状态、`batchClipIds` 是待续镜头。
 11. `node:resumeBatch`：`{ clips: [1..200], includeFinished? }`，等价 UI「继续生成」。沿用同一 `batchId` 续跑 `clips` 里的镜头（取 `node:getStatus.batchClipIds` 中尚未完成的那些），`attempts` 标记与批次行都不变；`includeFinished=false` 默认只跑 pending/failed。已有派工操作在跑时被拒。
-12. `node:retryClip`：`{ clipId }`，等价 UI「单镜重试」。只派这一镜并强制覆盖已生成/失败的旧结果，不连带同批其他镜头；`dispatching` 或 `batchRunning` 为真时被拒，先 `node:pauseBatch` 等当前镜结束或 `node:cancelBatch`。
+12. `node:retryClip`：`{ clipId }`，等价 UI「单镜重试/重新生成本镜」。只派这一镜，生成成功后作为新版本追加（旧视频与画布节点保留、新视频自动成为该镜默认），不连带同批其他镜头；`dispatching` 或 `batchRunning` 为真时被拒，先 `node:pauseBatch` 等当前镜结束或 `node:cancelBatch`。
 
 - `node:rewritePrompt`：`{ clipId?, rules? }`，等价 UI「整理提示词」。只调文本模型整理单镜提示词，返回 `{ text, requiresReview }`；**不改工程、不写编辑器的待采用区块**。结果需用户确认后，由你用 `node:editProject` 的 `patch` 把整理稿写回该镜 `prompt.integratedMultimodalDescription`（`prompt` 三字段整组提交）。生成中调用会返回服务端 409 原文，错误原样抛出、不重试。
 
-- 硬纪律一：`node:dispatchGenerate` 与逐镜 SOP（runbook §十三）二选一。本会话正在按 SOP 逐镜生成时绝不再调它，同一批镜头绝不双重执行，否则双份算力、双重回写。
+- 重新生成的口径（`node:retryClip`、`node:dispatchGenerate`、`node:resumeBatch` 带 `includeFinished`）：这是**追加版本**，不覆盖旧视频。派工时 `ensureNode` 对已产出视频的节点改为新建一个同 label 的视频节点，旧节点和旧视频留在画布上；`node:readClips` 返回的 `attempts` 里 `status` 为 `succeeded` 的记录按 `nodeId` 去重就是该镜的版本列表（旧→新），新视频完成自动写回 `clip.nodeId`/`assetPath` 成为该镜默认版本。没出过视频的节点（`pending`/`failed` 的镜）照旧复用，不为从未产出的镜头堆节点。
+- 切换默认版本：agent 可以代写，不属于硬纪律二的人工验收。用 `node:editProject` 的 `patch` 把该镜 `nodeId` 与 `assetPath` 一起写到目标版本——版本 `nodeId` 取 `node:readClips` 的 `attempts` 里 `succeeded` 记录，`assetPath` 用画布桥 `getCanvasNodes` 反查该节点 `outputs.video.value.url`（工作区相对路径，落盘名带随机后缀，不能按 `nodeId` 拼）。镜头生成中不切默认；切完仍需 `planOperator validate`（`accepted` 镜要求 `nodeId` 在画布上真实可读），合成 composite 只认 accepted 镜的**当前默认** `assetPath`。
+- 硬纪律一：`node:dispatchGenerate` 与逐镜 SOP（runbook §十三）二选一。本会话正在按 SOP 逐镜生成时绝不再调它，同一批镜头绝不双重执行，否则双份算力、双重回写；重新生成同一镜=追加新版本，旧版本仍在画布上可回切。
 - 硬纪律二：`accepted` 只能由用户在多轨界面点「验收」写入，agent 不得代写；`generating` 只表示已开始，不是可信终态，先按 runbook §15.5 对账再汇报。
 - 硬纪律三：合成成片只拼 `accepted` 镜头，`generated` 不参与。先 `planOperator { action: "composite", execute: false }` 出清单交用户确认，确认后再发 `execute: true`，最后用 `node:refreshOutput` 把成片挂回画布。
 - 界面能力、批量面板、重启后对账、合成成片、九宫格拆图、整理本镜提示词的细节见 Toonflow 内置 assetCard 技能 runbook §15（§15.1 界面能力表 / §15.4 批量面板 / §15.5 重启对账 / §15.6 合成成片 / §15.7 九宫格拆图 / §15.8 整理本镜提示词），这里不展开。

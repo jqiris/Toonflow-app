@@ -61,8 +61,8 @@
    - `integrated_multimodal_description`：画面、动作、对白（对白包在 `<d>[Chinese]…</d>`）；
    - `overall_soundscape`：环境声与动作声；
    - `non_diegetic_music`：配乐 / `N/A`。
-3. **参考顺序即协议**：`reference_ids` 的数组顺序 = `<Picture 1..N>`，并在段尾追加一句「本段图片引用顺序：<Picture 1> = C01（…，用途：character）；…」。
-4. **素材排他**：写了 `<Picture N>` 的资产，正文**禁止**再详细描述其外貌，否则模型会混淆。
+3. **参考顺序即协议**：`reference_ids` 的数组顺序 = `<Picture 1..N>`，LSC 侧还会在段尾追加一句「本段图片引用顺序：<Picture 1> = C01（…，用途：character）；…」（**LSC 自有写法，本仓库已不采用**：段尾参考顺序声明行已取消，改由写作者按官方六段直接书写正文）。
+4. **素材排他**：写了 `<Picture N>` 的资产，正文**禁止**再详细描述其外貌，否则模型会混淆（**LSC 口径**；本仓库不采用——官方 `ref-en.txt` §0/§5.3 要求写出被引用特征，见 assetCard runbook §四）。
 5. **说话人 ID**：`(S1)`、`(S2)` 全片唯一，对白必须 `<d>[语言] 内容</d>`。
 
 > **Toonflow 侧对应**：`<Picture N>` ↔ `{{ref N}}`（`useNodeReferences` 的编号），`reference_ids` 顺序 ↔ `data.referenceOrder` + 入边顺序。这是两套系统唯一需要严格对齐的地方。

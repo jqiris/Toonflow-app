@@ -143,18 +143,17 @@ pending ──生成提交──> generating ──成功──> generated ─�
 
 ### 2.5 参考顺序 = 编号协议
 
-`referenceIds` 数组顺序即 `<Picture N>` / `{{ref N}}`：
+`referenceIds` 数组顺序即画布引用位次，它决定 MiniMax H3 官方标记的编号基数（`<Picture N>` 只数图片类、`<Audio N>` 只数音频、`<Video N>` 只数视频，各自从 1 起；混入 `kind: "sound"` 音频卡时位次 ≠ Picture 序号）：
 
 ```text
-referenceIds: ["C01", "C03", "C05", "SC02"]
+referenceIds: ["C01", "C03", "C05", "SC02"]   ← 全是图片时位次恰好等于 Picture 序号
               ↓        ↓        ↓       ↓
-           {{ref 1}} {{ref 2}} {{ref 3}} {{ref 4}}
+        <Picture 1> <Picture 2> <Picture 3> <Picture 4>
 ```
 
 - Toonflow 侧实际顺序由 `data.referenceOrder`（键 `encodeURIComponent(JSON.stringify([source,sourceHandle]))`）+ 入边顺序决定，**必须逐一核对**；
-- 编辑器在段尾自动追加一句（照 LSC 做法）：
-  `本段参考顺序：{{ref 1}} = C01（淳于棼·人间游侠，用途：character）；…图片仅作参考，不自动作为精确首帧。`
-- **素材排他**：写了 `{{ref N}}` 的资产，正文不得再详细描述其外貌，否则模型混淆。
+- **六段由写作者直接写**：接了参考图就按 MiniMax H3 官方 ref2va 六段书写（`subject_definitions:` / `summary:` / `retention_analysis:` / `detailed_description:`），引擎只拼「全片风格 / 全片约束」前缀、正文原样透传，不代写任何一段，也**不再自动追加段尾「本段参考顺序」声明行**（该写法已取消；旧工程遗留的 `{{ref N}}` 只作兼容，由节点 wire 层按 `dataType` 换算成官方标记）；
+- **参考形貌必写**：官方 `ref-en.txt` §0/§5.3 要求 detailed_description 尽可能详细，被引用资产首次出现处要写「被引用特征 + 画面位置 + 当前动作」（旧版「写了引用就不描述外貌」的素材排他说法已废弃）。
 
 ---
 
@@ -227,7 +226,7 @@ packages/ext/multitrack/
 5) node:getConfig  → 确认可用 mode 与 duration
 6) node:setConfig({ providerId:"freevideo", modelId:"MiniMax-H3",
                     duration:<seconds>, resolution:<768P|2K>, ratio, generateAudio, mode })
-7) node:setPrompt({ prompt: <三字段拼装 + 段尾参考顺序声明> })
+7) node:setPrompt({ prompt: <写作者已写好的官方六段 + <Picture N>；引擎只拼全片风格/全片约束前缀、正文原样透传> })
 8) 展示生成方案并等待用户批准
 9) node:generateVideo({})
 10) 同一轮内用 node:getGenerationStatus 查终态；**跨轮/换会话前必须先用 getCanvasNodes 读该节点 outputs 确认已产出**，不能凭状态字段判断（见 §4.6）

@@ -82,53 +82,35 @@ function resolveNodeType(available: readonly { type: string }[], requested: stri
 }
 
 /**
- * 提示词拼装与 assetCard runbook §四 同源：三字段逐字取用，字段名按 FreeVideo 规范写在段首。
- * 字段名 `name: text` 是 H3 认的约定写法（引擎 example 与 promptWriting.md:19），三段顺序固定：
- * integrated_multimodal_description → overall_soundscape → non_diegetic_music，段间空一行。
- * 声明只在确实接了参考图时才写：接不上时 {{ref N}} 不会被节点替换（videoGenerationNode 仅在
- * refList 非空时把 {{ref N}} 换成 <Picture N>），写进去等于把模板字面量当画面描述喂给模型。
- * 正文已自带该声明（上游写入的多轨提示词常有）时不重复追加。
- * 参考顺序句并入第一段末尾而非独立第四段——规范三段结构内没有第四段的归属，独立成段会被模型当成画面描述。
+ * 提示词只做两件事，不代写内容：
+ *   1. 全片风格/全片约束拼在正文开头；
+ *   2. 正文原样透传——旧工程的 {{ref N}} 占位标记也不改写，编号由 videoGenerationNode 的
+ *      referenceTags 按 dataType 在 wire 层换算成 <Picture N> / <Video N> / <Audio N>。
+ * 官方 ref2va 六段（subject_definitions / summary / retention_analysis / detailed_description）由写作者直接
+ * 写进正文；只有正文还是旧工程的纯画面描述时才补官方段首标签。
+ * 字段名 `name: text` 是 H3 认的约定写法（引擎 example 与 promptWriting.md:19），段序固定：
+ * 画面正文段 → overall_soundscape → non_diegetic_music，段间空一行。
  */
-function buildPrompt(clip: MtrackClip, cards: readonly AssetIndexCard[], withReferences: boolean, global?: { style?: string; systemPrompt?: string }) {
-  const description = clip.prompt.integratedMultimodalDescription.trim();
-  const soundscape = clip.prompt.overallSoundscape.trim();
-  const music = clip.prompt.nonDiegeticMusic.trim();
-  const references = withReferences && clip.referenceIds.length
-    ? clip.referenceIds.map((id, index) => {
-      const card = cards.find(item => item.id === id);
-      return { tag: `{{ref ${index + 1}}}`, id, name: card?.name || id, kind: card?.kind || "" };
-    })
-    : [];
-  const alreadyDeclared = /本段参考顺序|\{\{\s*ref\s*\d+\s*\}\}/i.test(description);
-  let first = description;
-  if (references.length && !alreadyDeclared && first) {
-    first = `${first}\n本段参考顺序：${references.map((item, index) =>
-      `{{ref ${index + 1}}} = ${item.id}（${item.name}${item.kind ? `，用途：${item.kind}` : ""}）`).join("；")}。图片仅作参考，不自动作为精确首帧。`;
-  }
-  // ACT: 全片风格/系统提示词是工程级约束，拼在描述段开头而不是另起一段，避免破坏 H3 的三段/六段结构。
+/** 正文已自带官方段首：写作者按六段格式直接书写，不再套标签（ref2va 的画面正文段是 detailed_description）。 */
+const officialSection = /^(subject_definitions|summary|retention_analysis|detailed_description|integrated_multimodal_description)\s*:/i;
+
+function buildPrompt(clip: MtrackClip, global?: { style?: string; systemPrompt?: string }) {
+  // ACT: referenceIds 可能含 sound 卡，位次不等于 Picture 序号（sound 计 <Audio N>，其余计 <Picture N>）。
+  // 换算统一交给 videoGenerationNode 的 referenceTags 按 dataType 完成（index.vue:212-224），引擎层不替换。
+  const body = clip.prompt.integratedMultimodalDescription.trim();
+  // ACT: 全片风格/系统提示词是工程级约束，拼在正文开头而不是另起一段，避免破坏 H3 的六段结构。
   const style = global?.style?.trim() ?? "";
   const systemPrompt = global?.systemPrompt?.trim() ?? "";
   const constraint = [style && `全片风格：${style}`, systemPrompt && `全片约束：${systemPrompt}`].filter(Boolean).join("\n");
-  if (constraint) first = `${constraint}\n${first}`;
+  const first = constraint ? `${constraint}\n${body}` : body;
+  const head = first && `${officialSection.test(body) ? "" : `${clip.referenceIds.length ? "detailed_description" : "integrated_multimodal_description"}: `}${first}`;
+  const soundscape = clip.prompt.overallSoundscape.trim();
+  const music = clip.prompt.nonDiegeticMusic.trim();
   const tail = [
     soundscape && `overall_soundscape: ${soundscape}`,
     music && `non_diegetic_music: ${music}`,
   ].filter(Boolean);
-  // ACT: 有参考时走 ref2va 六段（promptWriting.md:13/:18，runbook §十一 实测 task=ref2va）；
-  // subject_definitions / summary / retention_analysis 由 referenceIds 与资产卡确定性生成，不编造内容。
-  if (references.length) {
-    return [
-      `subject_definitions:\n${references.map((item, index) =>
-        `<Subject ${index + 1}> 是 ${item.id}（${item.name}${item.kind ? `，用途：${item.kind}` : ""}），来自 ${item.tag}。`).join("\n")}`,
-      `summary:\nreference generation：本段参考 ${references.length} 个资产以保持与相邻镜头的身份一致性。`,
-      `retention_analysis:\n${references.map((_item, index) =>
-        `<Subject ${index + 1}> 的身份、外貌与服装 fully_preserved；本段只描述姿态、动作、镜头与光线，不复述其形貌。`).join("\n")}`,
-      first && `detailed_description:\n${first}`,
-      ...tail,
-    ].filter(Boolean).join("\n\n");
-  }
-  return [first && `integrated_multimodal_description: ${first}`, ...tail].filter(Boolean).join("\n\n");
+  return [head, ...tail].filter(Boolean).join("\n\n");
 }
 
 async function callTool(bridge: CanvasBridge, nodeId: string, name: string, args: Record<string, unknown>, signal: AbortSignal) {
@@ -260,16 +242,27 @@ export async function findCardNodeIds(call: CanvasCall, cardId: string, signal: 
   return (listed?.nodes ?? []).filter(node => labelMatchesCard(node.label ?? "", cardId)).map(node => node.id);
 }
 
-/** 画布上按分镜号找已有的视频生成节点，用于 clip.nodeId 悬空时复用而不是再建一个孤儿。 */
+/**
+ * 画布上按分镜号找已有的视频生成节点，用于 clip.nodeId 悬空时复用而不是再建一个孤儿。
+ * 只复用还没出过视频的节点：同 label 的节点可能已经有好几个（每次重新生成追加一个版本），
+ * 已产出视频的是旧版本，复用会把旧视频覆盖掉。
+ */
 async function findClipNodeId(call: CanvasCall, clip: MtrackClip, signal: AbortSignal) {
   const listed = await call({ name: "findCanvasNodes", args: { query: clip.clipId, limit: 50 } }, signal) as { nodes?: { id: string; label?: string; type?: string }[] };
   const matched = (listed?.nodes ?? []).filter(node => (node.type ?? "").includes("videoGenerationNode") && labelMatchesCard(node.label ?? "", clip.clipId));
-  return matched[0]?.id;
+  for (const node of matched) {
+    const detail = await readNodeDetail(call, node.id, signal);
+    if (detail && !videoPathOf(detail.outputs)) return node.id;
+  }
+  return undefined;
 }
 
 /**
  * 复用镜头上已有的节点；节点已被删除就按分镜号找回同名节点；都没有才新建。
  * ACT: 工程里的 nodeId 可能指向已删除的节点（画布被改写后常见），直接复用会让后续 nodeTools 报「节点不存在」。
+ * LSC 对齐：重新生成是追加新版本而不是覆盖旧结果——节点已产出视频时不再复用，旧节点保留旧视频的
+ * 画布引用（attempts 历史里的 nodeId 仍能反查旧视频）。没出过视频的节点（pending/failed 的镜）照旧复用，
+ * 不为从未产出的镜头堆节点。
  */
 async function ensureNode(options: {
   bridge: CanvasBridge;
@@ -281,7 +274,10 @@ async function ensureNode(options: {
 }) {
   const { bridge, clip, index, available, origin, signal } = options;
   const call = requireCall(bridge);
-  if (clip.nodeId && await readNodeDetail(call, clip.nodeId, signal)) return clip.nodeId;
+  if (clip.nodeId) {
+    const detail = await readNodeDetail(call, clip.nodeId, signal);
+    if (detail && !videoPathOf(detail.outputs)) return clip.nodeId;
+  }
   const reused = await findClipNodeId(call, clip, signal);
   if (reused) return reused;
   const type = resolveNodeType(available, "videoGenerationNode");
@@ -334,7 +330,7 @@ async function resolveReferenceSources(options: {
 
 /**
  * 把 referenceIds 对应的画布节点连到视频节点 in 端口，并按 referenceIds 顺序写 referenceOrder。
- * 只要有参考没接上就整镜报错：部分接线会让 {{ref N}} 编号与声明错位，生成结果对不上参考图还看不出原因。
+ * 只要有参考没接上就整镜报错：部分接线会让 {{ref N}} 编号与 referenceIds 顺序错位，生成结果对不上参考图还看不出原因。
  */
 async function connectReferences(options: {
   bridge: CanvasBridge;
@@ -443,9 +439,9 @@ async function dispatchClips(options: {
     try {
       nodeId = await ensureNode({ bridge, clip, index, available, origin, signal });
       // 参考接不上时 connectReferences 抛错：不带着缺失参考上场（runbook §一 步 2）。
-      const linked = await connectReferences({ bridge, clip, nodeId, cards, signal });
+      await connectReferences({ bridge, clip, nodeId, cards, signal });
       await configureNode({ bridge, clip, nodeId, videoModel, signal });
-      const prompt = buildPrompt(clip, cards, linked > 0, global);
+      const prompt = buildPrompt(clip, global);
       if (!prompt.trim()) throw new Error("该镜没有提示词，请先补全画面描述");
       await callTool(bridge, nodeId, "node:setPrompt", { prompt }, signal);
       await hooks.onStart(clip, nodeId);

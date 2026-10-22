@@ -162,7 +162,7 @@
 | E1 | 中 | 九宫格拆图建多轨工程（`imageGridSplit.vue:137-169`：每格一镜、`assetIndex` 每格一卡、`referenceIds` 指向该格、已存在不覆盖）在 `packages/skills` 全目录搜 `imageGridSplit\|宫格\|拆图` **0 命中** | **已修复**：`generationRunbook.md:462-484` 新增 §15.7「九宫格拆图 → 自动建多轨工程」，写清落盘形状与「只建工程不派工」边界 |
 | E2 | 中 | 拆图工程不产出 `plan/assetReport.json`，而 `multitrackEditor.vue:382-411 loadReport` 曾把报告与索引耦合（任一缺失整个进 catch，`indexCards` 不赋值 → 参考列表空 → 拆图工程的参考绑定形同虚设） | **已修复（代码）**：`loadReport` 拆两个独立 try + `isMissingFile` 只认 ENOENT；报告缺失时 `report=undefined` → 状态面板显示「未读取到 plan/assetReport.json」而非「未发现明显问题」（避免误判校验已跑）。该口径已写进 runbook §15.7 |
 | E3 | 低 | `multitrackNode/readme.md:10` 写「9 个节点函数」，实际 11 个（9 自带 + `useNodeReferences.ts:52/:67` 自动注册 2）；`ext/multitrack/readme.md:9`「不在扩展内做生成」与同文件 `:11` 自相矛盾 | **已修复**：前者先改为 11、再随本轮新增 4 个函数统一到 15（13 自带 + 2 引用）；后者改为「不在扩展内直连供应商」，矛盾消除 |
-| E4 | 低 | 界面与文档把 `global.style`/`global.systemPrompt` 描述成「渲染时拼到段尾」，实际 `directDispatch.ts:109-113` 是**前拼到画面正文开头**（不新增段落标题） | **已修复**：`multitrackEditor.vue:126` UI 标签 + `multitrackTemplate.md:28`/`:71` + `docs/multitrackProductionPlan.md:82` + `docs/multitrackGapAudit.md:182` 共 5 处口径统一为「拼到画面正文开头」 |
+| E4 | 低 | 界面与文档把 `global.style`/`global.systemPrompt` 描述成「渲染时拼到段尾」，实际 `directDispatch.ts:101-106` 是**前拼到画面正文开头**（不新增段落标题） | **已修复**：`multitrackEditor.vue:126` UI 标签 + `multitrackTemplate.md:28`/`:71` + `docs/multitrackProductionPlan.md:82` + `docs/multitrackGapAudit.md:182` 共 5 处口径统一为「拼到画面正文开头」（行号已按 ref2va 六段改造后的代码校正：现为 `:101-106`） |
 
 **E 系列遗留**：D7/D8/D9 三项 P2 已在 `mtrack-leftover` 轮次补齐；`docs/` 目录下的历史方案文档（`multitrackProductionPlan.md`、`requirementMultitrackAgentBridge.md`、`videoGuideMultitrackDesign.md`）仍保留 `agentDispatch.ts` 等旧描述，但文件头均已加「历史设计，勿作引导」标注，不再误导维护者。
 
@@ -190,7 +190,7 @@
 | 工具与路由共用执行段 | `packages/tools/planOperator/src/compositeRun.ts` |
 | 整理本镜提示词（新增） | `apps/server/src/routes/mtrack/rewriteShot.ts`（POST，`providerId`+`modelId`+三段提示词，可选 `rules` 覆盖内置整理规则；返回 `{text, requiresReview:true}`，工程级 `generating` 时 409 拒绝）；入口 `clipEditor.vue` 「整理本镜提示词」→ `multitrackEditor.vue` `rewriteClipPrompt`（自动取第一个可用文本模型）→ **待采用区块**：`adoptRewrite` 按 `pending.clipId` 人工采用才写回 `prompt.integratedMultimodalDescription`，环境声/配乐不动；`rewriteBasisChanged` 守原文/时长/规则三者，变化即禁用采用；runbook §15.8 |
 | 九宫格拆图建工程 | `packages/nodes/imageNode/src/components/imageGridSplit.vue` `writeSplitProject`（每格一镜 + `assetIndex` 每格一卡 + `referenceIds` 指向该格；`plan/story.mtrack` 与 `plan/assetIndex.json` 已存在则抛「已存在，未覆盖」）；runbook §15.7 |
-| 全片风格 / 系统提示词拼装位置 | `directDispatch.ts:109-113`：前拼到画面正文**开头**，不新增段落标题；两字段为空时输出逐字节一致 |
+| 全片风格 / 系统提示词拼装位置 | `directDispatch.ts:101-106`：前拼到画面正文**开头**，不新增段落标题；两字段为空时输出逐字节一致（行号已按 ref2va 六段改造后的代码校正，原引 `:109-113`） |
 | 参考缩略图解析 | `multitrackEditor.vue` `resolveReferenceThumbnails`：`card.nodeId` 优先，为空回落 `findCardNodeIds` label 匹配，取并集去重 |
 | planOperator composite 文档口径 | `assetCard/SKILL.md:64`；`generationRunbook.md` §15.6 |
 | `planOperator dispatch` 只出清单 | `packages/tools/planOperator/src/index.ts` composite/dispatch action |

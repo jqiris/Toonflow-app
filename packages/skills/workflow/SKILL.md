@@ -799,7 +799,7 @@ A9 只定义**最终交付外壳**，不改变 A2–A8 的任何执行逻辑。
 
 - Seedance 2.0 → 使用 A9.1
 - Seedance 2.5 → 使用 A9.2
-- freevideo / MiniMax-H3（默认） → 不使用 A9 外壳；直连例外按 [canvas 片段制作指南](../canvas/references/videoProduction.md) 的三段式写（素材定义 + 顺序镜头 + 风格约束），多轨工程按 [assetCard runbook](../assetCard/references/generationRunbook.md) §四 的 `clips[].prompt` 三字段写（正文英文，段首写字段名 `integrated_multimodal_description:` / `overall_soundscape:` / `non_diegetic_music:`，接参考图时按 §四 的 ref2va 六段，由 `buildPrompt` 自动拼装）。PART A 的 A1–A8、A11–A12 执行规则仍适用。
+- freevideo / MiniMax-H3（默认） → 不使用 A9 外壳；直连例外按 [canvas 片段制作指南](../canvas/references/videoProduction.md) 的三段式写（素材定义 + 顺序镜头 + 风格约束），多轨工程按 [assetCard runbook](../assetCard/references/generationRunbook.md) §四 的 `clips[].prompt` 三字段写（正文英文，段首写字段名 `integrated_multimodal_description:` / `overall_soundscape:` / `non_diegetic_music:`，接参考图时按 §四 的 ref2va 六段**由写作者直接写进正文**（段首标签与 `<Picture N>` 都自己写；引擎只拼「全片风格 / 全片约束」前缀、正文原样透传，不再代写任何段，也不再追加参考顺序声明行））。PART A 的 A1–A8、A11–A12 执行规则仍适用。
 
 如果 A9 的表达方式与 A2–A8、A11–A12 的执行规则发生冲突，以执行规则为准。
 

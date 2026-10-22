@@ -94,7 +94,7 @@ grep -n 'getCanvasContext' apps/web/src/pages/workspace/panels/canvas/canvasHost
 ```
 node:getConfig        → 读当前 matchingModes / 可用 duration / resolution / ratio（不许跳过）
 node:setConfig        → { providerId, modelId, duration=seconds, resolution, ratio, generateAudio, mode }
-node:setPrompt        → 三字段拼装 + 段尾参考顺序声明（{{ref N}} 与 referenceIds 顺序一致）
+node:setPrompt        → 写作者已写好的官方六段正文（含 `<Picture N>`；引擎只拼全片风格/全片约束前缀、正文原样透传，不代写任何段、不追加参考顺序声明）
 node:generateVideo    → 空调用；记录提交时刻
 node:getGenerationStatus → 追终态；换轮/换会话前先 getCanvasNodes({fields:["outputs"]}) 读产物
 mtrackUpdate          → 回写 status/nodeId/assetPath/attempts（planOperator，走 §4 契约）

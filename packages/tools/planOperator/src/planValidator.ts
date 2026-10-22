@@ -195,26 +195,55 @@ export function validatePlan(input: ValidateInput): Finding[] {
     }
   }
 
-  // ---- V7：提示词 {{ref N}} 引用位在 referenceIds 范围内，且每个 N 至少出现一次 ----
+  // ---- V7：提示词参考标记：官方 <Picture N>/<Video N>/<Audio N> 落在本镜同类型参考的编号范围内 ----
+  // 官方格式允许某张参考图只在 subject_definitions/retention_analysis 里出现，因此不再要求「每个编号至少出现一次」。
+  // 同一编号在正文里反复复述是正常写法（如「同前述画面中的男人」），因此不查重号、也不跨字段合并比较。
   for (const clip of mtrack.clips) {
     const refs = clip.referenceIds ?? [];
     const prompt = clip.prompt ?? { integratedMultimodalDescription: "", overallSoundscape: "", nonDiegeticMusic: "" };
-    const texts = [prompt.integratedMultimodalDescription, prompt.overallSoundscape, prompt.nonDiegeticMusic];
-    const declared = new Set<number>();
-    for (const text of texts) {
+    const fields: Array<[string, string]> = [
+      ["integratedMultimodalDescription", prompt.integratedMultimodalDescription ?? ""],
+      ["overallSoundscape", prompt.overallSoundscape ?? ""],
+      ["nonDiegeticMusic", prompt.nonDiegeticMusic ?? ""],
+    ];
+    // 参考类型来自资产卡：sound 是音频，其余（character/scene/prop/keyframe）都算画面参考。
+    const kinds = refs.map(id => cardById.get(id)?.kind);
+    const hasUnknownKind = kinds.some(kind => kind === undefined);
+    const pictureCount = kinds.filter(kind => kind !== "sound").length;
+    const audioCount = kinds.filter(kind => kind === "sound").length;
+    // ACT: 保守上限。官方标记按类型各自从 1 编号（生成侧在 packages/nodes/videoGenerationNode/src/index.vue 的
+    // referenceTags 里逐项换算），所以每种标记的上限是「本镜该类型参考的数量」；
+    // 视频参考在资产卡里没有独立类型（keyframe 与图片同属 picture），拿不到类型就退回参考总数当上限；
+    // 参考卡缺失 kind 时也退回总数。这只是保守兜底、只防明显越界，宁可漏报也不把合法旧工程误判成 error；
+    // 类型级精确校验留给生成时换算（升级路径：多轨 story 补上参考媒体类型后即可收紧）。
+    const boundOf = (type: string) => {
+      if (type === "video" || hasUnknownKind) return refs.length;
+      return type === "audio" ? audioCount : pictureCount;
+    };
+    for (const [field, text] of fields) {
       if (!text) continue;
+      // 旧格式占位标记：旧工程遗留，读入时仍要被看见（不静默漏检），但只提示迁移、不再按 error 卡住。
       // ref 两侧空白均可省略：{{ref1}}、{{ref 1}}、{{ ref1 }}、{{ REF 1 }} 都命中。
-      for (const matched of text.matchAll(/\{\{\s*ref\s*(\d+)\s*\}\}/gi)) declared.add(Number(matched[1]));
-    }
-    if (refs.length === 0 && declared.size === 0) continue;
-    for (const n of [...declared].sort((left, right) => left - right)) {
-      if (n < 1 || n > refs.length) {
-        findings.push({ rule: "V7", level: "error", message: `片段 ${clip.clipId} 提示词含越界引用 {{ref ${n}}}，参考范围为 1..${refs.length}`, ref: clip.clipId });
+      const legacy = [...text.matchAll(/\{\{\s*ref\s*(\d+)\s*\}\}/gi)].map(matched => matched[0]);
+      if (legacy.length) {
+        findings.push({
+          rule: "V7",
+          level: "warning",
+          message: `片段 ${clip.clipId} 的 ${field} 仍含旧格式参考标记 ${legacy.join("、")}：旧格式，建议迁移为 MiniMax H3 官方标记 <Picture N>/<Video N>/<Audio N>`,
+          ref: clip.clipId,
+        });
       }
-    }
-    for (let k = 1; k <= refs.length; k++) {
-      if (!declared.has(k)) {
-        findings.push({ rule: "V7", level: "error", message: `片段 ${clip.clipId} 提示词未声明第 ${k} 个参考 {{ref ${k}}}（参考总数 ${refs.length}）`, ref: clip.clipId });
+      // 官方标记大小写与内部空白均容忍：<Picture 1>、< picture 1 >、<PICTURE  1> 都命中。
+      for (const matched of text.matchAll(/<\s*(picture|video|audio)\s*(\d+)\s*>/gi)) {
+        const type = matched[1]!.toLowerCase();
+        const n = Number(matched[2]);
+        const bound = boundOf(type);
+        if (n < 1 || n > bound) {
+          const label = `${type[0]!.toUpperCase()}${type.slice(1)}`;
+          const scope = type === "audio" ? "音频" : type === "video" ? "视频" : "画面";
+          const range = bound ? `1..${bound}` : "空（本镜没有该类型参考）";
+          findings.push({ rule: "V7", level: "error", message: `片段 ${clip.clipId} 提示词含越界标记 <${label} ${n}>，本镜${scope}参考编号范围为 ${range}`, ref: clip.clipId });
+        }
       }
     }
   }

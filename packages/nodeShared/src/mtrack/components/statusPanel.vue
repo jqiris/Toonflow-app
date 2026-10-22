@@ -5,17 +5,30 @@
         <span class="panelTitle">生成状态</span>
         <span class="panelMeta">状态：{{ statusLabel }} · 节点：{{ clip?.nodeId || "—" }}</span>
       </header>
-      <div v-if="versionNodes.length > 1" class="versionRow">
-        <span class="panelMeta">历史版本</span>
-        <el-select v-model="activeVersion" size="small" class="versionSelect" placeholder="当前版本">
-          <el-option v-for="(node, index) in versionNodes" :key="node" :label="`版本 ${index + 1} · ${node.slice(0, 8)}`" :value="node" />
+      <div v-if="clip" class="versionRow">
+        <span class="panelMeta">视频版本</span>
+        <el-select v-model="activeVersion" size="small" class="versionSelect" placeholder="选择视频版本">
+          <el-option v-for="item in versionOptions" :key="item.node" :label="item.label" :value="item.node" />
         </el-select>
+        <span class="panelMeta">共 {{ versionOptions.length }} 版</span>
+      </div>
+      <div v-if="otherVersions.length" class="versionActions">
+        <span class="panelMeta">设为默认</span>
+        <el-button
+          v-for="item in otherVersions"
+          :key="item.node"
+          size="small"
+          text
+          :disabled="defaultLocked"
+          :title="item.node"
+          @click="emit('setDefaultVersion', item.node)"
+        >版本 {{ item.number }}</el-button>
       </div>
       <div v-if="previewUrl" class="preview">
         <video :src="previewUrl" controls playsinline preload="metadata" @error="onPreviewError" />
       </div>
       <p v-else-if="previewError" class="panelHint">预览失败：{{ previewError }}</p>
-      <p v-else-if="clip?.assetPath || activeVersion" class="panelHint">正在取预览地址…</p>
+      <p v-else-if="clip?.assetPath || (activeVersion && activeVersion !== clip?.nodeId)" class="panelHint">正在取预览地址…</p>
       <p v-else class="panelHint">尚未生成视频（无结果文件）。</p>
       <ul v-if="clip?.attempts.length" class="attempts">
         <li v-for="(attempt, index) in clip.attempts" :key="index">
@@ -62,21 +75,45 @@ const props = defineProps<{
   acquireNodeVideo?: (nodeId: string) => Promise<string>;
 }>();
 
+const emit = defineEmits<{
+  (event: "setDefaultVersion", nodeId: string): void;
+}>();
+
 /** 必须用 computed：statusLabel 要跟着选中片段变，静态取值会把标签永远钉在首次选中的那个片段上。 */
 const statusLabel = computed(() => props.clip ? clipStatusLabels[props.clip.status] : "未选中");
 const versionNodes = computed(() => clipVersionNodes(props.clip));
-const activeVersion = ref("");
+/**
+ * 版本列表对齐 LSC：attempts 序天然旧→新，当前默认（clip.nodeId）排在最后并打「默认」标记。
+ * 历史工程里 nodeId 可能不在 attempts 里，补到末尾，保证当前默认始终可选。
+ */
+const versionOptions = computed(() => {
+  const current = props.clip?.nodeId ?? "";
+  const nodes = versionNodes.value;
+  const list = current && !nodes.includes(current) ? [...nodes, current] : nodes;
+  return list.map((node, index) => ({
+    node,
+    number: index + 1,
+    label: `版本 ${index + 1} · ${node.slice(0, 8)}${node === current ? " · 默认" : ""}`,
+    isDefault: node === current,
+  }));
+});
+const otherVersions = computed(() => versionOptions.value.filter((item) => !item.isDefault));
+/** 生成中不切默认：这条镜的产物还在写，切了会和回写抢同一份工程。 */
+const defaultLocked = computed(() => props.clip?.status === "generating");
+/** 默认选中「默认版本」（clip.nodeId）：单版本时也把版本号摆在明面上，切片段跟随新片段。 */
+const activeVersion = ref(props.clip?.nodeId ?? "");
 const previewUrl = ref("");
 const previewError = ref("");
 let releasePreview: (() => void) | undefined;
 let previewJob = 0;
 
 watch(() => props.clip?.clipId, () => {
-  activeVersion.value = "";
+  activeVersion.value = props.clip?.nodeId ?? "";
 });
 
-watch(versionNodes, (nodes) => {
-  if (!nodes.includes(activeVersion.value)) activeVersion.value = "";
+/** 生成完成后默认会换成新节点：预览跟随到新默认。用户主动选历史版本时 nodeId 不变，不会被覆盖。 */
+watch(() => props.clip?.nodeId, (node) => {
+  activeVersion.value = node ?? "";
 });
 
 /**
@@ -152,6 +189,18 @@ function onPreviewError(event: Event) {
 .versionSelect {
   flex: 1;
   min-width: 0;
+}
+
+.versionActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.versionActions :deep(.el-button) {
+  margin-left: 0;
+  padding: 0 6px;
 }
 
 .panelBlock {

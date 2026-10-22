@@ -71,7 +71,7 @@
 | V4 | error | 构图卡 `KF*` 必须至少一个母版参考，不得无参考出图 |
 | V5 | — | **未实现**（该块只产出 V9 warning） |
 | V6 | — | **未实现**（画布入边数与参考数的一致性并入 V15，且 V15 需传 `snapshot`） |
-| V7 | error | 提示词三字段（`integratedMultimodalDescription`/`overallSoundscape`/`nonDiegeticMusic`）里的 `{{ref N}}` 必须落在 `1..referenceIds.length` 内（越界即拒），且每个 N 至少出现一次（缺失即拒）；同一 N 可重复；`referenceIds` 为空时出现 `{{ref N}}` 按越界报。写法空白不敏感、大小写不敏感：`{{ref1}}`、`{{ref 1}}`、`{{ ref1 }}`、`{{ REF 1 }}` 均命中 |
+| V7 | error / warning | 提示词三字段（`integratedMultimodalDescription`/`overallSoundscape`/`nonDiegeticMusic`）里的**官方标记** `<Picture N>`/`<Video N>`/`<Audio N>` 只查越界：N 必须落在该类型参考的数量上限内（画面 = 非 sound 卡数、音频 = sound 卡数、视频或参考卡缺 `kind` 时 = 参考总数），越界即 error；**不查重号**、也**不要求**每个编号出现。旧工程遗留的 `{{ref N}}` 只报迁移 warning「旧格式，建议迁移为 MiniMax H3 官方标记」。官方标记匹配大小写与内部空白不敏感（`/<\s*(picture|video|audio)\s*(\d+)\s*>/gi`） |
 | V8 | error | 片段图片参考 ≤4；声音参考 ≤1；视频参考 ≤1 |
 | V9 | warning | 文本类卡仍声明了参考 |
 

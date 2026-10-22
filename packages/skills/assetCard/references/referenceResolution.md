@@ -1,4 +1,4 @@
-﻿# 参考接线解析规则
+# 参考接线解析规则
 
 > 权威依据：[docs/assetCardWorkflowPlan.md](../../../../docs/assetCardWorkflowPlan.md) §1.2、§1.3、§2 K2；[docs/assetCardWorkflowPlanReview.md](../../../../docs/assetCardWorkflowPlanReview.md) A4；[docs/localStoryCanvasStudy.md](../../../../docs/localStoryCanvasStudy.md) §2（LSC 原实现的降级来源）。
 > 卡片本身的写法见 [资产卡模板](assetCardTemplate.md)。解析结果写进工作区 `plan/assetIndex.json`，由 `planOperator` 的 `resolve` / `build` 产出（P2 之前由 Agent 按本规则手写）。
@@ -11,7 +11,7 @@
 1. **显式 > 派生 > 兜底**：作者写明的字段永远优先，Agent 不自行猜测；三级都没命中就**不接线**，按原文独立生成。
 2. **解析必须可复现**：同一样例在两次不同会话里产出字节级相同的 `refs`（`order`、`nodeId` 之外），否则视为漂移。
 3. **守卫优先于结果**：哪怕三级里的某一级给出了候选，只要被任一道守卫拦下，一律记为不接线并写 `warnings`。
-4. **接线即顺序**：`refs` 数组顺序 = 生成时参考图顺序 = 视频节点 `{{ref N}}` 的编号来源，见 [多轨工程模板](multitrackTemplate.md) §四。
+4. **接线即顺序**：`refs` 数组顺序 = 画布参考位次 = 生成时参考顺序，它决定 MiniMax H3 **官方标记的编号基数**（`<Picture N>` / `<Audio N>` / `<Video N>` 按参考类型各自从 1 起算，互不共用序号），见 [多轨工程模板](multitrackTemplate.md) §四。旧工程遗留的 `{{ref N}}` 是画布引用位次（图片、音频、视频、文本混排），只作旧工程兼容：引擎层原样透传，到节点 wire 层才由 `videoGenerationNode` 的 `referenceTags` 按 `dataType` 换算成 `<Picture N>` / `<Video N>` / `<Audio N>`。
 
 ### 1.1 编号规范化（写入索引前统一执行）
 
@@ -161,4 +161,6 @@
 | 群像/闪回、否定命中 | 记入 `warnings`（`identityConflict` 等） |
 | 索引规范化（补零/大写/`SC` 优先） | V1（编号唯一与合法性） |
 
-解析结果与画布入边、`{{ref N}}` 的逐位对账见 [多轨工程模板](multitrackTemplate.md) §四，对应 V6/V7/V15。
+解析结果与画布入边、参考顺序（`data.referenceOrder`）的逐位对账见 [多轨工程模板](multitrackTemplate.md) §四，对应 V6/V7/V15。
+
+对账口径是**官方标记**：参考顺序决定 `<Picture N>` / `<Audio N>` / `<Video N>` 的编号基数，三类按参考类型各自从 1 起算、互不共用序号。注意 `referenceIds` 的位次是画布引用位次，可能混入 `kind: "sound"` 的音频卡（V8 把图片 ≤4 与音频分开计），所以 `<Picture N>` 只数图片类参考、`<Audio N>` 只数 sound 卡，**只有参考全是图片时位次才等于 Picture 序号**。旧工程遗留的 `{{ref N}}` 用的是同一套画布引用位次，只作旧工程兼容：引擎层不改写、原样透传，到 wire 层才按类型换算成官方标记；新写的正文一律直接用官方标记，不要按「官方 N = 旧标记 N」换算。

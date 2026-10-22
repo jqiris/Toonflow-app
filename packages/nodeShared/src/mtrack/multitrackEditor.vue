@@ -87,6 +87,7 @@
             @remove="removeClip"
             @accept="acceptClip"
             @rewrite="rewriteClipPrompt"
+            @regenerate="regenerateClip"
             :rewriteBusy="rewriteBusy"
             :rewritePending="pendingRewrite"
             @adoptRewrite="adoptRewrite"
@@ -104,6 +105,7 @@
             :readError="reportReadError"
             :acquireUrl="acquireUrl"
             :acquireNodeVideo="acquireNodeVideo"
+            @setDefaultVersion="setDefaultVersion"
           />
         </div>
       </div>
@@ -525,6 +527,32 @@ async function acquireNodeVideo(nodeId: string) {
   const url = video?.value?.url || "";
   if (!url) throw new Error("该版本节点上没有视频产物");
   return url;
+}
+
+/**
+ * 切换默认版本：历史版本是独立的画布节点，产物落盘名带随机后缀，只能经画布桥按 nodeId 读
+ * outputs.video.value.url；它就是工作区相对路径，与 clip.assetPath 同一口径，合成成片按
+ * accepted 镜的 assetPath 取文件，所以写回后自动生效。不追加 attempts：切换不是一次生成尝试。
+ */
+async function setDefaultVersion(nodeId: string) {
+  // onPatch 按当前选中项写回：await 期间换了镜头就不能再落，否则会把 nodeId/assetPath 写到另一条镜上。
+  const clip = selectedClip.value;
+  if (!clip) return;
+  const call = readBridge()?.call;
+  if (!call) return ElMessage.error("画布未打开，无法切换默认版本");
+  let detail: Awaited<ReturnType<typeof readNodeDetail>>;
+  try {
+    detail = await readNodeDetail(call, nodeId, AbortSignal.timeout(5000));
+  } catch (reason) {
+    return ElMessage.error(reason instanceof Error ? reason.message : "读取画布节点失败");
+  }
+  if (!detail) return ElMessage.error("该版本对应的画布节点已不存在");
+  const video = detail.outputs?.video as { value?: { url?: string } } | undefined;
+  const url = video?.value?.url || "";
+  if (!url) return ElMessage.error("该版本节点上没有视频产物");
+  if (selectedClip.value?.clipId !== clip.clipId) return ElMessage.warning("选中的镜头已变化，请重新切换默认版本");
+  onPatch({ nodeId, assetPath: url });
+  ElMessage.success(`已切换默认版本：${nodeId.slice(0, 8)}`);
 }
 
 async function runSave(): Promise<void> {
@@ -1169,6 +1197,27 @@ async function generateSelection() {
   }
 }
 
+/**
+ * UI 入口：重新生成本镜。LSC 对齐——已生成/已验收的镜也直接重跑，强制 includeFinished；
+ * 每次重跑在画布上追加一个新版本节点（旧版本保留，历史版本列表可切回），新视频完成后成为该镜默认。
+ * 与 generateSelection 同构：先弹本地校验 warning，再交给 launchDispatch 不等流。
+ */
+async function regenerateClip() {
+  if (dispatching.value || batchHandle.value) return;
+  const clip = selectedClip.value;
+  if (!clip) return;
+  const picked = pickDispatchTargets([clip.clipId], true);
+  if (picked.issue) return ElMessage.warning(picked.issue);
+  try {
+    const { batchId } = await launchDispatch([clip.clipId], { includeFinished: true });
+    ElMessage.success(`批次 ${batchId.slice(0, 8)} 已开始重新生成，新版本完成后自动成为默认视频`);
+  } catch (reason) {
+    // 与 generateSelection 完全一致：aborted（卸载/取消竞态）静默，其余弹错。
+    if ((reason as { silent?: boolean })?.silent) return;
+    ElMessage.error(reason instanceof Error ? reason.message : "发起生成失败");
+  }
+}
+
 /** UI 入口：批次存在即允许请求取消（在途派工流由 launchCancel 抢占），并发/校验错误弹文按 launch* 抛错展示。 */
 async function cancelBatch() {
   if (!activeBatchId.value) return;
@@ -1223,7 +1272,7 @@ async function resumeBatch(payload: { clips: string[]; includeFinished: boolean 
   return { batchId };
 }
 
-/** 面板「单镜重试」：只派这一镜，且强制 includeFinished 覆盖已生成/失败的旧结果。被拒同样抛错。 */
+/** 面板「单镜重试/重新生成本镜」：只派这一镜，强制 includeFinished；已生成的镜生成新版本追加（旧视频保留），failed 的镜照常重跑。被拒同样抛错。 */
 async function retryClip(payload: { clipId: string }): Promise<{ batchId: string }> {
   if (dispatching.value || batchHandle.value) throw new Error("生成进行中，请先暂停或取消后重试单镜");
   return await launchDispatch([payload.clipId], { includeFinished: true });

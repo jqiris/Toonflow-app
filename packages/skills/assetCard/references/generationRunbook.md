@@ -30,12 +30,12 @@
 |---|---|---|
 | 1 | **校验该镜（已实现 V1/V2/V4/V7/V8/V9/V11–V15）** | 用 `planOperator` 的 `validate` 读当前工程与画布快照，error 级发现清零才继续。**失败即停，不创建节点**；warning 可继续但须向用户说明。校验器**没有**实现 V3/V5/V6/V10，这四条靠本表后面几步人工核对兜住（见 §九） |
 | 1.5 | **判定节点分支** | 读同一份 `dispatch` 返回的 `currentState.nodeId`（`packages/tools/planOperator/src/index.ts:393`）：**非空 → 走「复用分支」**，不 `addNode`，后续只对该 `nodeId` 做 `node:getConfig`/`node:setPrompt`/`node:setConfig`（重生成换提示词与配置，不换节点）；**空 → 走「新建分支」**，按步 2 建节点。复用分支下步 11 回写的 `nodeId` 与旧值相同——`mtrackUpdate` 只允许写 `status`/`nodeId`/`assetPath`/`attempts` 四项（`packages/tools/planOperator/src/index.ts:86-108`、`:301`），不会产生新 id。**没有 dispatch 返回时先按 §十三.1 出清单再进门** |
-| 2 | **建节点** `addNode` | 视频生成节点；`label` 用 `场<场景号>·片段<片段号>·视频`（1–200 字符）。已有 `nodeId` 的重生成**复用该节点**，不新建 |
+| 2 | **建节点** `addNode` | 视频生成节点；`label` 用 `场<场景号>·片段<片段号>·视频`（1–200 字符）。已有 `nodeId` 的重生成**复用该节点**，不新建（这是 §十三 agent 逐镜编排口径；多轨编辑器的直连派工是另一条链路，重生成会新建节点追加版本，见 §15.9） |
 | 3 | **接线** `connectNodes` | 资产图节点 → 视频节点 `in` 端口，**严格按 `referenceIds` 数组顺序**逐条连 |
 | 4 | **核对顺序** `getCanvasNodes` | `fields: ["ports"]`、`dataKeys: ["referenceOrder", "mode", "model"]`，比对实际引用顺序与 `referenceIds` 是否逐位一致；不一致先修连线，不进入下一步。**这一步是人工核对，不是等校验器报错**：V15 只在 `validate` 收到 `snapshot`（`packages/tools/planOperator/src/index.ts:80-84`，形如 `{ nodes, incomingEdges, referenceOrder? }`，其中 `nodes[]` 只接受 `id`/`type`/`status`/`outputs`）时才生效，不传快照它一句话都不会说；V6（画布入边数 = 参考数）在 `planValidator.ts` 里根本没有实现，只能靠这里逐位比对 |
 | 5 | **读配置** `node:getConfig` | 读当前 `matchingModes`、可用 `duration`、`resolution`、`ratio`。**不许跳过本步**——模式按当前实际参考集合决定（见 §三） |
 | 6 | **下发配置** `node:setConfig` | `{ providerId: "freevideo", modelId: "MiniMax-H3", duration: <seconds>, resolution: <768P\|2K>, ratio, generateAudio, mode }`；`duration` 必须等于 `seconds` 且为 **2–60 的整数** |
-| 7 | **写提示词** `node:setPrompt` | 三字段拼装 + 段尾参考顺序声明，格式见 §四 |
+| 7 | **写提示词** `node:setPrompt` | 写作者已写在 `clips[].prompt` 里的官方六段原样下发（段首标签与 `<Picture N>` 都由写作者直接写，引擎不代写），格式见 §四 |
 | 8 | **展示方案并等批准** | 按 §七 的话术逐项展示，得到**明确同意**后才继续；未同意不调用生成 |
 | 9 | **生成** `node:generateVideo` | 空调用；记录提交时刻 |
 | 10 | **追终态** `node:getGenerationStatus` | 同一轮内追到终态；换轮/换会话必须先按 §二 读产物再判断 |
@@ -85,32 +85,33 @@ overall_soundscape: <环境声与动作声>
 non_diegetic_music: <配乐>
 ```
 
-接了参考图且校验通过时按 **ref2va 六段**拼装（引擎按 media.references 判定 task=ref2va，见 §十一 实测记录），前三段由 `referenceIds` 与资产卡生成，不编造：
+接了参考图的片段用 **MiniMax H3 官方 ref2va 六段**，六段全部由写作者直接写，引擎不再代写任何一段：
 
 ```text
-subject_definitions:
-<Subject 1> 是 C01（<名称>，用途：character），来自 {{ref 1}}。
+integrated_multimodal_description: subject_definitions:
+<Subject 1> = C01（<名称>，用途：character）
 
 summary:
-reference generation：本段参考 N 个资产以保持与相邻镜头的身份一致性。
+<一两句总述本镜>
 
 retention_analysis:
-<Subject 1> 的身份、外貌与服装 fully_preserved；本段只描述姿态、动作、镜头与光线，不复述其形貌。
+<Subject 1> (appears in [Shot 1]): fully_preserved - <列出保留的特征：外貌、服装、空间结构、形制>
 
-detailed_description: <画面正文>
+detailed_description:
+[Shot 1] <画面正文>
 
 overall_soundscape: <环境声与动作声>
 
 non_diegetic_music: <配乐>
 ```
 
-> `node:setPrompt` 之外的逐镜路径由 `packages/nodeShared/src/mtrack/directDispatch.ts` 的 `buildPrompt` 自动按上述结构拼装，Agent 不必手写六段。
+> 旧版 `packages/nodeShared/src/mtrack/directDispatch.ts` 的 `buildPrompt` 会自动拼 `subject_definitions` / `summary` / `retention_analysis` 三段与段尾「本段参考顺序」声明行；**该行为已删除**。现在 `buildPrompt`（`packages/nodeShared/src/mtrack/directDispatch.ts:97-114`）只做两件事：在正文最前面拼（有则拼的）「全片风格 / 全片约束」前缀；正文漏写官方段首时才补字段名（有参考 → `detailed_description: `，无参考 → `integrated_multimodal_description: `）。旧工程遗留的 `{{ref N}}` 占位标记**引擎层原样透传、不改写**，编号换算在节点 wire 层：`packages/nodes/videoGenerationNode/src/index.vue:225-238` 的 `generationPrompt` 用 `referenceTags(refList)` 按 `dataType` 逐位替换成 `<Picture N>` / `<Video N>` / `<Audio N>`（仅 freevideo 生效）。六段原文（含段首标签）由写作者写进 `integratedMultimodalDescription`，Agent 与引擎都不代写。
 
-- 段尾追加句完整格式与 `{{ref N}}` 的对应规则见 [多轨工程模板](multitrackTemplate.md) §四；**没有参考的段落不写该句**，也不写空的 `{{ref 1}}`。
-- **写法容忍空白**：V7 用 `/\{\{\s*ref\s*(\d+)\s*\}\}/gi`（`packages/tools/planOperator/src/planValidator.ts:207`）匹配，`{{ref1}}`、`{{ref 1}}`、`{{ ref1 }}`、`{{ REF 1 }}` 都算命中。存量画布数据里无空白的 `{{refN}}` 是常见写法，不要因为「看着不规范」而手改成带空格的版本——那会让 `referenceOrder` 与实际提示词对不上。校验器只认数字是否落在 `1..referenceIds.length` 内且每个位次都出现。
-- **素材排他**：已写入 `{{ref N}}` 的资产，正文不得再详细描述其外貌/空间/形制，只写姿态、动作、镜头、光线、情绪。
+- **写法**：段首标签自己写、段间空一行；六段的完整可照抄示例与编号规则见 [多轨工程模板](multitrackTemplate.md) §四。
+- **参考形貌必写**：挂了参考的资产，正文仍要在首次出现处写清「被引用的特征 + 画面位置 + 当前动作」，环境与光照照常写。MiniMax H3 官方 full-reference 规范（`references/ref-en.txt` §0 Description detail、§5.3）明确要求 detailed_description 尽可能详细，官方完整示例里同一场景的特征在 `subject_definitions`、`retention_analysis`、`detailed_description` 三处都写了一遍。正文只写 `<Picture 1>` 不写特征，模型只能靠一张图去猜，画面更容易跑偏。
+- **编号按类型各自算**：`<Picture N>` 只数图片类参考、`<Audio N>` 只数 sound 卡、`<Video N>` 只数视频，各自从 1 起。`referenceIds` 的位次是**画布引用位次**，不是 Picture 序号——它可能混入 `kind: "sound"` 的音频卡（V8 把图片 ≤4 与音频分开计），所以混排时要按类型重新数：`referenceIds: ["C01", "A01", "C03"]` 的对照关系是「C01 → `<Picture 1>`、A01 → `<Audio 1>`、C03 → `<Picture 2>`」，**不能**把 A01 写成 `<Picture 2>`；**只有参考全是图片时**位次才恰好等于 Picture 序号（那是特例，不是通例）。V7（`packages/tools/planOperator/src/planValidator.ts:237`，正则 `/<\s*(picture|video|audio)\s*(\d+)\s*>/gi`，大小写与内部空白都容忍）只查**越界**：编号要落在该类型参考的数量范围内（画面上限 = 非 sound 卡数、音频上限 = sound 卡数、视频或参考卡缺 `kind` 时上限 = 参考总数，`packages/tools/planOperator/src/planValidator.ts:209-222`）；**不查重号**，也**不要求**每个编号都出现。旧工程遗留的 `{{ref N}}` 用的是同一套画布引用位次，属迁移对象：引擎层不改写、原样透传，到 wire 层才按类型换算成官方编号，V7 只报 warning「旧格式，建议迁移」，不阻断生成，但新写的提示词不要再使用该写法，也不要按「官方 N = 旧标记 N」去换算。
 - 对白保持 `<d>[Chinese]…</d>`；说话人 ID 全片唯一。
-- 每改一次 `referenceIds` 或连线，都要重新核对段尾句并重新 `setPrompt`（R9：编号漂移）。
+- 每改一次 `referenceIds` 或连线，都要重新核对正文里的 `<Picture N>` 位次并重新 `setPrompt`（R9：编号漂移）。
 
 ---
 
@@ -127,7 +128,7 @@ non_diegetic_music: <配乐>
 | `continuity` | 本轮 | 说明 |
 |---|---|---|
 | `start` | ✅ 支持 | 首段或独立段，不接前镜 |
-| `cut` | ✅ 支持 | 硬切，靠 `{{ref N}}` 维持资产一致 |
+| `cut` | ✅ 支持 | 硬切，靠 `<Picture N>` 维持资产一致 |
 | `continue` | ⛔ **未实现**（M4） | 首帧续接需从上一镜视频截帧，截帧能力在视频播放器内；实现后 `mode` 变 `startFrameOptional`、参考图仅 2 张（首/尾），且须告知用户这是相对 LSC latent 续写的**能力降级** |
 
 遇到 `continue` 的片段：停下并告知用户该分支未实现，改走 `cut` 或等待 M4；不自行用首帧模式冒充续接。
@@ -154,7 +155,7 @@ non_diegetic_music: <配乐>
 - 数量：1 段（本镜）
 - 时长：8 秒（整数，2–60 内）
 - 分辨率：768P；画幅 9:16；含声音：是
-- 参考：{{ref 1}}=C01、{{ref 2}}=C03、{{ref 3}}=C05、{{ref 4}}=SC02（图 4 张）
+- 参考：`<Picture 1>`=C01、`<Picture 2>`=C03、`<Picture 3>`=C05、`<Picture 4>`=SC02（图 4 张）
 - 费用：免费 · 本机 GPU 生成，无计费
 确认生成这一镜吗？
 ```
@@ -167,7 +168,7 @@ non_diegetic_music: <配乐>
 ## 八、失败处理
 
 1. **读错误**：先取 `getGenerationStatus` 的 `error` 或供应商报错原文，连同 `attempts` 一起看，不猜。
-2. **核对参数**：`seconds` 是否 2–60 整数、`resolution` 是否 `768P`/`2K`、`ratio` 是否合法、`generateAudio` 与 `mode` 是否与当前参考集合匹配、`{{ref N}}` 是否越界或重号。
+2. **核对参数**：`seconds` 是否 2–60 整数、`resolution` 是否 `768P`/`2K`、`ratio` 是否合法、`generateAudio` 与 `mode` 是否与当前参考集合匹配、正文里的 `<Picture N>`/`<Audio N>`/`<Video N>` 是否越界（V7 上限按类型计数、**不查重号**；旧工程遗留的 `{{ref N}}` 只会报迁移 warning，不阻断生成）。
 3. **不自行「跑通」**：不得自行降分辨率、缩时长、换模型、删参考来让提交通过；这些都会改变交付语义，必须报告用户由其决定。
 4. **同类错误找不到原因就停下**：连续同类失败（如两次都是模式不匹配）仍定位不了，停止批量，把错误原文、当前参数、参考集合交回用户，不进入下一镜。
 
@@ -185,7 +186,7 @@ non_diegetic_music: <配乐>
 | 步 1.5 节点分支判定 | 无校验规则，纯人工判定：`dispatch` 的 `currentState.nodeId` 非空走复用、空走新建（`packages/tools/planOperator/src/index.ts:393`、`:301`） |
 | 步 4 顺序核对 | 人工核对：V15 仅在 `validate` 传入 `snapshot` 时生效，否则自己用 `getCanvasNodes` 逐位比对 `referenceOrder`；V6 未实现，同一步手工比入边数 |
 | 步 6 配置下发 | V8（参考数不超实际模式上限）、V12（`seconds`/`resolution`/`ratio`）；**V10 未实现**——`data.mode` 是否被静默切走要在这一步用 `node:getConfig` 的 `matchingModes` 人工核对 |
-| 步 7 提示词 | V7（`{{ref N}}` 在 `1..参考数` 内且每个 N 至少出现一次） |
+| 步 7 提示词 | V7（三类官方标记编号**只查越界**：画面 = 非 sound 卡数、音频 = sound 卡数、视频或参考卡缺 `kind` 时 = 参考总数；**不查重号**、缺席某个编号不报错；旧工程遗留的 `{{ref N}}` 只报迁移 warning） |
 | 步 11 回写 | V13（`generated`/`accepted` 的 `nodeId`/`assetPath` 必须存在） |
 | 合成（M4） | V14（只拼 `accepted`，顺序连续无空洞）：`planOperator` 的 `composite` 动作产出合成清单并写 `plan/composite.json`，`assetPath` 不可读同样报错；`execute=true` 时先逐段 ffprobe 实测尺寸/帧率/像素格式/音轨参数，与首段不一致直接报错挡在编码之前（concat 滤镜要求全段一致；实测中尺寸不一致会报 `Conversion failed!`，帧率与音轨不一致则静默出错片），声明 `seconds` 与实测时长差 >1s 只记规格提示 |
 
@@ -217,7 +218,7 @@ non_diegetic_music: <配乐>
 
 ### wire 层实测备忘（重提依据，后续改造 freevideo.ts 时对照）
 
-1. `{{refN}}` 只是画布 promptInput 的 mention chip（`packages/nodeShared/src/useNodeReferences.ts:27` value=`{{ref ${index + 1}}}`），**引擎不替换**，wire 层须转换成 H3 `<Picture N>` 标签。
+1. 画布 promptInput 里的 `{{refN}}` 只是 mention chip 的旧格式文本（`packages/nodeShared/src/useNodeReferences.ts:27` value=`{{ref ${index + 1}}}`，全局序号、含音频视频与文本），属兼容入口：引擎层原样透传（`buildPrompt` 不改写），由 wire 层的 `referenceTags`（`packages/nodes/videoGenerationNode/src/index.vue:212-224`）按 `dataType` 换算成 H3 官方 `<Picture N>`/`<Video N>`/`<Audio N>`。新写的提示词直接写官方标记，不要手抄 chip 的全局序号。
 2. FreeVideo agent 接口不接受 `width`/`height` 直传（422 `/ must be a permitted field combination`）；分辨率用 **`megapixels` 命中 sizes 档位表**（capabilities.sizes：1.0→1376×768、0.98→1344×768、1.056→1408×800、1.5→1664×928、2.0→1920×1088）。provider 现行 `megapixels` 计算公式据此修正。
 3. `POST /media` 返回 **201 Created**（响应含 `{file, url, ...}`），取 `file` 字段进 `spec.media.references`；判定成功须用 2xx 而非 `=== 200`。
 4. 分辨率档位表（provider 内已知成功档）：960×544/0.5、1184×672/0.75、1344×768/0.98、1376×768/1.0、1664×928/1.5、1920×1088/2.0。
@@ -258,7 +259,7 @@ non_diegetic_music: <配乐>
 
 ### 13.0 批次开工前（四条，缺一条就停）
 
-1. **校验清零**：`planOperator` `{ action: "validate", mtrackPath: "plan/story.mtrack" }`，error 级发现必须为 0。`dispatch` 不做校验，它只出清单——把校验省掉等于带着 `{{ref N}}` 越界上场。注意校验器只覆盖 V1/V2/V4/V7/V8/V9/V11–V15（见 §九），V10 的 mode 漂移这一轮仍要自己盯。
+1. **校验清零**：`planOperator` `{ action: "validate", mtrackPath: "plan/story.mtrack" }`，error 级发现必须为 0。`dispatch` 不做校验，它只出清单——把校验省掉等于带着 `<Picture N>` 越界上场。注意校验器只覆盖 V1/V2/V4/V7/V8/V9/V11–V15（见 §九），V10 的 mode 漂移这一轮仍要自己盯。
 2. **参考结算存在**：`plan/assetIndex.json` 必须已由 `resolve`/`build` 产出。缺它时 `dispatch` 仍返回清单，但每镜的 `referencePlan[].kind` 变成 `"未知"`、`nodeId` 为 `null`，并在文本尾追加 `参考结算缺 <refId>（建议先跑 resolve/build）`（`packages/tools/planOperator/src/index.ts:338`）。
 3. **定批次号**：`batch:<uuid>`，全批次唯一。多轨界面发起时由界面生成（`packages/nodeShared/src/mtrack/multitrackEditor.vue` 的 `generateSelection` 内 `crypto.randomUUID()`），会话内发起时自建；`node:dispatchGenerate` 派发的批次号由编辑器生成并在返回里给出（§十五·五）。
 4. **确认 `allowBuild` 没被关**：`mtrackUpdate` 受它限制，关闭时报「mtrackUpdate 不可用：allowBuild 已关闭」（`packages/tools/planOperator/src/index.ts:16` 的默认值 `true`、`packages/tools/planOperator/src/index.ts:302` 的门禁）。`mtrackRead`/`dispatch`/`assemble` 是只读，不受影响——但批量生成要靠 `mtrackUpdate` 回写，关了就只能出清单一轮游。
@@ -293,10 +294,10 @@ planOperator { action: "dispatch", path: "plan/story.mtrack", from: "S003", to: 
 | a | `mtrackUpdate` 先占位 | `{ action: "mtrackUpdate", expectedUpdatedAt: <13.1 的 updatedAt>, updates: [{ clipId, status: "generating", nodeId: <复用或新建>, attempts: [<原有全部 attempts>, { at: <ISO>, nodeId, status: "generating", error: "batch:<批次号>" }] }] }`。**`attempts` 是整数组替换**（`packages/tools/planOperator/src/index.ts:107`），必须把读到的旧记录一起带上，否则历史被抹掉 |
 | b | 建节点（`currentState.nodeId` 为空时） | 画布 `addNode`，`type` 取 `getCanvas({ include: ["nodeTypes"] })` 里真实存在的类型（真实类型带 `remote-` 前缀，见 `apps/web/src/pages/workspace/panels/canvas/canvasDrop.ts:106`）；`label` 用 `场<场景号>·片段<片段号>·视频`。**已有 `nodeId` 的重生成复用该节点，跳过本步** |
 | c | 接线 | `connectNodes`，按 `referencePlan` 顺序把资产节点 → 视频节点 `in` 端口；单批上限 64 条（`packages/tools/canvas/src/runtime.ts:61`） |
-| d | 核对参考顺序 | `nodeTools` `node:getReferenceOrder`（`packages/nodeShared/src/useNodeReferences.ts:52`）；不一致用 `node:setReferenceOrder`（`packages/nodeShared/src/useNodeReferences.ts:67`）按 `referencePlan` 顺序重写。`{{ref N}}` 的编号**只由 `referenceOrder` 决定**，不看连线手势 |
+| d | 核对参考顺序 | `nodeTools` `node:getReferenceOrder`（`packages/nodeShared/src/useNodeReferences.ts:52`）；不一致用 `node:setReferenceOrder`（`packages/nodeShared/src/useNodeReferences.ts:67`）按 `referencePlan` 顺序重写。参考编号（旧标记 `{{ref N}}` 的全局序号，生成时换算成官方 `<Picture N>`/`<Audio N>`/`<Video N>`）**只由 `referenceOrder` 决定**，不看连线手势 |
 | e | 读配置 | `nodeTools` `node:getConfig`（`packages/nodes/videoGenerationNode/src/index.vue:399`），取 `matchingModes`/`duration`/`resolution`/`ratio`/`audio` |
 | f | 下发配置 | `nodeTools` `node:setConfig`（`packages/nodes/videoGenerationNode/src/index.vue:411`）：`{ providerId, modelId, duration: <seconds>, resolution, ratio, generateAudio, mode }`；`duration` 必须等于 `seconds` 且为 2–60 整数 |
-| g | 写提示词 | `nodeTools` `node:setPrompt`（`packages/nodes/videoGenerationNode/src/index.vue:450`），三字段 + 段尾参考顺序声明（§四） |
+| g | 写提示词 | `nodeTools` `node:setPrompt`（`packages/nodes/videoGenerationNode/src/index.vue:450`），写作者已写好的官方六段原样下发（段首标签与 `<Picture N>` 由写作者直接写，§四） |
 | h | 展示方案等批准 | 按 §七 逐项展示（含费用行），得到明确同意才继续 |
 | i | 生成 | `nodeTools` `node:generateVideo`（`packages/nodes/videoGenerationNode/src/index.vue:462`），空参调用，记录提交时刻 |
 | j | 追终态 | `nodeTools` `node:getGenerationStatus`（`packages/nodeShared/src/useNodeGeneration.ts:11-16`），按 §二 三条纪律判断 |
@@ -364,7 +365,7 @@ planOperator { action: "mtrackRead", path: "plan/story.mtrack" }   // 读全量�
 |---|---|---|
 | 轨道条 `trackBar` | `packages/nodeShared/src/mtrack/components/trackBar.vue` 的 `selectClip`（发出 `select` 事件带 `additive`/`range`） | 单击 = 单选；`Ctrl`/`⌘` 单击 = 离散多选；`Shift` 单击 = 以当前单选为锚选连续区间（选段语义实现在 `packages/nodeShared/src/mtrack/multitrackEditor.vue` 的 `onSelect`） |
 | 派工条 `dispatchBar` | `packages/nodeShared/src/mtrack/components/dispatchBar.vue` | 显示「已选 N 段 · 首镜–末镜（前 5 个标题…）」或未选段提示（同文件 `rangeText` 计算属性） |
-| 复选框「包含已生成」 | `packages/nodeShared/src/mtrack/components/dispatchBar.vue` | 默认只派 `pending`/`failed`；勾上才把 `generated`/`accepted` 一起纳入（过滤逻辑在 `multitrackEditor.vue` 的 `dispatchableClips`） |
+| 复选框「包含已生成」 | `packages/nodeShared/src/mtrack/components/dispatchBar.vue` | 默认只派 `pending`/`failed`；勾上才把 `generated`/`accepted` 一起纳入（过滤逻辑在 `multitrackEditor.vue` 的 `dispatchableClips`）。**纳入的已生成镜重跑是追加新版本、旧视频保留**（§15.9） |
 | 按钮「生成选中段」 | `packages/nodeShared/src/mtrack/components/dispatchBar.vue`（发出 `generate` 事件） | 调 `multitrackEditor.vue` 的 `generateSelection` |
 | 按钮「取消批次」 | `packages/nodeShared/src/mtrack/components/dispatchBar.vue`（仅在 `batchId` 非空时出现，发出 `cancel` 事件） | 调 `multitrackEditor.vue` 的 `cancelBatch` |
 | 按钮「批量生成…」 | `packages/nodeShared/src/mtrack/components/dispatchBar.vue`（发出 `openBatch` 事件） | 打开批量生成面板，按「起始分镜 + 生成镜数」逐镜串行（§15.4） |
@@ -372,16 +373,17 @@ planOperator { action: "mtrackRead", path: "plan/story.mtrack" }   // 读全量�
 | 按钮「合成成片」 | `packages/nodeShared/src/mtrack/components/dispatchBar.vue`（`hasAccepted` 为真才可点，发出 `composite` 事件） | 把 `accepted` 镜合成为成片（§15.6） |
 | 跳过提示 | `packages/nodeShared/src/mtrack/components/dispatchBar.vue` | 「跳过 N 段（已生成/生成中）」 |
 | 全片比例 / 视频模型下拉 | `packages/nodeShared/src/mtrack/components/trackBar.vue:6-29`（`trackControls` 区，「全片比例」「视频模型」两个字段，改的是**工程级** `global`） | 全片比例是 `ratioOptions` 五档下拉，改后经 `updateRatio` 事件落到 `multitrackEditor.vue` 的 `handleRatioChange`；视频模型经 `updateModel` 落到 `handleModelChange`。两者都是 `node:editProject` 的 `setGlobal{ratio,model}` 的 UI 形态。**模型下拉取不到画布模型列表时降级为只读文本**（`trackBar.vue:84` 的 `hasModelOptions`：`modelOptions` 为空不渲染下拉，只展示 `modelLabel` 文本），此时切换模型的 UI 缺席，口径「模型在哪改」= 对话里让 agent 用 `node:editProject` `setGlobal{model}` 改 |
-| 单镜参考图缩略图卡 | `packages/nodeShared/src/mtrack/components/referenceList.vue`（挂在 `components/clipEditor.vue:85` 的「参考顺序」折叠区里） | 资产索引卡片逐张展示：缩略图（编辑器经画布桥反查节点产物，`multitrackEditor.vue` 的 `resolveReferenceThumbnails`，取不到显示「无预览」）、名称、kind 与选中序号徽标。点卡片加入参考、已选卡片右上角 ✕ 移除；**调序靠已选序号按钮「N. <id> ←」把该卡左移一位**（`move(index, -1)`）——序号即 `{{ref N}}` 编号，动序后 agent 要按 §四 重新核对段尾参考顺序句。图片参考上限 4（V8，`referenceList.vue:37` 的提示与 `toggle` 的硬上限） |
+| 单镜参考图缩略图卡 | `packages/nodeShared/src/mtrack/components/referenceList.vue`（挂在 `components/clipEditor.vue:85` 的「参考顺序」折叠区里） | 资产索引卡片逐张展示：缩略图（编辑器经画布桥反查节点产物，`multitrackEditor.vue` 的 `resolveReferenceThumbnails`，取不到显示「无预览」）、名称、kind 与选中序号徽标。点卡片加入参考、已选卡片右上角 ✕ 移除；**调序靠已选序号按钮「N. <id> ←」把该卡左移一位**（`move(index, -1)`）——序号即画布参考位次（旧标记 `{{ref N}}` 的全局序号，生成时按类型换算成官方 `<Picture N>`/`<Audio N>`/`<Video N>`），动序后 agent 要按 §四 重新核对正文里的官方标记位次。图片参考上限 4（V8，`referenceList.vue:37` 的提示与 `toggle` 的硬上限） |
 | 按钮「整理本镜提示词」 | `packages/nodeShared/src/mtrack/components/clipEditor.vue` 的单镜动作区（发出 `rewrite` 事件），接线在 `multitrackEditor.vue` 的 `rewriteClipPrompt` | 用文本模型把本镜草稿整理成画面描述（§15.8）。**结果不自动采用**：先落「待采用」区块，人工核对后点「采用整理结果」才写回；原文/时长/整理规则在待采用期间变化即禁用采用（一致性守卫）。整理规则可留空用服务端内置；本镜或本批正在生成时服务端 **409** 拒绝。按钮在提示词三段全空时禁用 |
-| 双栏布局 | `multitrackEditor.vue:74` 的 `.editorWorkspace` | 左栏 `editorMain`（单镜编辑器 `clipEditor`）+ 右栏 `editorSide`（状态栏 `statusPanel`），`grid-template-columns: 1.45fr 230px`（`multitrackEditor.vue:1417-1419`）——右边 230px 起的是状态/校验栏，窄窗口会折行 |
-| 单镜「历史版本」下拉 | `packages/nodeShared/src/mtrack/components/statusPanel.vue:8-13`（`versionRow`） | **仅 `versionNodes.length > 1` 时渲染**；`versionNodes` 由 `mtrackProject.ts` 的 `clipVersionNodes` 按 `attempts` 里出现过的 nodeId 去重得出，即同一镜重生成过多轮才有历史。选项文案「版本 N · <nodeId 前 8 位>」，切到历史版本经 `acquireNodeVideo` 反查该节点的真实产物路径做预览（落盘名带随机后缀，只有编辑器能反查） |
+| 双栏布局 | `multitrackEditor.vue:74` 的 `.editorWorkspace` | 左栏 `editorMain`（单镜编辑器 `clipEditor`）+ 右栏 `editorSide`（状态栏 `statusPanel`），`grid-template-columns: 1.45fr 230px`（`multitrackEditor.vue:1672-1678`）——右边 230px 起的是状态/校验栏，窄窗口会折行 |
+| 按钮「重新生成本镜」 | `packages/nodeShared/src/mtrack/components/clipEditor.vue:17` 的单镜动作行（发出 `regenerate` 事件），接线在 `multitrackEditor.vue` 的 `regenerateClip` | **已生成/已验收的镜也能直接重跑**：强制按 `includeFinished: true` 发起单镜派工，每次在画布上**新建一个视频节点追加版本**（旧节点与旧视频保留，见 §15.9），新版本完成后自动成为该镜默认。仅该镜 `status === "generating"` 时按钮禁用；有批次在跑时 `regenerateClip` 直接返回、不发新批次 |
+| 单镜「历史版本」下拉 +「设为默认」 | `packages/nodeShared/src/mtrack/components/statusPanel.vue:8-13`（`versionRow`）、`:14-25`（`versionActions`）；数据来自 `packages/nodeShared/src/mtrack/mtrackProject.ts` 的 `clipVersionNodes` | **`versionOptions.length > 1` 才渲染**（即该镜有两个以上成功版本）：列表按 `attempts` 旧→新、按 nodeId 去重；`clip.nodeId` 那一版文案追加「· 默认」——正常刚生成完时它是最末项，**切到旧版本后默认标记落在中间那一项，列表顺序不变**；历史工程里 `nodeId` 不在 `attempts` 时补到末尾，保证当前默认始终可选。选项文案「版本 N · <nodeId 前 8 位>」，选中即预览（历史版本经编辑器 `acquireNodeVideo` 按 nodeId 反查该节点 `outputs.video.value.url`，落盘名带随机后缀，只有编辑器能反查）。「设为默认」行的按钮只列非默认版本，点击经 `multitrackEditor.vue` 的 `setDefaultVersion` 把 `clip.nodeId`/`assetPath` 切回该版本——**不改 `status`、不追加 `attempts`**；该镜 `generating` 时禁用。本轮**没有「删除版本」入口** |
 
 ### 15.2 点下去之后发生了什么（链路）
 
 1. 本地前置校验（不发请求）：无选段 → 「请先在轨道上选择要生成的分镜」；选段内无可生成镜头 → 「选段内没有可生成的分镜，可勾选「包含已生成」后再试」；无工作目录 → 「当前没有工作目录，无法发起生成」（均在 `packages/nodeShared/src/mtrack/multitrackEditor.vue` 的 `generateSelection`）。
 2. 取画布上下文：先 `inject("agentCanvas")`、回落 `inject("canvas")`（`multitrackEditor.vue` 的 `readBridge`/`acquireBridge`，最多短轮询约 2 秒）。取不到 → 「未取到画布上下文：请先打开画布并等待加载完成，再回到多轨界面发起生成」。**为什么需要 `agentCanvas`**：多轨在文档面板内时画布面板不 active，而 `getCanvasContext()` 只在 active 时返回值（`apps/web/src/pages/workspace/panels/canvas/canvasHost.vue`）；宿主为此另给了一条不判 active 的入口 `getAgentCanvasContext`（同文件，经 `provide("agentCanvas", …)` 暴露给面板树，见 `apps/web/src/pages/workspace/index.vue`）。
-3. **编辑器自己经画布 nodeTools 逐镜生成，不经过对话模型**（`packages/nodeShared/src/mtrack/directDispatch.ts` 的 `beginDirectDispatch`）。链路逐镜串行：复用 `clip.nodeId` 或 `addNode` 建视频生成节点 → `getCanvasNodes` + `connectNodes` + `node:setReferenceOrder` 接参考图（尽力而为，失败不阻断）→ `node:setConfig`（时长/分辨率/比例/音频，工程有 `global.model` 时并下发 `providerId`/`modelId`，即 freevideo/MiniMax-H3）→ `node:setPrompt`（`buildPrompt` 按 assetCard runbook §四 口径拼三字段 + 参考顺序声明）→ `node:generateVideo`（立即返回 `{status:"generating"}`）→ 轮询 `node:getGenerationStatus`（2 秒一次，单镜上限 1 小时）→ 取 `outputs.video.value.url` 作 `assetPath`。
+3. **编辑器自己经画布 nodeTools 逐镜生成，不经过对话模型**（`packages/nodeShared/src/mtrack/directDispatch.ts` 的 `beginDirectDispatch`）。链路逐镜串行：`ensureNode` 决定复用还是**新建视频节点**（`clip.nodeId` 指向的节点已产出视频就不复用，改新建同 label 节点追加版本，见 §15.9）→ `getCanvasNodes` + `connectNodes` + `node:setReferenceOrder` 接参考图（尽力而为，失败不阻断）→ `node:setConfig`（时长/分辨率/比例/音频，工程有 `global.model` 时并下发 `providerId`/`modelId`，即 freevideo/MiniMax-H3）→ `node:setPrompt`（`buildPrompt` 只拼全片前缀、正文原样透传——旧标记也不改写，编号换算在节点 wire 层按 `dataType` 做；六段由写作者写在正文里，§四）→ `node:generateVideo`（立即返回 `{status:"generating"}`）→ 轮询 `node:getGenerationStatus`（2 秒一次，单镜上限 1 小时）→ 取 `outputs.video.value.url` 作 `assetPath`。
 4. 回写：`multitrackEditor.vue` 的 `writeClipRun` 在每次状态变化时直接改内存工程并推进 `dirtyVersion`（800ms 防抖写盘），所以 `clip.status`/`nodeId`/`assetPath` 与 `attempts` 都实时落盘——`attempts[].error` 记 `batch:<uuid>`（发起/成功/失败同一批次号，失败为 `batch:<uuid> <原文>`），取消记 `status:"cancelled"`。**这条链路不再有 agent 参与，`node:dispatchGenerate` 与界面按钮是同一实现**。
 5. 取消：`launchCancel` 先 abort 本地轮询，再对批次内 `status==="generating"` 且 `attempts` 命中 `batch:<id>` 的镜头逐个 `node:cancelGeneration`，成功即回写 `pending` + `attempts` 追加 `cancelled`。
 6. 提示文案：成功后「批次 <前 8 位> 已开始生成，进度见轨道与右侧状态」（`multitrackEditor.vue` 的 `generateSelection`）。
@@ -397,6 +399,8 @@ planOperator { action: "mtrackRead", path: "plan/story.mtrack" }   // 读全量�
 - 想只跑一部分镜：`Ctrl`/`⌘` 单击逐个加选，选段是**有序 clipId 列表**，不是只能连续区间。
 - 想在对话里跑同一批：直接报「按 S003–S007 批量生成」，agent 走 §十三（那条路径才会用对话模型编排）。
 - 两条路径的纪律一致，`batchId` 是唯一归属键：界面入口写的是同一份 `attempts` 记录，agent 之后读 `mtrackRead` 能看到同一批次号。
+- 要**换一版**（旧版本保留）：单镜点「重新生成本镜」，或勾「包含已生成」后再选段生成——都是追加新版本，不是覆盖（§15.9）。
+- 要**切回旧版本**：状态栏「历史版本」下拉选中旧版本预览，点对应「版本 N」按钮设为默认，再重新点「合成成片」（`accepted` 不用改，合成取当前默认版本的 `assetPath`）。
 
 ### 15.4 批量面板（`batchPanel.vue`）
 
@@ -438,9 +442,11 @@ planOperator { action: "mtrackRead", path: "plan/story.mtrack" }   // 读全量�
 
 ### 15.6 合成成片（界面按钮 + `POST /api/mtrack/composite`）
 
-**前置条件（最容易搞错）**：只有 `status === "accepted"` 的镜头进合成。界面按钮可用条件是 `hasAccepted`（`components/dispatchBar.vue:12`，`multitrackEditor.vue:564`）——一个 accepted 都没有时按钮直接禁用，服务端也会报「没有 accepted 片段可合成：请先在多轨编辑器里把要合成的片段验收为 accepted」（`packages/tools/planOperator/src/composite.ts:182`）。`generated` 只表示视频落地，**不参与合成**；验收入口在单镜编辑器（`components/clipEditor.vue:13` 的「验收」/「取消验收」）。
+**前置条件（最容易搞错）**：只有 `status === "accepted"` 的镜头进合成。界面按钮可用条件是 `hasAccepted`（`components/dispatchBar.vue:12`，`multitrackEditor.vue:715`）——一个 accepted 都没有时按钮直接禁用，服务端也会报「没有 accepted 片段可合成：请先在多轨编辑器里把要合成的片段验收为 accepted」（`packages/tools/planOperator/src/composite.ts:182`）。`generated` 只表示视频落地，**不参与合成**；验收入口在单镜编辑器（`components/clipEditor.vue:13` 的「验收」/「取消验收」）。
 
-流程（`multitrackEditor.vue:582-605` 的 `handleComposite`）：
+- 合成按 `clip.assetPath` 取文件，也就是该镜**当前默认版本**：在状态栏把旧版本「设为默认」后重新合成即用旧版本文件，`status` 仍是 `accepted`、不需要重新验收（版本机制见 §15.9）。
+
+流程（`multitrackEditor.vue:733-756` 的 `handleComposite`）：
 
 1. 点「合成成片」→ 先发 `execute:false`：只校验并写清单 `plan/composite.json`（`executed:false`），返回 `{ segments, output, specWarnings, … }`；
 2. 二次确认弹窗「将合成 N 段，输出到 plan/composite.mp4」，按钮「开始合成」/「取消」；
@@ -497,7 +503,7 @@ data: { manifestPath: "plan/composite.json", source, output, executed, segments,
 | 1 | **结果不自动采用** | 请求成功**不改工程**：整理稿进单镜编辑器的「待采用」区块（左原文只读、右整理结果可编辑），点「采用整理结果」才经 `onPatch` 写回画面描述；点「放弃」清空区块，原文一字不动。**任何路径都不自动覆盖原文**，界面提示只报「已整理，请核对后采用」这类文案，不报「已替换」 |
 | 2 | **一致性守卫（`rewriteBasis`）** | 发请求时记下 `basis = { 原文画面描述, clip.seconds, 本次 rules }`；处于待采用状态时这三者任一变化（手改画面描述、改时长、改整理规则），「采用整理结果」禁用并提示「本镜原文、时长或整理规则已变化，请核对整理结果后重新整理」——必须重新整理，不能拿旧稿套新基线 |
 | 3 | **生成中 409 拒绝** | 服务端在调模型前读 `plan/story.mtrack`（`apps/server/src/routes/mtrack/rewriteShot.ts:42-66` 的 `isGenerating`）：**任一 `clip.status === "generating"`**（本镜或本批别的镜）就返回 **HTTP 409** +「正在生成，请结束后再整理提示词，避免模型同时占显存」（`:72`，在解析模型之前，判定的是状态真源而不是某个浏览器里的批次号）；工程文件不存在或全无 `generating` 时放行。理由同 LSC：整理要额外加载一个文本模型，与视频生成抢显存。界面把 409 文案原样透出，不改成「整理失败」 |
-| 4 | **规则可配置、默认内置** | 请求 `rules` 可选（≤20000 字符）：非空覆盖内置规则，空/缺省回落到服务端内置 `rewriteRules` 五条（只整理不新增剧情、保留画面事实、英文输出、不输出解释、`{{ref N}}` 原样保留）。界面的「整理规则」输入留空即「用服务端内置规则」。**规则是本次一次性指定，不落盘、不随工程保存、不进 `global`**——刷新编辑器即回内置，想固定口径就每次粘贴 |
+| 4 | **规则可配置、默认内置** | 请求 `rules` 可选（≤20000 字符）：非空覆盖内置规则，空/缺省回落到服务端内置 `rewriteRules` 五条（只整理不新增剧情、保留画面事实、英文输出、不输出解释、MiniMax H3 官方标记 `<Picture N>`/`<Video N>`/`<Audio N>` 原样保留）。界面的「整理规则」输入留空即「用服务端内置规则」。**规则是本次一次性指定，不落盘、不随工程保存、不进 `global`**——刷新编辑器即回内置，想固定口径就每次粘贴 |
 
 **接口**（`apps/server/src/routes/mtrack/rewriteShot.ts`，`POST /api/mtrack/rewriteShot`）：
 
@@ -506,7 +512,7 @@ body: {
   directory: string,
   providerId: string, modelId: string,     // 文本模型；界面自动取第一个可用文本模型
   prompt: { integratedMultimodalDescription, overallSoundscape, nonDiegeticMusic },  // 三段至少一段非空，否则报「请先填写本镜提示词再整理」（:23-24）
-  referenceIds?: string[],                 // ≤4，仅拼成「参考图编号：{{ref 1}} = C01 …」告诉模型，不写工程（:80）
+  referenceIds?: string[],                 // ≤4，仅拼成「参考图编号：<Picture 1> = C01 …」告诉模型，不写工程（:80）
   rules?: string                           // 可选，≤20000（:22）；空/缺省用内置 rewriteRules（:88）
 }
 success data: { text: string, requiresReview: true }   // :100
@@ -516,11 +522,55 @@ success data: { text: string, requiresReview: true }   // :100
 
 - **第二种 409 不是「生成中」**：`plan/story.mtrack` 读得到但 JSON 解析失败时也回 409（`:61`），提示先重新保存工程。看到这句就修工程，不要当成模型报错重试。
 - **`requiresReview: true` 是契约字段，不是提示文案**（`:99-100` 的注释即此意）：前端据此走待采用流程，不直接写回；看到它为 `true` 就当「草稿」处理。
-- 内置 `rewriteRules`（`:27-35`）五条硬纪律：只整理不新增、保留全部画面事实与镜头语言、英文按「主体与动作 → 环境与空间 → 镜头与运动 → 光线与色彩 → 氛围」成一段、不输出解释/小标题/Markdown、`{{ref N}}` 原样保留。传了 `rules` 就整段替换它，不是追加。
-- `rules` 只影响**整理**这一步，不参与视频生成的提示词拼装（生成只读 `clip.prompt` 三字段 + 参考顺序声明，§四）。
-- 采用后仍要按 §四 复核：整理稿里的 `{{ref N}}` 必须与本镜 `referenceIds` 位次一致（V7），段尾参考顺序声明不能丢；改过 `referenceIds` 或连线就要重新核对并重新 `setPrompt`。
+- 内置 `rewriteRules`（`:27-35`）五条硬纪律：只整理不新增、保留全部画面事实与镜头语言、英文按「主体与动作 → 环境与空间 → 镜头与运动 → 光线与色彩 → 氛围」成一段、不输出解释/小标题/Markdown、MiniMax H3 官方标记 `<Picture N>`/`<Video N>`/`<Audio N>` 原样保留。传了 `rules` 就整段替换它，不是追加。
+- `rules` 只影响**整理**这一步，不参与视频生成的提示词拼装（生成只读 `clip.prompt` 三字段原文，六段由写作者写在正文里，§四）。
+- 采用后仍要按 §四 复核：整理稿里的官方标记必须与本镜参考位次一致（V7）。整理稿若带出旧的 `{{ref N}}` 写法，属迁移对象——改写成 `<Picture N>` 再下发；改过 `referenceIds` 或连线就要重新核对并重新 `setPrompt`。
 - 整理只做结构化改写，**不新增剧情、人物、道具**；需要加内容时先改原文再整理，别指望模型补。
 - 该入口不进批次：整理不产生 `attempts`、不占 `batchId`、不改 `status`；生成中互斥只靠上面的 409，不要用它绕开「同一批镜头只走一条生成路径」（§十五·五）。
+
+### 15.9 镜头视频版本机制（重新生成 = 追加版本，可切回默认）
+
+> LSC 对齐：重新生成一镜**不覆盖**旧视频。每次重跑在画布上多一个视频生成节点，旧节点与旧视频全部保留；工程里的 `attempts` 历史就是版本列表，`clip.nodeId`/`assetPath` 始终指向**当前默认版本**。
+
+**1. 谁决定新建节点（`packages/nodeShared/src/mtrack/directDispatch.ts` 的 `ensureNode`）**
+
+| 判定顺序 | 条件 | 结果 |
+|---|---|---|
+| ① 工程里的 `clip.nodeId` | 节点还在，且 `outputs.video.value.url` **为空** | 复用该节点（`pending`/`failed` 的镜不堆节点） |
+| ② 按分镜号找回同 label 的视频节点（同文件 `findClipNodeId`） | 只认**还没出过视频**的节点 | 复用 |
+| ③ 以上都不成立（原节点已产出视频 / 节点已删 / 从没建过） | — | `addNode` 新建视频节点：`label` 沿用 `clip.clipId` + `clip.title`（空则「分镜」），截 200 字；位置按 `origin.x + index * nodeGap`（`nodeGap = 480`）排 |
+
+- 「已产出视频」的判据是 `readNodeDetail` 读回的 `outputs.video.value.url` 非空——**只要节点上有视频就不复用**，这正是「追加版本」而不是「覆盖」的关键。
+- 新节点建好后本次生成的 `nodeId` 就是它；生成成功时 `multitrackEditor.vue` 的 `writeClipRun` 把 `status` 写成 `generated`、`nodeId`/`assetPath` 换成新节点与新产物（成功分支 `onSucceeded`），并追加一条 `succeeded` 的 `attempts`。**新视频自动成为该镜默认**，不需要额外确认。
+- 版本列表 = `mtrackProject.ts` 的 `clipVersionNodes`：取 `attempts` 里 `status === "succeeded"` 且有 `nodeId` 的记录，按 `nodeId` 去重、保持旧→新。`failed`/`cancelled` 的记录不进版本列表（但它们仍在 `attempts` 里留痕）。
+
+**2. 三个入口，含义相同**（都是追加版本，不是覆盖）
+
+| 入口 | 位置 | 备注 |
+|---|---|---|
+| 单镜「重新生成本镜」 | 单镜编辑器动作行（`packages/nodeShared/src/mtrack/components/clipEditor.vue:17`，该镜 `generating` 时禁用）→ `multitrackEditor.vue` 的 `regenerateClip` | 强制 `includeFinished: true`，已生成/已验收的镜直接重跑 |
+| 批量「包含已生成」 | 派工条复选框（`packages/nodeShared/src/mtrack/components/dispatchBar.vue:6`）、批量面板「包含已生成」（`packages/nodeShared/src/mtrack/components/batchPanel.vue:29`） | 勾上才把 `generated`/`accepted` 纳入派工；被纳入的已生成镜同样追加版本 |
+| `node:retryClip` | `packages/nodes/multitrackNode` 的节点函数（薄代理 `multitrackEditor.vue` 的 `retryClip`） | 单镜重派，同样强制纳入已完成镜；`dispatching`/在跑批次时**直接抛错**，不返回成功快照 |
+
+**3. 版本 UI（状态栏 `statusPanel`）**：控件位置见 §15.1 表的「历史版本」行，口径如下。
+
+- 列表**旧版本在上、新版本在下**（`statusPanel.vue` 的 `versionOptions` 按 `attempts` 序）。当前默认是 `clip.nodeId` 那一项，文案带「 · 默认」：正常刚生成完时它是最末项，**切到旧版本后默认标记落在中间项、顺序不变**；历史工程里 `nodeId` 不在 `attempts` 中时补到末尾，保证当前默认始终可选。
+- 下拉可预览任意版本：当前版本用工程里的 `assetPath`，历史版本经 `multitrackEditor.vue` 的 `acquireNodeVideo` 按 nodeId 读该节点 `outputs.video.value.url`。快速连点会用 `previewJob` 丢弃过期结果。
+- 「设为默认」= 编辑器 `setDefaultVersion(nodeId)` 经 `onPatch` **只写 `{ nodeId, assetPath }`**：不改 `status`、不改 `attempts`、不追加记录——切换不是一次生成尝试。写前会重读一次该节点产物，节点已删/没视频就报错不写（「该版本对应的画布节点已不存在」「该版本节点上没有视频产物」）；`await` 期间用户换了选中镜也会放弃写入（避免写到另一条镜上）。
+- 该镜 `generating` 时「设为默认」按钮全部禁用（`defaultLocked`）：产物还在写，切了会和回写抢同一份工程。
+
+**4. 合成口径**：合成清单只收 `status === "accepted"` 的镜，取的是 `clip.assetPath`——即**该镜当前默认版本**。所以切回旧版本后重新合成就会用旧版本文件，`status` 仍是 `accepted`，不需要重新验收（流程见 §15.6）。
+
+- **验收不跨版本保留**：重新生成已验收的镜，`onStart` 就把 `status` 打回 `generating`，成功后落 `generated`——新版本要再验收一次才回到合成清单。「设为默认」是唯一不改 `status` 的切换路径（§15.9·3）。
+
+**5. Agent 侧口径**：
+
+- 版本列表读 `planOperator mtrackRead` / `node:readClips` 的 `attempts`（`succeeded` + `nodeId` 去重即列表），不必再去画布上找节点名。
+- 代切默认版本：`node:editProject` 的 `patch` 里 `nodeId`/`assetPath` 是**普通可写字段**，不属于 `accepted` 那种人工判定，agent 可以先 `readClips` 取某条 `succeeded` 记录的 `nodeId`，再把 `nodeId`/`assetPath` 一起 patch 回去（`assetPath` 取该节点 `outputs.video.value.url`，与工程同一口径）。只写其中一个会留下 `nodeId` 与 `assetPath` 不是同一版本的不一致工程。`planOperator mtrackUpdate` 同样收 `nodeId`/`assetPath`，但它的 `attempts` 是**整数组替换**（`packages/tools/planOperator/src/index.ts:107`）——切版本时别带 `attempts`，否则会把历史版本列表整条覆盖掉。
+- 合成仍只认 `accepted`：`patch` 改得动「默认是哪一版」，改不动「哪条镜进成片」。
+- 版本追加只发生在**编辑器直连链路**（`ensureNode`）。agent 自己按 §十三 逐镜编排时仍按 §一 步 1.5 复用 `clip.nodeId`，那条路径**不会**产生新版本。
+
+**6. 本轮不做**：没有「删除版本」入口（LSC 的 trash 按钮不跟进）。旧版本节点留在画布上；手工删掉某个版本节点后，它的条目仍留在 `attempts` 里，但预览会报「该版本节点已从画布删除」、设为默认会报「该版本对应的画布节点已不存在」。
 
 ---
 
@@ -542,16 +592,16 @@ success data: { text: string, requiresReview: true }   // :100
 | `node:cancelBatch` | `{ batchId? }`（缺省取 `activeBatchId`） | `{ cancellationRequested: true, batchId }` | UI「取消批次」等价物：abort 本地轮询，再对批次内在跑镜头逐个 `node:cancelGeneration` 并回写 `pending` + `attempts` 追加 `cancelled`。同样**立即返回不等待**；取消成功不等于供应商退费或撤销任务 |
 | `node:pauseBatch` | 无 | 编辑器状态快照（`batchPaused` 为闸门状态、`batchClipIds` 为待续镜头、`batchRunning` 为在跑标记） | UI「本镜结束后暂停」等价物：**软闸门**——在跑的镜头不中断，本镜生成结束后不再开始下一镜；不 abort、不取消供应商任务，整批中止用 `node:cancelBatch`。没有在跑的批次时闸门不置位、`batchPaused` 仍为 false；续跑交 `node:resumeBatch` |
 | `node:resumeBatch` | `{ clips: [1..200], includeFinished? = false }` | 编辑器状态快照 | UI「继续生成」等价物：沿用同一 `batchId` 续跑 `clips` 里的镜头（取 `node:getStatus.batchClipIds` 中尚未完成的那些），`attempts` 标记与批次行都不变；`includeFinished=false` 默认只跑 pending/failed。**被拒时直接抛错**（如「已有派工操作正在进行，请等待结束」或派工失败原文），不返回成功快照——拿到错误即视为未受理，不要重试同一批 |
-| `node:retryClip` | `{ clipId }` | 编辑器状态快照 | UI「单镜重试」等价物：只派这一镜、强制覆盖已生成/失败的旧结果，不连带同批其他镜头；`dispatching` 或 `batchRunning` 为真时**直接抛错**（不返回成功快照），先 `node:pauseBatch` 等当前镜结束或 `node:cancelBatch` |
+| `node:retryClip` | `{ clipId }` | 编辑器状态快照 | UI「单镜重试」等价物：只派这一镜、**强制把已生成/已验收的旧结果也纳入**（追加新版本，不覆盖旧视频，见 §15.9），不连带同批其他镜头；`dispatching` 或 `batchRunning` 为真时**直接抛错**（不返回成功快照），先 `node:pauseBatch` 等当前镜结束或 `node:cancelBatch` |
 | `node:rewritePrompt` | `{ clipId?, rules? }`（`clipId` 缺省取当前选中镜；`rules` 覆盖内置整理规则，≤20000 字） | `{ text, requiresReview }` | UI「整理提示词」等价物：**只调文本模型，不改工程、不写编辑器的待采用区块**。结果需用户确认后，由 agent 用 `node:editProject` 的 `patch` 写回 `prompt.integratedMultimodalDescription`（`prompt` 三字段整组提交）；生成中调用返回服务端 409 原文，错误原样抛出、不重试 |
 | `node:refreshOutput` | 无 | `{ hasOutput, url? }` | 重新读取 `plan/composite.json` 合成清单：`executed` 为真时把成片挂到节点 `video` 输出端口并在卡片播放，否则清空输出。`planOperator composite execute=true` 之后调它刷新成片展示 |
-| `node:getReferenceOrder` | `{ handleId? }`（省略 = 节点默认端口） | `{ handleId, explicit, references, referenceMentions }` | 查询该端口的参考顺序：按当前生效顺序返回 references（含参考编号、来源节点与端口），并给出 `referenceMentions` 的 `{{ref N}}` 文本。未显式排序时按入边顺序。`{{ref N}}` 编号唯一落点的读取口 |
-| `node:setReferenceOrder` | `{ handleId?, sources[] }`（sources 须为该端口现有入边来源） | `{ handleId, order, appended }` | 按给定 sources 顺序重写该端口的参考顺序、写入 `referenceOrder`，参考编号 `{{ref N}}` 随之改变；未列出的入边保持在其后按原顺序追加。§十三.2 步 d 与下方资产接入三步第 2 步即用此函数 |
+| `node:getReferenceOrder` | `{ handleId? }`（省略 = 节点默认端口） | `{ handleId, explicit, references, referenceMentions }` | 查询该端口的参考顺序：按当前生效顺序返回 references（含参考编号、来源节点与端口），并给出 `referenceMentions` 的旧格式 `{{ref N}}` 文本（全局序号，生成时由 wire 层换算成官方 `<Picture N>`/`<Audio N>`/`<Video N>`）。未显式排序时按入边顺序。参考编号唯一落点的读取口 |
+| `node:setReferenceOrder` | `{ handleId?, sources[] }`（sources 须为该端口现有入边来源） | `{ handleId, order, appended }` | 按给定 sources 顺序重写该端口的参考顺序、写入 `referenceOrder`，参考编号（旧标记 `{{ref N}}` 的全局序号，生成时换算成官方标记）随之改变；未列出的入边保持在其后按原顺序追加。§十三.2 步 d 与下方资产接入三步第 2 步即用此函数 |
 
 **资产接入多轨节点的三步**（把资产图接到某镜的参考）：
 
 1. `connectNodes` 把资产节点 → 多轨节点 `in` 端口（按期望引用顺序逐条连）；
-2. `node:setReferenceOrder` 按同一顺序对齐编号——`{{ref N}}` 编号只由 `referenceOrder` 决定（§一 步 4），不看连线手势；
+2. `node:setReferenceOrder` 按同一顺序对齐编号——参考编号（旧标记 `{{ref N}}` 的全局序号，生成时换算成官方 `<Picture N>` 等）只由 `referenceOrder` 决定（§一 步 4），不看连线手势；
 3. `node:editProject` 用 `patch` op 把 `referenceIds` 写进对应 clip（真源落盘）。**上限 4（V8）**：超限时 editProject 的校验整批拒绝，`issues` 里给原因，先减参考再写。
 
 **与 planOperator 的边界**：多轨工程真源的批量读写与回写仍以 `planOperator` 的 `mtrackRead`/`mtrackUpdate` 为准（§十二）；`node:editProject`/`node:saveProject` 是编辑器等价能力，两边同经 `updatedAt` CAS 对账——节点侧保存与 `mtrackUpdate` 谁先落盘谁更新 `updatedAt`，另一方基线过期时报冲突，不静默覆盖。拿到编辑器内存态优先用 `node:readClips`（自带磁盘对账）。
@@ -597,7 +647,7 @@ assembleCanvas { plan: <16.1 返回的 { assetNodes, clipNodes, layers } 原样>
 2. 类型解析：精确名优先，其次唯一 `-<name>` 后缀匹配（真实类型是 `remote-imageGenerationNode` 这类，`packages/tools/canvas/src/assembly.ts:107-111`、`apps/web/src/pages/workspace/panels/canvas/canvasDrop.ts:106`）；歧义或未命中直接报错并列出画布现有类型（`packages/tools/canvas/src/assembly.ts:151`）。
 3. 建节点：资产按 layer 从 0 往上、同层按计划顺序（`packages/tools/canvas/src/assembly.ts:177-185`）；`clip` 层固定排在所有资产层右侧（`packages/tools/canvas/src/assembly.ts:188-193`）。`addNode` 只能传 `type`/`position`/`label`（`packages/tools/canvas/src/runtime.ts:56`，`apps/web/src/pages/workspace/panels/canvas/useCanvasTools.ts:140-145` 只写 `data: { label }`）。
 4. 连线：按计划 edges 顺序，每批 ≤64 条（`packages/tools/canvas/src/runtime.ts:61`、`packages/tools/canvas/src/assembly.ts:92`）；端点没落地的连线跳过并记进 `failures`（`packages/tools/canvas/src/assembly.ts:204-208`）。
-5. 写参考顺序：按「目标节点 + 目标端口」分组，把 edges 的给出顺序写成 `node:setReferenceOrder`（`packages/tools/canvas/src/assembly.ts:224-246`，工具在 `packages/nodeShared/src/useNodeReferences.ts:67`，落盘在 `packages/nodeShared/src/useNodeReferences.ts:92`）。这是 `{{ref N}}` 编号的唯一落点。
+5. 写参考顺序：按「目标节点 + 目标端口」分组，把 edges 的给出顺序写成 `node:setReferenceOrder`（`packages/tools/canvas/src/assembly.ts:224-246`，工具在 `packages/nodeShared/src/useNodeReferences.ts:67`，落盘在 `packages/nodeShared/src/useNodeReferences.ts:92`）。这是参考编号（旧标记 `{{ref N}}` 的全局序号，生成时换算成官方标记）的唯一落点；正文里写官方标记时按「类型各自编号」独立起算。
 6. 写提示词：`data.prompt` / `data.text` 走 `node:setPrompt`（`packages/tools/canvas/src/assembly.ts:260-272`）。
 7. 其余字段（`ratio`/`duration`/`resolution`/`generateAudio`）进 `deferredSeeds`，**装配阶段不下发**——`node:setConfig` 会校验模型能力，模型未选时下发必被拒（源码注释原文「装配阶段模型尚未选定，强行下发必然被拒」，`packages/tools/canvas/src/assembly.ts:255-258`）。
 
@@ -719,7 +769,7 @@ Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue
 | `mtrackUpdate` 实现与 CAS | `packages/tools/planOperator/src/index.ts:301`（分支）、`:308`（冲突抛错）、`:326`（`writeAtomic`） | 存在；冲突文案逐字一致；`writeAtomic` |
 | `dispatch` 实现 | `packages/tools/planOperator/src/index.ts:338`（分支）、`:341`（`from`/`to` 必填报错）、`:396-403`（返回结构） | 只出清单；`from`/`to` 必填；缺失参考告警；`generationParams` 三项待定 |
 | `assemble` 实现 | `packages/tools/planOperator/src/index.ts:415`（分支）、`:510`（返回结构起点） | 分层、拒绝条件、返回结构逐项一致 |
-| V7 真正实现 | `packages/tools/planOperator/src/planValidator.ts:198-220` | 扫 prompt 三字段、正则 `/\{\{\s*ref\s*(\d+)\s*\}\}/gi`（`packages/tools/planOperator/src/planValidator.ts:207`，`ref` 两侧空白均可省略，`{{ref1}}` 也命中）、越界 `:212` 与缺失 `:217` 均 error |
+| V7 真正实现 | `packages/tools/planOperator/src/planValidator.ts:198-249` | 扫 prompt 三字段的官方标记（正则 `/<\s*(picture|video|audio)\s*(\d+)\s*>/gi`，`packages/tools/planOperator/src/planValidator.ts:237`，大小写与内部空白都容忍）：**只查越界**——上限按类型计数（`packages/tools/planOperator/src/planValidator.ts:209-222` 的 `pictureCount`/`audioCount`/`boundOf`：视频或未知 kind = 参考总数、音频 = sound 卡数、其余 = 非 sound 卡数），不查重号；旧标记 `{{ref N}}`（`packages/tools/planOperator/src/planValidator.ts:227`）只报迁移 warning，不再要求每个编号都出现 |
 | 校验器实际覆盖的规则 | `packages/tools/planOperator/src/planValidator.ts` 全文 | 出现 `rule:` 的只有 V1/V2/V4/V7/V8/V9/V11/V12/V13/V14/V15；**V3/V5/V6/V10 没有 `rule:` 产出**。V3 由 `packages/tools/planOperator/src/referenceResolver.ts:148-149` 以 `backwardsOnly` 告警处理（不在 findings 里）；V5 的块在 `packages/tools/planOperator/src/planValidator.ts:133-141`（注释在 `packages/tools/planOperator/src/planValidator.ts:133`）只产出 V9 warning；V6 无实现；V10 无实现 |
 | `composite` 实现与执行段 | `packages/tools/planOperator/src/index.ts:529-563`（composite 分支，`:548` 调 `concatComposite`），concat/ffprobe 实测已抽到 `packages/tools/planOperator/src/compositeRun.ts` 的 `concatComposite`（与服务端 `POST /api/mtrack/composite` 共用），清单与实测判定在 `packages/tools/planOperator/src/composite.ts`（`planComposite`、`verifySegmentSpecs`、`probeSignature`） | 默认只写 `plan/composite.json`（`executed:false`）；`execute=true` 先经 `context.ffmpeg` 走 `executeRemoteFfmpeg` 的 `input` + `ffprobe` 逐段实测规格（与首段不一致即抛），再走 `input` + `concat`，成功后改写 `executed:true`；输出目录不存在、输出已存在均报错 |
 | concat 规格不一致的真实行为 | 2026-10-20 实测（样本工程真实产出造变体，绕过探针直接调 fluent `concat`） | 尺寸不一致（640×360 + 1376×768）报 `ffmpeg exited with code 234 ... Conversion failed!`，**错误信息不含尺寸线索**；帧率不一致（30fps + 24fps）与音轨不一致（无音轨 + 有音轨）**均静默成功**，分别产出 30.175s / 30.167s 的错乱成片。这正是 `verifySegmentSpecs` 必须挡在编码之前的理由 |
@@ -735,6 +785,7 @@ Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue
 | 视频节点四函数 | `packages/nodes/videoGenerationNode/src/index.vue:399`、`:411`、`:450`、`:462` | `getConfig`/`setConfig`/`setPrompt`/`generateVideo` |
 | 图片 / 音频节点函数 | `packages/nodes/imageGenerationNode/src/index.vue:420`、`:432`、`:461`、`:473`；`packages/nodes/audioGenerationNode/src/index.vue:271`、`:282`、`:310`、`:321` | 存在 |
 | 多轨派工按钮与交互 | `packages/nodeShared/src/mtrack/components/trackBar.vue`（`selectClip` 发 `additive`/`range`）、`packages/nodeShared/src/mtrack/components/dispatchBar.vue`（`rangeText`、「生成选中段」「取消批次」「包含已生成」「跳过提示」）、`packages/nodeShared/src/mtrack/multitrackEditor.vue`（`onSelect` 选段语义、`generateSelection`、`cancelBatch`、`dispatchableClips`） | 全部真实存在 |
+| 镜头版本机制（§15.9） | `packages/nodeShared/src/mtrack/directDispatch.ts`（`ensureNode` 的「已产出视频不复用」判据与 `findClipNodeId`）、`packages/nodeShared/src/mtrack/mtrackProject.ts`（`clipVersionNodes`）、`packages/nodeShared/src/mtrack/components/statusPanel.vue:8-25`（`versionRow`/`versionActions`）、`packages/nodeShared/src/mtrack/multitrackEditor.vue`（`regenerateClip`/`setDefaultVersion`/`acquireNodeVideo`/`writeClipRun`）、`packages/nodeShared/src/mtrack/components/clipEditor.vue:17`（「重新生成本镜」按钮） | 逐处读文件核对：只有已产出视频的节点才新建（追加版本）；版本列表 `attempts`→`succeeded` 按 nodeId 旧→新去重；设为默认只写 `nodeId`/`assetPath`；无「删除版本」入口 |
 | `agentCanvas` 入口 | `apps/web/src/pages/workspace/panels/canvas/canvasHost.vue:205-207`、`apps/web/src/pages/workspace/panels/canvas/canvasHost.vue:214-218`、`apps/web/src/pages/workspace/panels/canvas/canvasHost.vue:417`；`apps/web/src/pages/workspace/index.vue:190` | 存在 |
 | 批次号记账与取消判据 | `packages/nodeShared/src/mtrack/directDispatch.ts`（`beginDirectDispatch`/`beginDirectCancel`/`resolveCanvasBridge`/`buildPrompt`）、`packages/nodeShared/src/mtrack/multitrackEditor.vue`（`writeClipRun` 写 `batch:<uuid>`、`launchDispatch`/`launchCancel`） | 存在；`batch:<uuid>` 写在 `attempts[].error` |
 | `ClipStatus` 五值与 `attempts` 四字段 | `packages/nodeShared/src/mtrack/mtrackProject.ts`（`ClipStatus`、`ClipAttempt`） | 一致；`attempts` 无 `batchId` 字段 |

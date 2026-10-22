@@ -6,6 +6,8 @@
 
 ## 0. 现状盘点（契约的约束来源）
 
+> 行号注记：下表「位置」列取自本稿冻结时的 `planOperator` 代码，行号已随后续功能演进漂移；所列语义仍成立（action 枚举、`promptGuidelines`「不连接画布节点」、`executionMode: "sequential"`、`mtrackSchema` 窄于编辑器写入形状），引用时以当前文件为准——`action` 枚举见 `packages/tools/planOperator/src/index.ts:126`，`promptGuidelines` 见 `:183`，`executionMode` 见 `:191`。V7 现状与现行实现见 §7。
+
 | 现状 | 位置 | 对契约的约束 |
 |---|---|---|
 | `action: z.enum(["parse","resolve","validate","build"])` | `packages/tools/planOperator/src/index.ts:66` | 新增 4 个 action 并入同一枚举 |
@@ -14,8 +16,8 @@
 | `indexStore.writeText` 用 `files.writeFile`（**非原子**） | `packages/tools/planOperator/src/indexStore.ts:20-22` | `mtrackUpdate` 必须新增 `writeAtomic` 写入路径，不得复用 `writeText` |
 | `promptGuidelines` 明写「本工具…不连接画布节点、不调用供应商」 | `index.ts:106` | `assemble` 因此定为「产出计划、由 agent 执行」，见 §6 |
 | `executionMode: "sequential"` | `index.ts:109` | 工具内同步循环必然超时，`dispatch` 只出清单不执行生成，见 §5 |
-| 校验器只实现 V1/V2/V4/V8/V9/V11/V12/V13/V14/V15，**全文无任何 `{{ref` 匹配** | `packages/tools/planOperator/src/planValidator.ts`（全文 242 行） | V7 未实现，需按 §7 定死语义 |
-| readme 把 V7 标为「—（`{{ref N}}` 在 1..refs 范围内且每个 N 至少出现一次，由画布快照核对）」 | `packages/tools/planOperator/readme.md:43` | V7 的权威口径 |
+| 校验器只实现 V1/V2/V4/V8/V9/V11/V12/V13/V14/V15，**全文无任何 `{{ref` 匹配** | `packages/tools/planOperator/src/planValidator.ts`（当时全文 242 行） | **历史快照（已过时）**：V7 已实现，现行口径见 §7；现行文件 295 行，V7 位于 `:198-249` |
+| readme 把 V7 标为「—（`{{ref N}}` 在 1..refs 范围内且每个 N 至少出现一次，由画布快照核对）」 | 当时 `packages/tools/planOperator/readme.md:43` | **历史快照（已过时）**：readme 现为 `:74`，V7 标为 `error / warning`，按官方 `<Picture N>`/`<Video N>`/`<Audio N>` 只查越界、不查重号，旧 `{{ref N}}` 只报迁移 warning |
 | 多轨字段与枚举全量定义 | `packages/ext/multitrack/src/mtrackProject.ts` | 所有字段名、枚举值以该文件为准 |
 | 首镜实跑 738.5s（15s 单块 / RTX 3090 / quality light） | `packages/skills/assetCard/references/generationRunbook.md:186` | `dispatch` 只出清单的硬事实依据 |
 
@@ -211,10 +213,10 @@ action: z.enum(["parse","resolve","validate","build","mtrackRead","mtrackUpdate"
       mode:       "待 node:getConfig 读 matchingModes 决定（不得写死）"
     },
     promptEssentials: [         // 提示词要点
-      "integratedMultimodalDescription 为画面主体（含 {{ref N}} 引用位）",
+      "integratedMultimodalDescription 为画面主体（含官方 <Picture N> 引用位；旧工程 {{ref N}} 仅作兼容）",
       "overallSoundscape 为环境声",
       "nonDiegeticMusic 为配乐",
-      "段尾须附参考顺序声明（与 referenceIds 顺序一致）"
+      "接参考图时按 MiniMax H3 官方六段由写作者直接书写；引擎不代写任何段，也不再追加段尾参考顺序声明行（已取消）"
     ],
     currentState: {
       status, nodeId, assetPath,
@@ -312,7 +314,7 @@ action: z.enum(["parse","resolve","validate","build","mtrackRead","mtrackUpdate"
 | `audioGenerationNode` | `label`=name、`prompt`=AssetCard.prompt（textOnly 卡以 `text` 承载文本） | 同上 | `model` |
 | `videoGenerationNode` | `label`=clipId、`duration`=seconds、`resolution`、`ratio`、`generateAudio` | `mtrackProject.ts:23-39` | `model`、`mode`（必须 `node:getConfig` 读 `matchingModes` 后定，**不得写死「4 图就是多参考」**） |
 
-连线顺序：卡内按 `card.refs` 顺序、clip 内按 `clip.referenceIds` 顺序；`{{ref N}}` 的 N 与该顺序一一对应（V7/V15 据此核对）。装配计划本身不写盘（纯算内联返回）；如需落盘由 agent 决定，路径建议 `plan/assemblePlan.json`，但不属于本 action 职责。
+连线顺序：卡内按 `card.refs` 顺序、clip 内按 `clip.referenceIds` 顺序；**提示词里写的是官方标记 `<Picture N>`/`<Audio N>`/`<Video N>`，按类型各自从 1 编号**（`Picture` 只数非 sound 参考，`Audio` 只数 sound 参考），不是「第 N 个 referenceIds」的全局序号；旧工程遗留的 `{{ref N}}` 才按全局序号理解。V15 核对 `referenceIds` 顺序与画布位次（`planValidator.ts:274-284`），V7 只核对标记编号是否越界（见 §7）。装配计划本身不写盘（纯算内联返回）；如需落盘由 agent 决定，路径建议 `plan/assemblePlan.json`，但不属于本 action 职责。
 
 ### 6.6 错误触发条件与文案要点
 
@@ -325,38 +327,39 @@ action: z.enum(["parse","resolve","validate","build","mtrackRead","mtrackUpdate"
 
 ---
 
-## 7. V7 真正实现契约（补进 `validate`，非新 action）
+## 7. V7 参考标记校验（现行实现）
 
-### 7.1 现状为何判定为「未实现」
+> 版本注记：本节原为「V7 未实现，按本节语义补齐」的设计契约，基于旧 `{{ref N}}` 全局序号，要求「每个编号至少出现一次」。该口径**已随 MiniMax H3 官方 ref2va 六段格式迁移废除**，下面 7.1 是现行实现（`planValidator.ts:198-249`），7.2 保留旧口径供追溯，不得据此实现。
 
-`planValidator.ts` 全文（242 行）只实现 V1/V2/V4/V8/V9/V11/V12/V13/V14/V15，**不存在任何匹配 `{{ref` 或 `ref \d+` 的正则/字符串代码**（V15 只比对 `referenceIds` 数组与画布 `referenceOrder` 的**顺序**，不解析提示词文本）。`readme.md:43` 把 V7 标为「—」，属「定义了但没实现」。故 V7 以未实现处理，实现时按本节语义落地。
+### 7.1 现行实现（以代码为准）
 
-### 7.2 扫描字段
+`packages/tools/planOperator/src/planValidator.ts:198-249` 已实现 V7，扫描 `MtrackClip.prompt` 三字段文本：`integratedMultimodalDescription` / `overallSoundscape` / `nonDiegeticMusic`（`:204-208`），三字段各自独立判断，不做跨字段合并比较。
 
-V7 只扫 `MtrackClip.prompt` 的**三个子字段**文本（即分镜三字段，`multitrackTemplate.md` 的提示词载体）：
+**官方标记（唯一写法）**：`<Picture N>` / `<Video N>` / `<Audio N>`，正则 `/<\s*(picture|video|audio)\s*(\d+)\s*>/gi`（`:237`，大小写与内部空白均容忍：`<Picture 1>`、`< picture 1 >`、`<PICTURE  1>` 都命中）。
 
-- `prompt.integratedMultimodalDescription`
-- `prompt.overallSoundscape`
-- `prompt.nonDiegeticMusic`
+**编号上限按类型计**（`:209-222` 的 `boundOf`）：
 
-匹配模式：`/\{\{\s*ref\s+(\d+)\s*\}\}/gi`（大小写不敏感，容忍空白；`{{ref 2}}`、`{{ ref2 }}` 均命中）。三字段**合并**后的匹配集合参与判定（不区分 N 出现在哪个字段）。
+| 标记 | 上限 | 依据 |
+| --- | --- | --- |
+| `<Audio N>` | 本镜 `kind === "sound"` 的参考数 | 官方标记按类型各自从 1 编号，生成侧由 `packages/nodes/videoGenerationNode/src/index.vue:212-224` 的 `referenceTags` 逐项换算 |
+| `<Picture N>` | 本镜非 sound 参考数（character/scene/prop/keyframe 都算画面） | 同上 |
+| `<Video N>` | 参考总数（资产卡没有独立的视频类型，`keyframe` 与图片同属 picture，拿不到类型时退回总数） | 保守兜底，宁可漏报也不误判合法工程 |
 
-### 7.3 N 上界来源与不一致行为
+- 越界（`N < 1` 或 `N > 上限`）报 `error`：`片段 {clipId} 提示词含越界标记 <Picture 3>，本镜画面参考编号范围为 1..4`（`:241-246`）；上限为 0 时范围为「空（本镜没有该类型参考）」。
+- **不查重号**（`:200` 注释）：同一编号在正文里反复复述（如「同前述画面中的男人」）是正常写法。
+- **不要求每个编号至少出现一次**（`:199` 注释）：官方格式允许某张参考图只出现在 `subject_definitions` / `retention_analysis` 里。
+- **旧工程兼容**：`{{ref N}}`（正则 `/\{\{\s*ref\s*(\d+)\s*\}\}/gi`，`:227`）只报 `warning`：「片段 {clipId} 的 {field} 仍含旧格式参考标记 …：旧格式，建议迁移为 MiniMax H3 官方标记 <Picture N>/<Video N>/<Audio N>」（`:228-235`），不阻断生成。
 
-- **N 上界 = `clip.referenceIds.length`**（`{{ref N}}` 是对 `referenceIds` 的第 N 个元素的索引引用）。
-- `snapshot.referenceOrder[nodeId]` **不参与定上界**，只承担「画布位次核对」职责；`referenceOrder` 缺失（节点尚未接线）时，V7 的文本范围校验仍可执行，画布核对部分跳过。
-- `snapshot.referenceOrder` 与 `clip.referenceIds` 不一致（长度或顺序）时：**V7 不新增规则**，由既有 **V15**（`planValidator.ts:222-233`）报 `error`「referenceIds 顺序与画布节点实际参考顺序不一致」。V7 与 V15 的分工：V7 管「提示词里写了哪些 `{{ref N}}`」，V15 管「数组顺序与画布接线顺序是否一致」。
+### 7.2 历史设计口径（已废除，供追溯）
 
-### 7.4 判定规则（rule 编号与 level）
+原契约基于旧 `{{ref N}}` 全局序号，与现行实现全面冲突，**均已变更**：
 
-| 规则 | level | 触发 | 文案要点 |
-|---|---|---|---|
-| **V7** | `error` | 存在 `{{ref N}}` 且 `N < 1` 或 `N > referenceIds.length`（越界） | `片段 {clipId} 提示词含越界引用 {{ref {N}}}，参考范围为 1..{refs.length}` |
-| **V7** | `error` | 存在 `k ∈ [1..referenceIds.length]`，在三个字段的 `{{ref N}}` 集合中**一次都未出现**（缺失） | `片段 {clipId} 提示词未声明第 {k} 个参考 {{ref {k}}}（参考总数 {refs.length}）` |
+| 旧规范 | 现行实现 |
+| --- | --- |
+| 匹配 `/\{\{\s*ref\s+(\d+)\s*\}\}/gi`（`ref` 后须有空格） | 匹配官方 `/<\s*(picture|video|audio)\s*(\d+)\s*>/gi`；旧 `{{ref N}}` 只报迁移 warning |
+| 上界 = `referenceIds.length`（全局序号） | 上界按标记类型计（画面/音频/视频分别计数，缺 `kind` 退回总数） |
+| 「每个 N 至少出现一次」缺失即 `error` | 已废除：不要求每个编号出现 |
+| 越界文案「含越界引用 `{{ref {N}}}`，参考范围为 1..{refs.length}」 | 「含越界标记 `<Picture {N}>`，本镜画面参考编号范围为 1..{bound}」 |
+| 同一 N 可重复（不查重号） | 保持一致：仍不查重号（但理由变为「官方格式允许自然复述」，而非旧口径推断） |
+| `referenceOrder` 不参与定上界，只承担画布位次核对（由 V15 负责） | 保持一致：V15 现位于 `planValidator.ts:274-284`，仍是「`referenceIds` 顺序与画布参考顺序一致」的唯一规则点 |
 
-**「每个 N 至少出现一次」≠「恰好每个」**：同一 N 允许重复出现（如多次强调同一素材），不违规；只查「上界内每个 N ≥ 1 次」且「不出现上界外 N」。
-
-### 7.5 边界
-
-- `referenceIds.length === 0` 的 clip：无 N 可查，若三字段仍出现 `{{ref N}}` 则按越界报 error（`参考范围为 1..0`），否则跳过 V7。
-- `nodeId` 为空且 `status ∈ {generated, accepted}`：V13 已报 error（缺 nodeId），V7 的画布核对部分跳过，文本范围校验仍执行。

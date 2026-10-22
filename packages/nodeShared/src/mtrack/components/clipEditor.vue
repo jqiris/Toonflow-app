@@ -13,6 +13,8 @@
         {{ clip.status === "accepted" ? "取消验收" : "验收" }}
       </el-button>
       <el-button size="small" :disabled="!rewriteEligible" :loading="rewriteBusy" @click="emit('rewrite', rewriteRules)">整理本镜提示词</el-button>
+      <!-- LSC 对齐：已生成/已验收的镜也允许直接重跑，生成成功后作为新版本追加（旧视频保留），只有该镜正在生成时禁用。 -->
+      <el-button size="small" :disabled="clip.status === 'generating'" @click="emit('regenerate')">重新生成本镜</el-button>
       <el-button size="small" type="danger" text @click="emit('remove')">删除</el-button>
       <details class="bulkDetails">
         <summary class="bulkSummary">批量调整</summary>
@@ -194,6 +196,7 @@ const emit = defineEmits<{
   (event: "remove"): void;
   (event: "accept", accepted: boolean): void;
   (event: "rewrite", rules: string): void;
+  (event: "regenerate"): void;
   (event: "adoptRewrite", text: string): void;
   (event: "discardRewrite"): void;
   (event: "updateRewriteDraft", text: string): void;

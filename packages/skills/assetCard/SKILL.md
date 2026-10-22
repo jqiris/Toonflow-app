@@ -57,7 +57,7 @@ metadata:
 ## 生成闭环（简版）
 
 1. 资产卡定稿 → 编号、参考关系、画幅全部锁定；
-2. 分镜定稿 → 每段写清三字段提示词与参考编号；
+2. 分镜定稿 → 每段按 MiniMax H3 官方 ref2va 六段写清提示词（参考写 `<Picture N>`，图片从 1 编号；音频/视频各写 `<Audio N>`/`<Video N>`）与参考编号；
 3. 导入多轨 → 生成/更新 `story.mtrack`；
 4. 校验 → `planOperator validate`，error 清零才继续；
 5. 逐分镜生成 → 二选一（同一批镜头绝不同时执行，见 [runbook §十五·五](references/generationRunbook.md)）：会话内按 §十三 SOP 逐镜（即每段一个视频节点、展示方案并等待用户批准算力消耗后 `node:generateVideo`），或 `node:dispatchGenerate` 后台派工（立即返回 batchId，进度看 `node:getStatus` / `mtrackRead`）；
@@ -84,7 +84,7 @@ metadata:
 - **一致性守卫**：待采用期间原文画面描述、`clip.seconds`、本次整理规则任一变化，「采用」禁用，必须重新整理，不能拿旧稿套新基线。
 - **规则可留空**：请求字段 `rules` 可选（≤20000），空/缺省用服务端内置规则；规则只对本次整理生效，不落盘、不随工程保存——不是全片设置。
 - **生成中拒绝**：本镜或本批任一镜头 `status === "generating"` 时服务端 409「正在生成，请结束后再整理提示词，避免模型同时占显存」；整理不产生 `attempts`、不占 `batchId`、不改 `status`。
-- 采用后仍要按 runbook §四 核对整理稿里的 `{{ref N}}` 与本镜 `referenceIds` 位次；整理只做结构化改写，不新增剧情、人物、道具。
+- 采用后仍要按 runbook §四 核对整理稿里的官方 `<Picture N>` 与本镜图片参考的顺序（`<Picture 1>` 是本镜第 1 张图，音频/视频另算 `<Audio N>`/`<Video N>`）；旧工程里残留的 `{{ref N}}` 只是画布 mention chip 与旧格式全局占位，引擎读入时按类型换算归一化为官方标记，不作为新写法。整理只做结构化改写，不新增剧情、人物、道具。
 
 ## 能力边界（必须如实告知）
 

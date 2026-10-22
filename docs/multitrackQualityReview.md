@@ -61,8 +61,8 @@
 | 多轨字段表（模板 §2 vs `planValidator.ts` `MultitrackClip`） | ✅ 一致：`clipId/seconds/ratio/resolution/generateAudio/prompt.*/referenceIds/continuity/status/nodeId/assetPath` 全部对齐；`seconds` 2–60 整数、`resolution ∈ {768P,2K}`、`ratio` 五档、`clipId ^S\d{3}$` 与 V11/V12 实现逐字一致 |
 | 状态机（模板 §3 vs `resolvedToLite`/`clipSchema`） | ✅ 一致：`pending/generating/generated/accepted/failed` 五态，`planValidator.ts:154` 同集合 |
 | 参考上限 4（模板 §2.2 vs `MAX_IMAGE_REFERENCES`） | ✅ 一致：`planValidator.ts:80` V8 同值；编辑器 `referenceList` 上限 4 同值 |
-| 参考顺序协议 `{{ref N}}`（模板 §四 vs SOP §四） | ✅ 一致，含段尾追加句格式与「图片仅作参考」收句 |
-| `{{ref N}}` 校验 V7 | ⚠️ 见 W1（工具未实现该条） |
+| 参考顺序协议（旧 `{{ref N}}`，模板 §四 vs SOP §四） | ✅ 当时一致，含段尾追加句格式与「图片仅作参考」收句（**已过时**：模板 §四 与 SOP §四 现改为写作者直接写官方六段 + `<Picture N>`，段尾参考顺序声明行已取消、引擎不再代写任何段） |
+| V7 校验 | ✅ 已实现（当时记的 W1 缺口已补）：现行 V7 校验官方 `<Picture N>`/`<Video N>`/`<Audio N>` 只查越界、不查重号，旧 `{{ref N}}` 只报迁移 warning |
 | 生成调用序列 11 步（SOP §一 vs 方案 §4.1） | ✅ 一致 |
 | 状态查询纪律（SOP §二 vs 方案 §4.6 vs 工具 promptGuidelines） | ✅ 一致，三处同文 |
 | 能力边界/降级（SKILL.md vs SOP §十 vs readme） | ⚠️ 见 W2（`capabilityDegraded` 字段未实现） |
@@ -94,7 +94,7 @@
 
 | # | 问题 | 影响 | 建议 |
 |---|---|---|---|
-| W1 | V7（`{{ref N}}` 在 `1..参考数` 内且每个 N 至少出现一次）在 `planValidator.ts` **未实现**，但 SOP §九与模板 §七都宣称有 V7 | 提示词越界不报错，靠人工 | M1 补 V7：扫 `integratedMultimodalDescription` 中 `{{ref n}}` 的 n 与 `referenceIds.length` 比对。优先级中（不阻断生成，但属于宣称了却没做的校验） |
+| W1 | V7（旧口径：`{{ref N}}` 在 `1..参考数` 内且每个 N 至少出现一次）在 `planValidator.ts` **未实现** | 提示词越界不报错，靠人工 | **已修复**：现行 V7 校验官方 `<Picture N>`/`<Video N>`/`<Audio N>` 只查越界、不查重号，旧 `{{ref N}}` 只报迁移 warning（`packages/tools/planOperator/src/planValidator.ts:198-249`） |
 | W2 | `capabilityDegraded` 字段在 `planValidator.ts` 与 `build` 产出中**未实现**，SKILL.md/readme/SOP §十 三处宣称「固定输出」 | 降级项不显式落盘 | M1 补 `capabilityDegraded: string[]` 常量字段（3 项降级恒为 true，直接静态输出） |
 | W3 | `mtrackSchema`（`index.ts:30-33`）不含 `version/projectId/updatedAt/global.style/global.systemPrompt/global.model` 与 `clips[].title/sourceRange/attempts/notes` | 这些字段不被校验也不被拒（`z.object` 非 strict，静默忽略） | 可接受：V11–V15 不依赖这些字段；但应在 readme 注明「未校验字段清单」避免误以为校验过 |
 | W4 | 方案 §6 M3 行仍写「工具加 `dispatch` action」 | 与已交付范围不符 | 已在方案 §6 M3 保留为后续项，建议下一轮明确「M3 仅 SOP，dispatch 待定」 |

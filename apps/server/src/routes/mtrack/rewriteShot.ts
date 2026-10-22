@@ -31,7 +31,7 @@ const rewriteRules = [
   "2. 保留全部画面事实、镜头语言（景别、机位、运动、光线、色彩）与时间顺序；",
   "3. 用英文输出，按「主体与动作 → 环境与空间 → 镜头与运动 → 光线与色彩 → 氛围」的顺序组织成一段连贯描述；",
   "4. 不要输出解释、不要分段小标题、不要 Markdown 代码块，只输出整理后的提示词正文；",
-  "5. 若原文包含 {{ref N}} 引用标记，原样保留在原位置。",
+  "5. 原文中的 MiniMax H3 官方标记（<Picture N>/<Video N>/<Audio N>）原样保留在原位置。",
 ].join("\n");
 
 /**
@@ -77,7 +77,7 @@ export default Router().post("/", validateFields(inputSchema.shape), async (req,
     `声音景观：\n${prompt.overallSoundscape.trim() || "（空）"}`,
     `非剧情音乐：\n${prompt.nonDiegeticMusic.trim() || "（空）"}`,
   ];
-  if (input.referenceIds?.length) sections.push(`参考图编号：\n${input.referenceIds.map((id, index) => `{{ref ${index + 1}}} = ${id}`).join("\n")}`);
+  if (input.referenceIds?.length) sections.push(`参考图编号：\n${input.referenceIds.map((id, index) => `<Picture ${index + 1}> = ${id}`).join("\n")}`);
   const controller = new AbortController();
   const close = () => controller.abort();
   res.once("close", close);

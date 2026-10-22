@@ -515,7 +515,7 @@ nodeTools.register({
 
 nodeTools.register({
   name: "retryClip",
-  description: "重试单个镜头（UI「单镜重试」等价物）：只派 clipId 这一镜，强制覆盖已生成/失败的旧结果，不连带同批其他镜头。生成进行中（dispatching 或 batchRunning 为真）时直接抛错并带原因，需先 node:pauseBatch 等当前镜结束或 node:cancelBatch；受理成功返回编辑器 status 快照",
+  description: "重试单个镜头（UI「单镜重试/重新生成本镜」等价物）：只派 clipId 这一镜，生成成功后作为新版本追加——旧版本视频与画布节点保留，attempts 历史（succeeded+nodeId 去重）即版本列表，新视频自动成为该镜默认；不连带同批其他镜头。生成进行中（dispatching 或 batchRunning 为真）时直接抛错并带原因，需先 node:pauseBatch 等当前镜结束或 node:cancelBatch；受理成功返回编辑器 status 快照",
   parameters: z.strictObject({ clipId: clipIdSchema }),
   async execute({ clipId }, { signal }) {
     signal?.throwIfAborted();

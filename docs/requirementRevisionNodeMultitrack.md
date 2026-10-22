@@ -74,7 +74,7 @@
 | C. 多轨节点调 `context.canvas` 让 Agent 建 | —— | 同上，且引入 Agent 依赖 |
 
 **选 A**，把 A 绕开的校验**搬到多轨节点内部与 `planOperator` 里**：
-- `referenceIds` 顺序即 `{{ref N}}`，由多轨节点在拼 prompt 时按数组顺序注入，并**在编辑器里显示序号**（人眼可核对）；
+- `referenceIds` 顺序即画布引用位次，决定官方标记的编号基数（`<Picture N>` 只数图片类、`<Audio N>` 只数音频），并在**编辑器里显示序号**（人眼可核对）；提示词正文的六段与官方标记由写作者直接书写，引擎不代写（旧工程遗留的 `{{ref N}}` 属迁移对象，生成时由 wire 层按 `dataType` 换算）；
 - `mode` 由 `ai.getMediaModels()` 返回的能力自行判定（`getMatchingModes` 的逻辑在多轨节点内重实现：按参考集合算出可用模式，**空镜或超 4 图时直接拒绝并提示拆分**）；
 - V1–V15 仍由 `planOperator` 在生成前校验，多轨节点生成前调用同一套规则（经 `packages/nodeShared` 共享，避免两处实现漂移）。
 
