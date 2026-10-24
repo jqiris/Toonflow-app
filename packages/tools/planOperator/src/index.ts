@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { ToolPlugin } from "@toonflow/tools-scaffold/runtime";
-import { parseAssetCards } from "./assetCardParser";
+import { parseAssetCards, type ParseWarning } from "./assetCardParser";
 import { resolveReferences, resolveFromMarkdown, type ResolveResult, type ResolvedCard } from "./referenceResolver";
 import { validatePlan, type Finding, type MultitrackLite, type SnapshotLite, type ParsedCardLite, type ResolvedCardLite } from "./planValidator";
 import { createStore, type PlanStore } from "./indexStore";
@@ -50,11 +50,13 @@ const clipSchema = z.looseObject({
   assetPath: z.string().nullable().optional(),
   attempts: z.array(clipAttemptSchema).optional(),
   notes: z.string().optional(),
+  systemPromptOverride: z.string().optional(),
 });
 
 const mtrackSchema = z.looseObject({
   version: z.number().optional(),
   projectId: z.string().optional(),
+  name: z.string().optional(),
   updatedAt: z.string().optional(),
   global: z.looseObject({
     ratio: z.string().optional(),
@@ -79,8 +81,12 @@ const snapshotNodeSchema = z.object({
 
 const snapshotSchema = z.object({
   nodes: z.array(snapshotNodeSchema),
-  incomingEdges: z.record(z.string(), z.array(z.tuple([z.string(), z.string()]))),
-  referenceOrder: z.record(z.string(), z.array(z.tuple([z.string(), z.string()]))).optional(),
+  // ACT: 语义是「节点id → [源id, 边id] 定长二元组」。z.tuple 在 draft-07 下生成
+  // items 数组形态，DSH 宿主 MCP 校验器拒收（items must be object|boolean）；
+  // z.array(z.string()).length(2) 输出等价 schema 且宿主可收，TS 侧靠既有
+  // `snapshot as SnapshotLite` 断言维持二元组语义。上限：单源节点边数无约束。
+  incomingEdges: z.record(z.string(), z.array(z.string()).length(2)),
+  referenceOrder: z.record(z.string(), z.array(z.string()).length(2)).optional(),
 }).strict();
 
 /**
@@ -147,6 +153,20 @@ function buildFindings(findings: Finding[], cardsMarkdown?: string): { errors: n
   return { errors, warnings, findings };
 }
 
+/**
+ * 资产卡三级结算的告警并入 findings：resolve 只把 missingTarget/backwardsOnly/identityConflict 放进 warnings，
+ * 不并进校验结果的话「卡片声明了不存在的参考目标」= 丢声明 + 0 error + build 通过，生成时少一张参考还看不出来（审计 F2）。
+ * missingTarget 按 error 处理（静默少参考比报错更贵）；后两项只是人工确认项，保持 warning。
+ */
+function resolveFindings(warnings: ParseWarning[]): Finding[] {
+  return warnings.map(warning => ({
+    rule: warning.code,
+    level: warning.code === "missingTarget" ? "error" : "warning",
+    message: `${warning.card}：${warning.message}`,
+    ref: warning.card,
+  }));
+}
+
 /** composite 返回文本：清单 JSON + 每段规格提示逐行列出，避免提示被埋在 JSON 里看不见。 */
 function withSpecWarnings(summary: unknown, warnings: SpecWarning[]) {
   const text = JSON.stringify(summary, null, 2);
@@ -211,8 +231,14 @@ export const plugin: ToolPlugin = {
           signal?.throwIfAborted();
           const resolved = resolveFromMarkdown(markdown);
           const index = buildAssetIndex(resolved);
+          // ACT: 三级结算的告警只放在 details 时 agent 在文本通道里看不见（审计 F1）；
+          // 同步进 content，声明了不存在/前向引用目标时不会「静默丢声明」。
+          const warnings = resolved.warnings;
+          const text = warnings.length
+            ? `${JSON.stringify(index, null, 2)}\n\n结算告警（${warnings.length}）：\n${warnings.map(item => `  ${item.card} [${item.code}] ${item.message}`).join("\n")}`
+            : JSON.stringify(index, null, 2);
           return {
-            content: [{ type: "text", text: JSON.stringify(index, null, 2) }],
+            content: [{ type: "text", text }],
             details: { resolved, index },
           };
         }
@@ -220,14 +246,19 @@ export const plugin: ToolPlugin = {
         // ---- validate：只读，零写入，返回 V1–V15 findings ----
         if (action === "validate") {
           const resolved = await loadResolvedFromMarkdown(params, store, signal);
-          const mtrack = await loadMultitrack(params, store, signal);
+          const loadedMtrack = await loadMultitrack(params, store, signal);
+          const mtrack = loadedMtrack?.project;
           const snapshot = params.snapshot;
-          const findings = validatePlan({
-            cards: parsedToLite(resolved.cards),
-            resolved: resolvedToLite(resolved),
-            mtrack: mtrack as MultitrackLite | undefined,
-            snapshot: snapshot as SnapshotLite | undefined,
-          });
+          const findings = [
+            ...resolveFindings(resolved.warnings),
+            ...(loadedMtrack?.findings ?? []),
+            ...validatePlan({
+              cards: parsedToLite(resolved.cards),
+              resolved: resolvedToLite(resolved),
+              mtrack: mtrack as MultitrackLite | undefined,
+              snapshot: snapshot as SnapshotLite | undefined,
+            }),
+          ];
           const summary = buildFindings(findings);
           return {
             content: [{ type: "text", text: JSON.stringify({ ...summary, resolved: resolved.cards.map(c => ({ id: c.id, refs: c.refs, refSource: c.refSource })), mtrackClips: mtrack?.clips?.length ?? 0 }, null, 2) }],
@@ -239,14 +270,19 @@ export const plugin: ToolPlugin = {
         if (action === "build") {
           if (!allowBuild) throw new Error("allowBuild 已关闭，build 不可用");
           const resolved = await loadResolvedFromMarkdown(params, store, signal);
-          const mtrack = await loadMultitrack(params, store, signal);
+          const loadedMtrack = await loadMultitrack(params, store, signal);
+          const mtrack = loadedMtrack?.project;
           const snapshot = params.snapshot;
-          const findings = validatePlan({
-            cards: parsedToLite(resolved.cards),
-            resolved: resolvedToLite(resolved),
-            mtrack: mtrack as MultitrackLite | undefined,
-            snapshot: snapshot as SnapshotLite | undefined,
-          });
+          const findings = [
+            ...resolveFindings(resolved.warnings),
+            ...(loadedMtrack?.findings ?? []),
+            ...validatePlan({
+              cards: parsedToLite(resolved.cards),
+              resolved: resolvedToLite(resolved),
+              mtrack: mtrack as MultitrackLite | undefined,
+              snapshot: snapshot as SnapshotLite | undefined,
+            }),
+          ];
           const errors = findings.filter(f => f.level === "error").length;
           if (errors > 0) {
             throw new Error(`build 被拒绝：仍有 ${errors} 条 error 级发现\n${findings.filter(f => f.level === "error").map(f => `  [${f.rule}] ${f.message}`).join("\n")}`);
@@ -284,6 +320,7 @@ export const plugin: ToolPlugin = {
             updatedAt: project.updatedAt,
             version: project.version,
             projectId: project.projectId || undefined,
+            name: project.name || undefined,
             global: project.global,
             clips,
             missing,
@@ -545,7 +582,16 @@ export const plugin: ToolPlugin = {
             signal?.throwIfAborted();
             return { content: [{ type: "text", text: withSpecWarnings(summary, plan.specWarnings) }], details: summary };
           }
-          const executed = await concatComposite(store, plan, output, { cwd: context.cwd, ffmpeg: signal => context.ffmpeg(signal) }, signal);
+          let executed: Awaited<ReturnType<typeof concatComposite>>;
+          try {
+            executed = await concatComposite(store, plan, output, { cwd: context.cwd, ffmpeg: signal => context.ffmpeg(signal) }, signal);
+          } catch (error) {
+            // ACT: ffmpeg 中途失败/被杀会留半成品，下次合成又被「输出已存在」挡住；这里删掉本次产物再报错（审计 P2-5）。
+            await context.files.remove(output).catch(() => {
+              // 半成品可能根本不存在，删除失败不影响原始错误。
+            });
+            throw error;
+          }
           const specWarnings = [...plan.specWarnings, ...executed.specWarnings];
           await store.writeAtomic(compositeManifestPath, JSON.stringify({ ...plan.manifest, executed: true }, null, 2));
           const summary = {
@@ -573,15 +619,39 @@ export const plugin: ToolPlugin = {
       return resolveFromMarkdown(markdown);
     }
 
-    /** 加载多轨工程，纯只读；validate 缺文件时返回 undefined（跳过片段侧规则） */
+    /**
+     * 加载多轨工程，纯只读；validate 缺文件时返回 undefined（跳过片段侧规则）。
+     * ACT: 同时带回「首镜衔接被归一改成 shot」的告警——normalizeProject 为保证落盘工程合法
+     * 会静默把首镜 context 改回 shot，若不留痕，V11 的「首镜不能承接上一镜」永远不触发（审计 F4）。
+     */
     async function loadMultitrack(params: z.infer<typeof requestSchema>, store: PlanStore, signal?: AbortSignal) {
-      if (params.mtrack) return normalizeProject(params.mtrack) as MultitrackLite;
-      const path = params.mtrackPath ?? defaultProjectPath;
-      const exists = await store.exists(path);
-      if (!exists) return undefined;
-      const raw = await store.readText(path);
-      signal?.throwIfAborted();
-      return normalizeProject(parseProjectJson(raw, path, "validate")) as MultitrackLite;
+      const loaded = await (async (): Promise<{ raw: unknown; project: MtrackProject } | undefined> => {
+        if (params.mtrack) return { raw: params.mtrack, project: normalizeProject(params.mtrack) };
+        const path = params.mtrackPath ?? defaultProjectPath;
+        const exists = await store.exists(path);
+        if (!exists) return undefined;
+        const text = await store.readText(path);
+        signal?.throwIfAborted();
+        const raw = parseProjectJson(text, path, "validate");
+        return { raw, project: normalizeProject(raw) };
+      })();
+      if (!loaded) return undefined;
+      return { project: loaded.project as MultitrackLite, findings: firstClipContinuityFindings(loaded.raw) };
+    }
+
+    /** 首镜写了承接时，归一已经把它改成 shot，这里把「被改过」这件事报出来。 */
+    function firstClipContinuityFindings(raw: unknown): Finding[] {
+      if (!isRecord(raw) || !Array.isArray(raw.clips) || !raw.clips.length) return [];
+      const first = raw.clips[0];
+      if (!isRecord(first)) return [];
+      if (first.continuity !== "context" && first.continuity !== "continue") return [];
+      const clipId = typeof first.clipId === "string" ? first.clipId : "S001";
+      return [{
+        rule: "V11",
+        level: "warning",
+        message: `首镜 ${clipId} 写的是「承接上一镜」，但首镜没有上一镜可接，已按独立起拍（shot）处理`,
+        ref: clipId,
+      }];
     }
 
     /**

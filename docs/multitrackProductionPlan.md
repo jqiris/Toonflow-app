@@ -22,7 +22,7 @@ assets/assetCards.md → plan/storyboard.md → plan/story.mtrack → 每镜一�
 |---|---|---|---|
 | 契约层 | 技能 `packages/skills/assetCard` | 编号规则、接线规则、多轨模板、段头语法 | 不执行任何生成 |
 | **编辑器层** | 扩展 `packages/ext/multitrack`（`resourceKind:"file"`，绑定 `.mtrack`） | 轨道渲染、片段增删排序、每镜三字段提示词、参考顺序、状态回显、视频 URL 预览 | **不调节点、不发请求、不合成** |
-| 校验/派工层 | 工具 `packages/tools/planOperator` | 解析、校验 V1–V15、输出派工单 | 不自动执行生成 |
+| 校验/派工层 | 工具 `packages/tools/planOperator` | 解析、校验 V1–V16、输出派工单 | 不自动执行生成 |
 | 执行层 | Agent + 画布工具 + 节点函数 | `addNode→connectNodes→setConfig→setPrompt→generateVideo` | 不发明契约 |
 | 合成层 | 工具 `planOperator` 的 `composite`（经宿主 ffmpeg；亦可直接用 `ffmpeg` 工具或节点内 `useNodeFfmpeg`） | 按 `story.mtrack` 中 `accepted` 镜的顺序 concat，先写 `plan/composite.json` 清单 | 不做剪辑特效 |
 
@@ -99,7 +99,7 @@ assets/assetCards.md → plan/storyboard.md → plan/story.mtrack → 每镜一�
         "nonDiegeticMusic": "低沉古筝与箫声"
       },
       "referenceIds": ["C01", "C03", "C05", "SC02"],
-      "continuity": "start",
+      "continuity": "shot",
       "status": "pending",
       "nodeId": null,
       "assetPath": null,
@@ -119,16 +119,16 @@ assets/assetCards.md → plan/storyboard.md → plan/story.mtrack → 每镜一�
 | `seconds` | number | ✅ | **整数 2–60** | MiniMax-H3 逐秒支持；超范围报错 |
 | `ratio` | string | ✅ | `9:16`/`16:9`/`1:1`/`4:3`/`3:4` | 与 global 不同则覆盖 |
 | `resolution` | string | ✅ | `768P`/`2K` | 来自 `durationResolutionMap` |
-| `generateAudio` | boolean | ✅ | — | H3 `audio: "optional"` |
+| `generateAudio` | boolean | ✅ | — | H3 `audio: "optional"`；freevideo 侧只透传不消费，**apiMart / tfRouter / compshare 会消费**（下发为 `generate_audio`） |
 | `prompt.integratedMultimodalDescription` | string | ✅ | 非空 | 画面/动作/对白（`<d>[Chinese]…</d>`） |
 | `prompt.overallSoundscape` | string | ✅ | 可 `N/A` | 环境声与动作声 |
 | `prompt.nonDiegeticMusic` | string | ✅ | 可 `N/A` | 配乐 |
-| `referenceIds` | string[] | ✅ | 图 ≤4；顺序即 `{{ref N}}` | 资产卡编号 |
-| `continuity` | enum | ✅ | `start`/`continue`/`cut` | 首段必须 `start` |
+| `referenceIds` | string[] | ✅ | **校验器 V8 拦图片 ≤9、音频 ≤1**（常量 `MAX_IMAGE_REFERENCES` / `MAX_AUDIO_REFERENCES`，见 `packages/tools/planOperator/src/planValidator.ts`）——**视频参考与图片同桶计数**，所以「视频 ≤1」只是供应商模式声明，不是校验器拦的；**供应商模式声明与多轨界面勾选还另外都只有 4**（`packages/providers/src/media/freevideo.ts` 的 `imageReference:4`、`packages/nodeShared/src/mtrack/components/referencePicker.vue` 的勾选上限）——超 4 张是产品侧挡下、不是校验器；承接镜（`context`）参考合计 ≤3（V16）；≥30 秒自动分块时引擎实限 3 张；顺序即 `{{ref N}}` | 资产卡编号 |
+| `continuity` | enum | ✅ | `shot`（独立起拍/切镜）/`context`（承接上一镜） | 首段必须 `shot`；`context` 另受 V16 约束（参考合计 ≤3、时长 ≥10 秒）。旧工程的 `start`/`cut` 归一为 `shot`、`continue` 归一为 `context`（`normalizeContinuity`） |
 | `status` | enum | ✅ | `pending`/`generating`/`generated`/`accepted`/`failed` | 状态机见 §2.4 |
-| `nodeId` | string\|null | ✅ | 生成后必有 | 视频节点 ID |
+| `nodeId` | string\|null | ✅ | 画布节点通道生成后必有；服务端媒体任务通道恒为 `null` | 视频节点 ID（媒体任务通道不建节点） |
 | `assetPath` | string\|null | ✅ | 工作区相对路径 | 产出视频 |
-| `attempts` | object[] | ✅ | 追加写 | `{ at, nodeId, status, error? }` |
+| `attempts` | object[] | ✅ | 追加写 | `{ at, nodeId, status, error?, jobId?, assetPath?, signature?, index?, parentJobId? }`；`jobId` 只有成功那次尝试才有值（承接镜靠它续接），`assetPath` 是历史版本的身份，后三项为后续新增、旧工程可缺 |
 
 ### 2.4 状态机
 
@@ -180,7 +180,7 @@ referenceIds: ["C01", "C03", "C05", "SC02"]   ← 全是图片时位次恰好等
 ├──────────────────────────────────────────────────┤
 │ 选中 S001 · 8 秒 · 768P · 9:16 · 含声音            │
 │ 标题 [槐下饮酒          ]  时长 [  8] 秒           │
-│ 衔接 [start ▾]   参考 [C01][C03][C05][SC02] +     │
+│ 衔接 [shot ▾]    参考 [C01][C03][C05][SC02] +     │
 │ ┌ 画面 / 动作 / 对白 ───────────────────────────┐ │
 │ │ [Shot 1] 黄昏广陵宅南古槐下…                   │ │
 │ └───────────────────────────────────────────────┘ │
@@ -219,7 +219,7 @@ packages/ext/multitrack/
 ### 4.1 单镜调用序列
 
 ```text
-1) 校验该镜（V1–V15），失败即停，不创建节点
+1) 校验该镜（V1–V16），失败即停，不创建节点
 2) addNode({ type: <视频生成节点类型>, position, label: "场01·片段01·视频" })
 3) connectNodes：资产图节点 → 视频节点 in 端口（按 referenceIds 顺序）
 4) getCanvasNodes({ fields:["ports"], dataKeys:["referenceOrder","mode","model"] }) 核对顺序
@@ -240,27 +240,28 @@ packages/ext/multitrack/
 | 模型 | `providerId: "freevideo"`，`modelId: "MiniMax-H3"` |
 | 时长 | **整数 2–60 秒**；多轨 `seconds` 必须落在这个集合 |
 | 分辨率 | `768P` / `2K` |
-| 声音 | `audio: "optional"` → `generateAudio` 可切换 |
+| 声音 | `audio: "optional"` → `generateAudio` 可切换；freevideo 只把它透传给引擎，**apiMart / tfRouter / compshare 会消费**（下发为 `generate_audio`，tfRouter 另映射 `sound: "on"/"off"`） |
 | 模式 | `text` / `startFrameOptional` / `["imageReference:4","videoReference:1","audioReference:1"]` |
-| 参考上限 | **图 ≤4、视频 ≤1、音频 ≤1**；超限会被逼到 `startFrameOptional`（仅 2 图且变首尾帧） |
+| 参考上限 | **校验器 V8 拦图片 ≤9、音频 ≤1**（视频参考与图片同桶计数）；**供应商模式声明是「图 ≤4、视频 ≤1、音频 ≤1」**（`mode` 里的 `imageReference:4` / `videoReference:1` / `audioReference:1`，见 `packages/providers/src/media/freevideo.ts`），多轨界面勾选也按 4 挡——超 4 张会被逼到 `startFrameOptional`（仅 2 图且变首尾帧）；承接镜（`context`）参考合计 ≤3（V16），≥30 秒自动分块时引擎实限 3 张 |
 | 费用 | `getPrice()` = 「免费 · 本机 GPU 生成，无计费」 |
 
 ### 4.3 模式判定铁律
 
 不得写死「4 图就是多参考」：必须调 `node:getConfig` 读 `matchingModes`，按**当前实际参考集合**（含文本/空端口）选模式。空镜段或混入视频参考时，模式集合会收缩——这也是 V10 存在的原因。
 
-### 4.4 首帧续接（`continuity: "continue"`）
+### 4.4 承接上一镜（`continuity: "context"`）
 
-LSC 用尾帧 latent 续写，Toonflow 无 latent，降级为：
+LSC 用尾帧 latent 续写；本仓库不自己截帧，走引擎官方的续接口径：
 
-- 取上一镜视频的末帧（节点播放器可截帧为图片节点），作为本镜头帧参考；
-- `mode` 变为 `startFrameOptional`，参考图仅 2 张（首/尾）；
-- **明确告知用户**：这是能力降级，衔接稳定性低于 LSC 的 latent 续写。
+- 取上一镜**成功那次尝试的 `jobId`**（续接解析只认最后一条 `succeeded` 且带 `jobId` 的 attempt），随请求下发 `continue_from: { from_job }`（`packages/providers/src/media/freevideo.ts`），由引擎按上一镜的原生上下文续拍；
+- 续接时引擎只接受 `media.references`，首/尾帧必须为空（`freevideo.ts` 的 `continuing` 分支）；参考图照常生效，**续接不占媒体槽**（`packages/nodeShared/src/mtrack/mediaDispatch.ts`）；
+- 受 V16 约束：参考素材合计 ≤3、时长 ≥10 秒；拿不到上一镜可用 `jobId` 时**直接报错**，不静默降级；
+- 首帧模式（`startFrameOptional`）是另一条路径：仅在 `resolveClipMode(clip)` 为 `image`、逐镜 `continuity` 不是 `context`、且只有 1 张图片参考时下发 `firstFrame`（`mediaDispatch.ts`），与 `context` 互斥。
 
 ### 4.5 批量执行
 
-- 同一时刻只跑 1–2 个生成任务（本机 GPU 串行更稳）；
-- 每镜独立 `status`，单镜失败不影响其他镜；
+- 同一时刻只跑 1–2 个生成任务（本机 GPU 串行更稳）；`node:dispatchGenerate` 按 `clips` 顺序**逐个**执行，上一镜出结果才开始下一镜；
+- 每镜独立 `status`；但承接镜依赖上一镜的任务号——上一镜失败时它的 `context` 会报「上一镜没有可用的生成任务号」并跳过，修好上一镜后用 `node:resumeBatch` 续跑该镜；
 - 不在生成中改多轨文件（快照语义），改完需重新提交该镜。
 
 ### 4.6 状态查询的真实能力（实测修正）
@@ -283,7 +284,7 @@ LSC 用尾帧 latent 续写，Toonflow 无 latent，降级为：
 
 ---
 
-## 5. 校验规则（V1–V15）
+## 5. 校验规则（V1–V16）
 
 | 编号 | 规则 | 级别 | 归属 |
 |---|---|---|---|
@@ -291,9 +292,10 @@ LSC 用尾帧 latent 续写，Toonflow 无 latent，降级为：
 | V10 | 节点 `data.mode` 仍属该模型匹配集合 | 错误 | 既有 |
 | **V11** | 多轨结构完整：`clipId` 唯一、必填字段齐全、`status` 合法 | 错误 | 新增 |
 | **V12** | `seconds` 是 2–60 整数；`resolution` ∈ {768P, 2K}；`ratio` 合法 | 错误 | 新增 |
-| **V13** | `referenceIds` 全部存在于 `assetIndex.json` 且资产已出图；`generated`/`accepted` 的镜 `nodeId` 与 `assetPath` 必须存在 | 错误 | 新增 |
+| **V13** | `referenceIds` 全部存在于 `assetIndex.json` 且资产已出图；`generated`/`accepted` 的镜 `assetPath` 必须存在、`nodeId` 必须存在，但**服务端媒体任务通道例外**（该通道不建画布节点、`nodeId` 恒 `null`，按 `attempts` 里的 `batch:`/`task:` 标记识别） | 错误 | 新增 |
 | **V14** | 合成清单只含 `accepted` 镜；顺序连续、无空洞 | 错误 | 新增 |
 | **V15** | `referenceIds` 顺序与画布实际 `referenceOrder` + 入边顺序逐一一致 | 错误 | 新增 |
+| **V16** | 承接镜（`continuity: "context"`）：参考素材合计 ≤3 且时长 ≥10 秒（引擎 `continue_from` 限制） | 错误 | 新增 |
 
 - 校验器与执行分离：`planOperator` 的 `planValidator.ts` 保持纯函数，读快照由 Agent 传入；
 - `validate` **零写入**；`build` 才写派生文件。
@@ -325,7 +327,7 @@ LSC 用尾帧 latent 续写，Toonflow 无 latent，降级为：
 | R1 | 扩展无节点写通道 | 编辑器点「生成」无法直接执行 | 编辑只改状态标记，生成由 Agent/工具读工程执行 |
 | R2 | 能力降级（无 VAE identity / context latent / 调度器） | 跨镜一致性弱于 LSC | 多图参考 + 强约束文案 + `firstFrame` 续接，`assetReport.json` 固定输出 `capabilityDegraded` |
 | R3 | `freevideo.ts` 未提交（git `A`） | 断链 | M1 前先提交并锁定版本 |
-| R4 | 参考 >4 被逼首尾帧模式 | 生成失败或语义错误 | V8/V13 在编辑器层拦截 |
+| R4 | 参考超出该模式上限（供应商声明 4）被逼首尾帧模式 | 生成失败或语义错误 | V8（图片 ≤9、音频 ≤1）与 V16（承接镜 ≤3）在生成前校验拦截，多轨界面在勾选第 5 张时直接挡住 |
 | R5 | 长任务（60 秒）超时 | 误判失败 | 只认 `getGenerationStatus` 终态，超时不等于失败 |
 | R6 | 合成片段规格不一 | concat 静默产出错乱成片（尺寸不一致会报错，帧率/音轨不一致不会） | `planOperator composite` 的 `execute=true` 段先逐段 ffprobe 实测，规格与首段不一致直接报错挡在编码前（2026-10-20 实装）；声明 `seconds` 与实测时长差 >1s 记规格提示 |
 | R7 | 多轨与画布漂移 | 派工单指向不存在的节点 | V13/V15 每次执行前重校验 |

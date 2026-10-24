@@ -63,7 +63,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { ElButton, ElCheckbox, ElDialog, ElInputNumber, ElProgress, ElTable, ElTableColumn } from "element-plus";
 import type { MtrackClip } from "../mtrackProject";
 import { clipStatusLabels, hasPrompt } from "../mtrackProject";
@@ -105,6 +105,12 @@ watch(() => props.batchRunning, running => {
     now.value = Date.now();
   }, 1000);
 }, { immediate: true });
+
+// ACT: 组件卸载时批处理可能还在跑，interval 不跟着 props 停，必须显式清掉（否则离开画布后每秒空转一次）。
+onBeforeUnmount(() => {
+  clearInterval(tick);
+  tick = undefined;
+});
 
 // 打开面板时用当前选段预填一次；之后面板数字是唯一真源，轨道改选不再覆盖。
 watch(visible, shown => {

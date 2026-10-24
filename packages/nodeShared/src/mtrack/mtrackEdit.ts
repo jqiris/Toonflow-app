@@ -1,7 +1,7 @@
 /** 多轨工程编辑内核：对工程做批量纯函数编辑，禁止 import vue / 磁盘 API。 */
 
 import type { MtrackClip, MtrackProject } from "./mtrackProject";
-import { ratioOptions, resolutionOptions, nextClipId, createClip, cloneClips } from "./mtrackProject";
+import { ratioOptions, resolutionOptions, nextClipId, createClip, cloneClips, normalizeContinuityOrder } from "./mtrackProject";
 
 /**
  * 编辑操作。定位一律用 clipId（after 为锚点片段编号），不用可能漂移的裸索引；
@@ -54,11 +54,22 @@ export function validateClip(clip: MtrackClip): string[] {
   if (new Set(clip.referenceIds).size !== clip.referenceIds.length) {
     issues.push("参考集合含重复项");
   }
-  if (clip.referenceIds.length > 4) {
-    issues.push("图片参考上限 4 个（V8）");
+  // MiniMax H3 Ref2VA 独立镜头最多支持 9 张参考图
+  if (clip.referenceIds.length > 9) {
+    issues.push("图片参考上限 9 个（V8，MiniMax H3 独立镜）");
   }
-  if (clip.continuity !== "start" && clip.continuity !== "continue" && clip.continuity !== "cut") {
-    issues.push(`衔接方式 ${clip.continuity} 需为 start/continue/cut`);
+  if (clip.continuity !== "shot" && clip.continuity !== "context") {
+    issues.push(`衔接方式 ${clip.continuity} 需为 shot（独立起拍 / 切镜）或 context（承接上一镜）`);
+  }
+  // ACT: 续接镜的参考图上限是 3 张（引擎 continue_from 契约），比独立镜头的 9 张更紧，
+  // 在这里提前拦下，避免等到派工才失败。
+  if (clip.continuity === "context" && clip.referenceIds.length > 3) {
+    issues.push(`承接上一镜的镜头最多 3 张参考图（引擎限制），当前 ${clip.referenceIds.length} 张；请减少参考或改为独立起拍`);
+  }
+  // ACT: 续接镜时长下限是 10 秒（引擎原文：Each continued part must be at least 10 seconds），
+  // 独立镜头 2 秒即可。这里提前拦下，不让用户等到派工才看到 422。
+  if (clip.continuity === "context" && clip.seconds < 10) {
+    issues.push(`承接上一镜的镜头最短 10 秒（引擎限制），当前 ${clip.seconds} 秒；请加长本镜或改为独立起拍`);
   }
   return issues;
 }
@@ -159,6 +170,8 @@ export function applyClipOperations(project: MtrackProject, ops: EditOp[]): Edit
     const issues = applyOp(draft, op);
     if (issues.length) return { applied: false, issues };
   }
+  // ACT: 删除首镜 / 把承接镜移到最前之后，新首镜必须回到 shot，否则存下去就是非法工程（与读盘归一同口径）。
+  normalizeContinuityOrder(draft.clips);
   project.clips = draft.clips;
   project.global = draft.global;
   return { applied: true, issues: [] };

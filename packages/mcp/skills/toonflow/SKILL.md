@@ -37,7 +37,7 @@ description: 通过 Toonflow MCP 操作工作区、实时画布、节点、文�
 - 顶层 `nextCursor` 仅用于保持原参数继续节点分页。处理节点任一 `truncated` 时，仅查询所属节点，使用该项路径及偏移，不携带原 `cursor`：`text` 用该项 `path` 和 `nextOffset` 作为 `textOffset` 续读，`entries` 改用 `valueOffset`；没有 `nextOffset` 表示该路径已到末尾。`depth/budget` 沿该项 `path` 缩小范围重新查询，不携带旧 `cursor`。对象/数组的 `valueLimit` 最多 100，文本的 `textLimit` 最多 4000；正偏移必须提供 `path`。路径最多 64 层和 2048 JSON UTF-8 字节，每段最多 256 字符；`pathDepthLimit/pathBytesLimit/circular` 不可靠重复请求补齐，`keyTooLong` 可按返回的 `nextOffset` 作为 `valueOffset` 跳过该键继续，但被跳过的值仍未取得。不得把截断或省略字段当作完整内容。
 - 使用 `addCanvas`、`switchCanvas`、`addNode`、`connectNodes` 等实时工具。不要直接写入带 `toonflowCanvas` 标记的 JSON；否则会绕开节点校验、历史记录、素材清理和界面状态。
 - 提示词、模型和生成参数通过 `nodeTools` 调用节点注册的函数。先发现函数名和参数，再调用；不要猜测 `node:setPrompt` 或配置结构存在于所有节点。
-- 连接前用 `getCanvasNodes` 的 `fields: ["ports"]` 确认真实的 `sourceHandle`、`targetHandle` 和兼容的数据类型。图片或视频引用由连线提供；提示词中的引用标记应与节点实际引用顺序一致，需要核对时用 `getCanvasEdges` 查询目标入边、`getCanvasNodes` 读取目标 `data.referenceOrder` 和源节点输出。画布直连的视频节点沿用画布 mention chip `{{ref N}}`（节点在 wire 层按引用类型换算成 `<Picture N>` / `<Video N>` / `<Audio N>`）；多轨工程的镜头提示词由写作者直接按 MiniMax H3 官方 ref2va 六段（`subject_definitions` / `summary` / `retention_analysis` / `detailed_description` / `overall_soundscape` / `non_diegetic_music`）书写并写官方 `<Picture N>`（按图片参考各自从 1 编号，音频/视频各写 `<Audio N>`/`<Video N>`，与旧标记的全局序号不同），不写旧 `{{ref N}}`（旧工程标记只由引擎在生成时换算兼容）。
+- 连接前用 `getCanvasNodes` 的 `fields: ["ports"]` 确认真实的 `sourceHandle`、`targetHandle` 和兼容的数据类型。图片或视频引用由连线提供；提示词中的引用标记应与节点实际引用顺序一致，需要核对时用 `getCanvasEdges` 查询目标入边、`getCanvasNodes` 读取目标 `data.referenceOrder` 和源节点输出。参考标记统一写 `{{ref N}}`，`N` 是参考位次（1 起，图片/音频/视频按同一份列表连续编号），画布直连与多轨工程同一口径；节点在下发前按参考的媒体类型把它换算成模型侧标记。多轨工程的镜头提示词由写作者直接按 MiniMax H3 官方 ref2va 六段（`subject_definitions` / `summary` / `retention_analysis` / `detailed_description` / `overall_soundscape` / `non_diegetic_music`）书写，参考处用 `{{ref N}}` 指位。
 - 批量操作优先使用支持数组的工具。只在用户需要整理整体布局时使用 `arrangeCanvas`，局部调整使用 `moveNodes`，查看内容使用 `fitCanvas`。
 - 整理、视口适配和删除的 ID 回执最多 100 项，另提供 `arrangedCount`、`nodeCount` 或 `removedEdgeCount`；`truncated` 不代表操作只完成了部分，不为获取完整回执而重执行。`nodeTools` 返回具体业务结果，不适用五个读取工具的 64 KiB 上限。
 - 断开、切换项目、切换画布或节点卸载后，重新发现状态，更新目标 ID，不向旧目标重试修改操作。
@@ -52,29 +52,32 @@ description: 通过 Toonflow MCP 操作工作区、实时画布、节点、文�
 
 ## 多轨工程（mtrack）
 
-- 入口先探针：用 `getCanvas` 或 `findCanvasNodes` 定位 `remote-multitrackNode`，拿到节点 ID 后调 `getNodeTools` 读取它真实注册的函数与完整 schema，共 15 个——13 个由节点自身注册，2 个由 `useNodeReferences` 自动注册（`node:getReferenceOrder`、`node:setReferenceOrder`）。清单里没有的函数不调用，参数不猜。画布上暂时没有多轨节点、但工作区存在 `plan/story.mtrack` 时，工程已经存在却没有可派工的画布节点，先向用户确认是否新增多轨节点并绑定该工程，不直接改 mtrack 文件绕过节点校验。
-- 十三个节点函数按下列顺序使用，全部经 `nodeTools` 调用：
+- 入口先探针：用 `getCanvas` 或 `findCanvasNodes` 定位 `remote-multitrackNode`，拿到节点 ID 后调 `getNodeTools` 读取它真实注册的函数与完整 schema，共 16 个——14 个由节点自身注册，2 个由 `useNodeReferences` 自动注册（`node:getReferenceOrder`、`node:setReferenceOrder`）。清单里没有的函数不调用，参数不猜。画布上暂时没有多轨节点、但工作区存在 `plan/story.mtrack` 时，工程已经存在却没有可派工的画布节点，先向用户确认是否新增多轨节点并绑定该工程，不直接改 mtrack 文件绕过节点校验。
+- 十四个节点函数按下列顺序使用，全部经 `nodeTools` 调用：
 
 1. `node:getStatus`：无参数，入口探针。返回 `bound`、`projectPath`、`clipCount`、`totalSeconds`、`statusCounts`、`dirty`、`saving`、`dispatching`、`activeBatchId`、`batchClipIds` 等；`activeBatchId` 为空不代表没有批次在跑，按 runbook §十五·五从 `planOperator` 的 `attempts` 找回真实批次号。
 2. `node:bindProject`：`{ mode: "open" | "new", path? }`。`open` 必须给工作区相对路径的 `.mtrack` 文件；`new` 缺省顺延 `plan/story[-N].mtrack`，以 exclusive 写入、绝不覆盖已有工程；同一路径重复绑定幂等，已绑定其他路径时报错，需新建节点或重新加载。
 3. `node:readClips`：`{ from?, to? }`，按分镜号读取（含端点），省略即全量。读前已对磁盘，返回的 `updatedAt` 是后续 `planOperator mtrackUpdate` 与本节点保存链的 CAS 基线；`conflict=true` 表示磁盘已被其他操作改过且本节点有未保存修改，先 `node:saveProject` 或 `node:reloadProject` 再继续。
-4. `node:editProject`：`{ operations: [1..100], save? }`。六种 op——`add`、`patch`、`duplicate`、`move`、`remove`、`setGlobal`；整批原子，任一 op 校验失败整批拒收，问题在 `issues` 返回、不抛错。真源字段可写，但生成前仍必须跑 `planOperator validate` 且 error 清零。
-5. `node:saveProject`：无参数，强制落盘并返回 `{ saved: updatedAt }`。与 800ms 防抖自动保存共用同一条 CAS 保存链，磁盘被其他操作改过时报冲突而不是覆盖。
-6. `node:reloadProject`：`{ discard? }`，从磁盘重新加载。有未保存修改且未传 `discard=true` 时报错不重载。
-7. `node:dispatchGenerate`：`clipIds`（1–200 个分镜号）或 `from` + `to` 二选一，`includeFinished` 默认 `false`。立即返回 `{ batchId, skipped }`，不等待生成；进度看 `node:getStatus.batchClipIds` 或 `planOperator mtrackRead`。
-8. `node:cancelBatch`：`{ batchId? }`，缺省取当前 `activeBatchId`。abort 本地轮询并对批次内在跑镜头逐个 `node:cancelGeneration`，立即返回 `{ cancellationRequested, batchId }`；取消成功不等于供应商退费或撤销任务。
-9. `node:refreshOutput`：无参数。重读 `plan/composite.json`，`executed` 为真时把成片挂到节点 `video` 输出端口，否则清空输出。
-10. `node:pauseBatch`：无参数，等价 UI「本镜结束后暂停」。这是**软闸门**——在跑的镜头不中断，本镜生成结束后不再开始下一镜；不 abort、不取消供应商任务，整批中止用 `node:cancelBatch`。返回编辑器状态快照，`batchPaused` 是闸门状态、`batchClipIds` 是待续镜头。
-11. `node:resumeBatch`：`{ clips: [1..200], includeFinished? }`，等价 UI「继续生成」。沿用同一 `batchId` 续跑 `clips` 里的镜头（取 `node:getStatus.batchClipIds` 中尚未完成的那些），`attempts` 标记与批次行都不变；`includeFinished=false` 默认只跑 pending/failed。已有派工操作在跑时被拒。
-12. `node:retryClip`：`{ clipId }`，等价 UI「单镜重试/重新生成本镜」。只派这一镜，生成成功后作为新版本追加（旧视频与画布节点保留、新视频自动成为该镜默认），不连带同批其他镜头；`dispatching` 或 `batchRunning` 为真时被拒，先 `node:pauseBatch` 等当前镜结束或 `node:cancelBatch`。
+4. `node:readReferenceMap`：`{ from?, to? }`，分镜号区间读取（含端点），省略即全量，语义与 `node:readClips` 相同。返回 `{ updatedAt, conflict, clips[] }`，每镜 `{ clipId, clipNodeId, items, unconnectedCardIds, missingCardIds, orphanSources }`；一次读全「镜 → 用哪些资产 → 资产卡 id → 画布节点 id → `{{ref N}}` 位次」四段映射链，`items[]` 逐位给出期望位次 `expectedIndex/expectedRef` 与实际位次 `actualIndex/actualRef`（仅该镜已派工、已有 `nodeId` 时返回），映射断在哪一步一眼可见，不必等 `node:dispatchGenerate` 抛「参考图未就绪」。`missingCardIds` 是画布上根本没有可用产出的卡（真断点）；`unconnectedCardIds` 只对已派工镜头报「有产出但没连上」；未派工镜头连线尚未建立属正常。来源解析与派工共用 `resolveReferenceSources`。
+5. `node:editProject`：`{ operations: [1..100], save? }`。六种 op——`add`、`patch`、`duplicate`、`move`、`remove`、`setGlobal`；整批原子，任一 op 校验失败整批拒收，问题在 `issues` 返回、不抛错。真源字段可写，但生成前仍必须跑 `planOperator validate` 且 error 清零。
+6. `node:saveProject`：无参数，强制落盘并返回 `{ saved: updatedAt }`。与 800ms 防抖自动保存共用同一条 CAS 保存链，磁盘被其他操作改过时报冲突而不是覆盖。
+7. `node:reloadProject`：`{ discard? }`，从磁盘重新加载。有未保存修改且未传 `discard=true` 时报错不重载。
+8. `node:dispatchGenerate`：`clipIds`（1–200 个分镜号）或 `from` + `to` 二选一，`includeFinished` 默认 `false`。立即返回 `{ batchId, skipped }`，不等待生成；进度看 `node:getStatus.batchClipIds` 或 `planOperator mtrackRead`。
+9. `node:cancelBatch`：`{ batchId? }`，缺省取当前 `activeBatchId`。abort 本地轮询并对批次内在跑镜头逐个 `node:cancelGeneration`，立即返回 `{ cancellationRequested, batchId }`；取消成功不等于供应商退费或撤销任务。
+10. `node:refreshOutput`：无参数。重读 `plan/composite.json`，`executed` 为真时把成片挂到节点 `video` 输出端口，否则清空输出。
+11. `node:pauseBatch`：无参数，等价 UI「本镜结束后暂停」。这是**软闸门**——在跑的镜头不中断，本镜生成结束后不再开始下一镜；不 abort、不取消供应商任务，整批中止用 `node:cancelBatch`。返回编辑器状态快照，`batchPaused` 是闸门状态、`batchClipIds` 是待续镜头。
+12. `node:resumeBatch`：`{ clips: [1..200], includeFinished? }`，等价 UI「继续生成」。沿用同一 `batchId` 续跑 `clips` 里的镜头（取 `node:getStatus.batchClipIds` 中尚未完成的那些），`attempts` 标记与批次行都不变；`includeFinished=false` 默认只跑 pending/failed。已有派工操作在跑时被拒。
+13. `node:retryClip`：`{ clipId }`，等价 UI「单镜重试/重新生成本镜」。只派这一镜，生成成功后作为新版本追加（旧视频与画布节点保留、新视频自动成为该镜默认），不连带同批其他镜头；`dispatching` 或 `batchRunning` 为真时被拒，先 `node:pauseBatch` 等当前镜结束或 `node:cancelBatch`。
 
 - `node:rewritePrompt`：`{ clipId?, rules? }`，等价 UI「整理提示词」。只调文本模型整理单镜提示词，返回 `{ text, requiresReview }`；**不改工程、不写编辑器的待采用区块**。结果需用户确认后，由你用 `node:editProject` 的 `patch` 把整理稿写回该镜 `prompt.integratedMultimodalDescription`（`prompt` 三字段整组提交）。生成中调用会返回服务端 409 原文，错误原样抛出、不重试。
 
-- 重新生成的口径（`node:retryClip`、`node:dispatchGenerate`、`node:resumeBatch` 带 `includeFinished`）：这是**追加版本**，不覆盖旧视频。派工时 `ensureNode` 对已产出视频的节点改为新建一个同 label 的视频节点，旧节点和旧视频留在画布上；`node:readClips` 返回的 `attempts` 里 `status` 为 `succeeded` 的记录按 `nodeId` 去重就是该镜的版本列表（旧→新），新视频完成自动写回 `clip.nodeId`/`assetPath` 成为该镜默认版本。没出过视频的节点（`pending`/`failed` 的镜）照旧复用，不为从未产出的镜头堆节点。
-- 切换默认版本：agent 可以代写，不属于硬纪律二的人工验收。用 `node:editProject` 的 `patch` 把该镜 `nodeId` 与 `assetPath` 一起写到目标版本——版本 `nodeId` 取 `node:readClips` 的 `attempts` 里 `succeeded` 记录，`assetPath` 用画布桥 `getCanvasNodes` 反查该节点 `outputs.video.value.url`（工作区相对路径，落盘名带随机后缀，不能按 `nodeId` 拼）。镜头生成中不切默认；切完仍需 `planOperator validate`（`accepted` 镜要求 `nodeId` 在画布上真实可读），合成 composite 只认 accepted 镜的**当前默认** `assetPath`。
+- 重新生成的口径（`node:retryClip`、`node:dispatchGenerate`、`node:resumeBatch` 带 `includeFinished`）：这是**追加版本**，不覆盖旧视频。版本的身份是**产物文件路径**，不是画布节点：`node:readClips` 返回的 `attempts` 里 `status` 为 `succeeded` 的记录按 `assetPath`（旧工程回退 `nodeId`）去重就是该镜的版本列表（旧→新），新视频完成自动写回 `clip.nodeId`/`assetPath` 成为该镜默认版本。`clipVersions()` 就是这套口径的实现。服务端媒体任务通道不建画布节点，这条链路的 `nodeId` 恒为 `null`；只有画布视频节点通道才有值。
+- 切换默认版本：agent 可以代写，不属于硬纪律二的人工验收。用 `node:editProject` 的 `patch` 把该镜 `nodeId` 与 `assetPath` 一起写到目标版本——`assetPath` 直接取该版本记录里的值（版本身份就是它，工作区相对路径、落盘名带随机后缀，不能按 `nodeId` 拼）；只有该版本记录没有 `assetPath`（旧画布节点工程）时才用画布桥 `getCanvasNodes` 反查该节点 `outputs.video.value.url`。镜头生成中不切默认；切完仍需 `planOperator validate`（`accepted` 镜要求产物当前可读；媒体任务通道的镜 `nodeId` 为 `null` 是合法状态），合成 composite 只认 accepted 镜的**当前默认** `assetPath`。
 - 硬纪律一：`node:dispatchGenerate` 与逐镜 SOP（runbook §十三）二选一。本会话正在按 SOP 逐镜生成时绝不再调它，同一批镜头绝不双重执行，否则双份算力、双重回写；重新生成同一镜=追加新版本，旧版本仍在画布上可回切。
 - 硬纪律二：`accepted` 只能由用户在多轨界面点「验收」写入，agent 不得代写；`generating` 只表示已开始，不是可信终态，先按 runbook §15.5 对账再汇报。
 - 硬纪律三：合成成片只拼 `accepted` 镜头，`generated` 不参与。先 `planOperator { action: "composite", execute: false }` 出清单交用户确认，确认后再发 `execute: true`，最后用 `node:refreshOutput` 把成片挂回画布。
+- 新手坑一（模式语义）：生成模式由本镜当前参考集合决定，下发前用 `node:getConfig` 读 `matchingModes` 再定，不写死「4 图就是多参考」；`startFrameOptional` 只吃 2 张图且按顺序当首帧/尾帧，语义与多图参考完全不同；参考集合一变，节点自身 watch 会把 `data.mode` 静默改成第一个可用项，所以配置与提示词要同时复核对齐（runbook §三）。
+- 新手坑二（参考编号）：`{{ref N}}` 的 `N` 是本镜 `referenceIds` 的位次（从 1 起，图片/音频/视频同一份列表连续编号），不是画布视觉编号；任何一次改 `referenceIds` 或参考顺序后，都必须重写正文里的编号并重新 `node:setPrompt`（runbook §一 步 4、§四；可用 `node:readReferenceMap` 的 `expectedRef/actualRef` 对账）。
 - 界面能力、批量面板、重启后对账、合成成片、九宫格拆图、整理本镜提示词的细节见 Toonflow 内置 assetCard 技能 runbook §15（§15.1 界面能力表 / §15.4 批量面板 / §15.5 重启对账 / §15.6 合成成片 / §15.7 九宫格拆图 / §15.8 整理本镜提示词），这里不展开。
 
 ## 文件与文档

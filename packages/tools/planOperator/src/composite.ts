@@ -35,6 +35,8 @@ export interface CompositeManifest {
   source: string;
   output: string;
   executed: boolean;
+  /** 段规格的来源：`declared` = 工程声明值（当前实现不回读成片实测规格）。 */
+  specSource: "declared";
   segments: CompositeSegment[];
 }
 
@@ -206,7 +208,8 @@ export async function planComposite(store: PlanStore, projectPath: string, outpu
   }
 
   return {
-    manifest: { version: 1, source: projectPath, output, executed: false, segments },
+    // ACT: 清单里的 ratio/resolution/seconds 全取自工程声明，不回读成片；标 specSource 免得被当成实测（审计 P2-6）。
+    manifest: { version: 1, source: projectPath, output, executed: false, specSource: "declared", segments },
     segments,
     specWarnings: checkSpecs(segments),
   };

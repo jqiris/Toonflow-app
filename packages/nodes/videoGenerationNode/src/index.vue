@@ -207,28 +207,39 @@ watch([selectedModel, () => data.value.duration], ([choice]) => {
   if (choice.audio !== "optional") data.value.generateAudio = choice.audio === true;
 }, { flush: "sync" });
 const modelGroups = computed(() => groupNodeModels(models.value));
-// {{ref N}} 的 N 是画布引用列表的全局序号（含文本），而 H3 的 <Picture N> 按类型各自编号，
-// 必须在此按 refList 逐项换算，否则混入文本或视频参考时编号会整体错位。
-function referenceTags(list: readonly { dataType: string | string[] }[]) {
+// {{ref N}} 的 N 是画布参考顺序的序号（含文本参考），H3 的参考标签按媒体类型各自编号，
+// 必须在此按 refList 逐项换算；同一来源节点重复出现时沿用第一个编号，避免同一张图占两个参考位。
+function referenceTags(list: readonly { dataType: string | string[]; source: string }[]) {
   const tags = new Map<number, string>();
+  const assigned = new Map<string, string>();
   let picture = 0;
   let video = 0;
   let audio = 0;
   list.forEach((item, index) => {
-    if (item.dataType === "IMAGE") tags.set(index + 1, `<Picture ${++picture}>`);
-    else if (item.dataType === "VIDEO") tags.set(index + 1, `<Video ${++video}>`);
-    else if (item.dataType === "AUDIO") tags.set(index + 1, `<Audio ${++audio}>`);
-    else if (item.dataType === "STRING") tags.set(index + 1, `参考 ${index + 1}`);
+    const known = assigned.get(item.source);
+    if (known) {
+      tags.set(index + 1, known);
+      return;
+    }
+    const tag = item.dataType === "IMAGE" ? `<Picture ${++picture}>`
+      : item.dataType === "VIDEO" ? `<Video ${++video}>`
+        : item.dataType === "AUDIO" ? `<Audio ${++audio}>`
+          : undefined;
+    if (!tag) return;
+    assigned.set(item.source, tag);
+    tags.set(index + 1, tag);
   });
   return tags;
 }
+// ACT: MiniMax H3 族按 modelId 判定（五家供应商共用同一模型 id）；ProviderModel 支持 promptProfile 后改为声明式。
+const h3ModelId = /minimax-h3/i;
+function isH3Model(model?: { modelId: string }) {
+  return h3ModelId.test(model?.modelId ?? "");
+}
 const generationPrompt = computed(() => {
   const text = data.value.prompt.trim();
-  // ACT: <Picture N> 是 MiniMax-H3 的参考标签语法，仅对 freevideo 生效；其他供应商保持原始提及。
-  const tags = selectedModel.value?.providerId === "freevideo" ? referenceTags(refList.value) : undefined;
-  // ACT: 正文若直接写了 {{Picture N}} / {{Video N}} / {{Audio N}}（未按规范写 {{ref N}}），wire 层兜底归一化成 H3 标签，避免双花括号字面量漏进提示词。
-  const prompt = (tags ? text.replace(/\{\{\s*ref\s*(\d+)\s*\}\}/gi, (mention, n: string) => tags.get(Number(n)) ?? mention) : text)
-    .replace(/\{\{\s*(picture|video|audio)\s*(\d+)\s*\}\}/gi, (_mention, kind: string, n: string) => `<${kind[0].toUpperCase()}${kind.slice(1).toLowerCase()} ${n}>`);
+  const tags = isH3Model(selectedModel.value) ? referenceTags(refList.value) : undefined;
+  const prompt = tags ? text.replace(/\{\{\s*ref\s*(\d+)\s*\}\}/gi, (mention, n: string) => tags.get(Number(n)) ?? mention) : text;
   return [
     prompt,
     ...refList.value.flatMap((item, index) => (item.dataType === "STRING" && item.value?.trim() ? [`参考 ${index + 1}：\n${item.value.trim()}`] : [])),
@@ -335,6 +346,16 @@ async function startGeneration() {
   if (deleting.value) throw new Error("节点正在删除");
   if (!choice || !input) throw new Error("请先选择视频模型");
   if (!generationPrompt.value) throw new Error("请输入生成提示词");
+  // ACT: 参考标记统一写 {{ref N}}；行内尖括号标签会被 wire 层当普通文本透传，生成前先拦下并给出正确写法。
+  const inlineTag = /<\s*(picture|video|audio)\s*\d+\s*>/i.exec(data.value.prompt);
+  if (inlineTag) throw new Error(`参考标记请写 {{ref N}}，N 为参考顺序里的序号（本节点共 ${refList.value.length} 项）；当前写的是 ${inlineTag[0]}`);
+  if (isH3Model(choice)) {
+    const tags = referenceTags(refList.value);
+    for (const matched of data.value.prompt.matchAll(/\{\{\s*ref\s*(\d+)\s*\}\}/gi)) {
+      const n = Number(matched[1]);
+      if (!tags.has(n)) throw new Error(`参考标记 {{ref ${n}}} 超出范围：本节点参考顺序共 ${refList.value.length} 项`);
+    }
+  }
   if (refList.value.some(item => item.value === undefined)) throw new Error("引用节点暂无内容，请先补充引用内容");
   if (choice.mode?.length && !matchingModes.value.length) throw new Error("当前模型没有适合这些参考素材的生成模式，请更换模型或调整引用");
   const workspace = files.getWorkspaceFiles();

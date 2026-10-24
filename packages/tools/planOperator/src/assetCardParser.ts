@@ -107,7 +107,8 @@ function matchCardTitle(rawLine: string): TitleMatch | undefined {
   const body = rawLine.replace(hashPattern, "").replace(listMarkerPattern, "").trim();
   if (!body) return undefined;
   const separator = titleSeparators.exec(body);
-  const [idPart, ...rest] = separator ? body.split(separator[0]) : body.split(/\s+/);
+  const [idPartRaw, ...rest] = separator ? body.split(separator[0]) : body.split(/\s+/);
+  const idPart = idPartRaw?.trim();
   if (!idPart || !cardIdPattern.test(idPart)) return undefined;
   const parsed = parseCardId(idPart);
   if (!parsed) return undefined;

@@ -82,12 +82,14 @@ function resolveNodeType(available: readonly { type: string }[], requested: stri
 }
 
 /**
- * 提示词只做两件事，不代写内容：
+ * 提示词只做三件事，不代写内容：
  *   1. 全片风格/全片约束拼在正文开头；
  *   2. 正文原样透传——旧工程的 {{ref N}} 占位标记也不改写，编号由 videoGenerationNode 的
- *      referenceTags 按 dataType 在 wire 层换算成 <Picture N> / <Video N> / <Audio N>。
+ *      referenceTags 按 dataType 在 wire 层换算成 <Picture N> / <Video N> / <Audio N>；
+ *   3. 正文漏写官方段首时补字段名，并把 overall_soundscape / non_diegetic_music 两个声音字段
+ *      拼成同名的两段尾（字段里只写内容，段名由这里拼）。
  * 官方 ref2va 六段（subject_definitions / summary / retention_analysis / detailed_description）由写作者直接
- * 写进正文；只有正文还是旧工程的纯画面描述时才补官方段首标签。
+ * 写进正文。
  * 字段名 `name: text` 是 H3 认的约定写法（引擎 example 与 promptWriting.md:19），段序固定：
  * 画面正文段 → overall_soundscape → non_diegetic_music，段间空一行。
  */
@@ -214,9 +216,33 @@ export function imagePathOf(node: NodeDetail) {
   return image?.value?.url || "";
 }
 
-function sourceHandleOf(node: NodeDetail) {
+/**
+ * 资产卡 kind → 参考产出端口的数据类型：`sound` 卡走音频，其余（character/scene/prop/keyframe 与缺省）走图片。
+ * 口径与 planValidator 的 V8 计数一致（只有 `kind === "sound"` 算音频参考，其余算图片参考）。
+ */
+export function referenceMediaTypes(kind: string | undefined) {
+  return kind === "sound" ? ["AUDIO"] : ["IMAGE"];
+}
+
+/**
+ * 资产节点的参考产出路径：sound 卡取音频产出，其余与原来一致取图片产出。
+ * ACT: 旧实现非声音卡也走 `imagePathOf`，声音卡因此在画布上永远被判「未就绪」——参考被整批跳过、
+ * 派工直接报「参考图未就绪」；参考类型本来就由卡片 kind 决定，这里只补 sound 一支，不改其余口径。
+ * 上限：只读节点 outputs，不校验文件是否真实存在。
+ */
+export function mediaPathOf(node: NodeDetail, kind?: string) {
+  if (kind === "sound") {
+    const audio = node.outputs?.audio as { value?: { url?: string } } | undefined;
+    return audio?.value?.url || "";
+  }
+  return imagePathOf(node);
+}
+
+/** 资产节点提供参考产出的输出端口：按卡片 kind 找对应类型的第一个 source 端口。 */
+export function sourceHandleOf(node: NodeDetail, kind?: string) {
+  const types: string[] = referenceMediaTypes(kind);
   const port = (node.ports ?? []).find(item => item.type === "source"
-    && (Array.isArray(item.dataType) ? item.dataType : [item.dataType]).some(type => type === "IMAGE" || type === "VIDEO"));
+    && (Array.isArray(item.dataType) ? item.dataType : [item.dataType]).some(type => types.includes(type ?? "")));
   return port?.id;
 }
 
@@ -296,30 +322,32 @@ async function ensureNode(options: {
 }
 
 /**
- * 解析 referenceIds 对应的画布资产节点。assetIndex.json 的 nodeId 由 planOperator 产出且**从不回填**
- * （buildAssetIndex 写 `card.nodeId ?? null`，resolveReferences 不产出 nodeId），只认它会让参考图被整批
- * 静默跳过、生成退化成纯文生视频（实测 freevideo job 的 spec.media 为空）；这里以画布 label 兜底。
- * 资产节点必须已出图：没出图的参考连线也传不出素材。
+ * 解析 referenceIds 对应的画布资产节点。assetIndex.json 的 nodeId 由 planOperator 产出，resolve 阶段不产出 nodeId
+ * （buildAssetIndex 写 `card.nodeId ?? null`，resolveReferences 不回填；真正回填发生在 imageGridSplit），只认它会让
+ * 参考图被整批静默跳过、生成退化成纯文生视频（实测 freevideo job 的 spec.media 为空）；这里以画布 label 兜底。
+ * 资产节点必须已出对应产出：没出图的参考连线也传不出素材；声音卡按 `kind: "sound"` 取音频产出。
+ * ACT: 与 node:readReferenceMap（multitrackNode）共用本函数，保证「派工实际怎么接」与「agent 查到的映射」同源。
  */
-async function resolveReferenceSources(options: {
+export async function resolveReferenceSources(options: {
   call: CanvasCall;
-  clip: MtrackClip;
+  clip: Pick<MtrackClip, "referenceIds">;
   cards: readonly AssetIndexCard[];
   signal: AbortSignal;
 }) {
   const { call, clip, cards, signal } = options;
-  const picked: { cardId: string; nodeId: string; sourceHandle: string }[] = [];
+  const picked: { cardId: string; nodeId: string; sourceHandle: string; path: string }[] = [];
   const missing: string[] = [];
   for (const id of clip.referenceIds) {
     const card = cards.find(item => item.id === id);
     const candidates = [...new Set([card?.nodeId, ...(await findCardNodeIds(call, id, signal))].filter((value): value is string => !!value))];
-    let chosen: { cardId: string; nodeId: string; sourceHandle: string } | undefined;
+    let chosen: { cardId: string; nodeId: string; sourceHandle: string; path: string } | undefined;
     for (const nodeId of candidates) {
       const detail = await readNodeDetail(call, nodeId, signal);
       if (!detail) continue;
-      const sourceHandle = sourceHandleOf(detail);
-      if (!sourceHandle || !imagePathOf(detail)) continue;
-      chosen = { cardId: id, nodeId, sourceHandle };
+      const sourceHandle = sourceHandleOf(detail, card?.kind);
+      const path = mediaPathOf(detail, card?.kind);
+      if (!sourceHandle || !path) continue;
+      chosen = { cardId: id, nodeId, sourceHandle, path };
       break;
     }
     if (chosen) picked.push(chosen);
@@ -329,36 +357,96 @@ async function resolveReferenceSources(options: {
 }
 
 /**
+ * 多轨节点自己 `in` 端口上的入边：用户在卡片上手动接的资产。
+ * 返回按「该端口 referenceOrder」排好序的来源，未显式排序时按入边顺序——
+ * 与画布 mention 的 {{ref N}} 同源，所以这里的顺序就是用户看到的位次。
+ */
+async function readMultitrackSources(call: CanvasCall, multitrackNodeId: string, signal: AbortSignal) {
+  const listed = await call({ name: "getCanvasEdges", args: { nodeIds: [multitrackNodeId], direction: "incoming", limit: 200 } }, signal) as {
+    edges?: { source: string; sourceHandle?: string | null; targetHandle?: string | null }[];
+  };
+  const incoming = (listed?.edges ?? [])
+    .filter(edge => (edge.targetHandle ?? "in") === "in")
+    .map(edge => ({ nodeId: edge.source, sourceHandle: edge.sourceHandle ?? "" }));
+  if (!incoming.length) return [];
+  let order: { nodeId: string; sourceHandle: string }[] = [];
+  try {
+    const result = await call({ name: "nodeTools", args: { nodeId: multitrackNodeId, name: "node:getReferenceOrder", args: { handleId: "in" } } }, signal) as {
+      references?: { nodeId: string; sourceHandle: string }[];
+    };
+    order = result?.references ?? [];
+  } catch {
+    // 多轨节点没有引用函数时按入边顺序，与 referenceOrderOf 的回退一致。
+  }
+  if (!order.length) return incoming;
+  const rank = new Map(order.map((item, index) => [`${item.nodeId}:${item.sourceHandle}`, index]));
+  return [...incoming].sort((left, right) => (rank.get(`${left.nodeId}:${left.sourceHandle}`) ?? order.length) - (rank.get(`${right.nodeId}:${right.sourceHandle}`) ?? order.length));
+}
+
+/**
  * 把 referenceIds 对应的画布节点连到视频节点 in 端口，并按 referenceIds 顺序写 referenceOrder。
  * 只要有参考没接上就整镜报错：部分接线会让 {{ref N}} 编号与 referenceIds 顺序错位，生成结果对不上参考图还看不出原因。
+ *
+ * ACT: 优先用多轨节点 `in` 端口上用户已接的连线——那张卡片看着就是「把参考资产接到这镜」的入口，
+ * 手接的边若被派工无视，用户会以为接好了。判定口径：多轨端口上的来源能按卡片 id/label 对上某张参考卡时即视为「用户已指定」，
+ * 按多轨端口的 referenceOrder 取位次；对不上的参考仍回落到「按 assetIndex/画布 label 自动找节点」。
  */
 async function connectReferences(options: {
   bridge: CanvasBridge;
   clip: MtrackClip;
   nodeId: string;
   cards: readonly AssetIndexCard[];
+  multitrackNodeId?: string;
   signal: AbortSignal;
 }) {
-  const { bridge, clip, nodeId, cards, signal } = options;
+  const { bridge, clip, nodeId, cards, multitrackNodeId, signal } = options;
   if (!clip.referenceIds.length) return 0;
   const call = requireCall(bridge);
+  const manual = multitrackNodeId ? await readMultitrackSources(call, multitrackNodeId, signal) : [];
   const { picked, missing } = await resolveReferenceSources({ call, clip, cards, signal });
   if (missing.length) {
     throw new Error(`参考图未就绪：${missing.join("、")} 在画布上没有可用产出（需要已装配资产节点且已出图），请先补齐再生成`);
   }
+  // 手动接线优先：按参考位次逐条找「这条参考卡是否已在多轨端口上」，命中就改用那条边。
+  const manualByCard = new Map<string, { nodeId: string; sourceHandle: string }>();
+  if (manual.length) {
+    const details = new Map<string, NodeDetail>();
+    for (const source of manual) {
+      const detail = await readNodeDetail(call, source.nodeId, signal);
+      if (!detail) continue;
+      details.set(`${source.nodeId}:${source.sourceHandle}`, detail);
+    }
+    for (const card of clip.referenceIds) {
+      const matched = manual.find(source => {
+        const detail = details.get(`${source.nodeId}:${source.sourceHandle}`);
+        const label = detail?.label ?? "";
+        return labelMatchesCard(label, card) || cards.find(item => item.id === card)?.nodeId === source.nodeId;
+      });
+      if (matched) manualByCard.set(card, matched);
+    }
+  }
+  const ordered = clip.referenceIds.map(cardId => {
+    const source = manualByCard.get(cardId);
+    if (source) return { cardId, ...source };
+    return picked.find(item => item.cardId === cardId);
+  }).filter((item): item is { cardId: string; nodeId: string; sourceHandle: string } => Boolean(item));
+  if (ordered.length !== clip.referenceIds.length) {
+    throw new Error(`参考图未就绪：${clip.referenceIds.filter(card => !ordered.some(item => item.cardId === card)).join("、")} 无法确定画布来源`);
+  }
   await call({
     name: "connectNodes",
     args: {
-      connections: picked.map(item => ({ source: item.nodeId, sourceHandle: item.sourceHandle, target: nodeId, targetHandle: "in" })),
+      connections: ordered.map(item => ({ source: item.nodeId, sourceHandle: item.sourceHandle, target: nodeId, targetHandle: "in" })),
     },
   }, signal);
+  // referenceOrder 按 referenceIds 顺序写：手动接线的顺序才是用户想要的位次，不能被入边顺序覆盖。
   await callTool(bridge, nodeId, "node:setReferenceOrder", {
     handleId: "in",
-    sources: picked.map(item => ({ nodeId: item.nodeId, sourceHandle: item.sourceHandle })),
+    sources: ordered.map(item => ({ nodeId: item.nodeId, sourceHandle: item.sourceHandle })),
   }, signal).catch(() => {
     // ACT: 顺序写入失败不阻断生成——参考图仍已连线，只是 {{ref N}} 编号回退到入边顺序。
   });
-  return picked.length;
+  return ordered.length;
 }
 
 /** 配好一镜的模型与参数。工程没绑视频模型时只下发时长/分辨率/比例/声音，模型沿用节点当前值。 */
@@ -383,136 +471,3 @@ async function configureNode(options: {
   await callTool(bridge, nodeId, "node:setConfig", args, signal);
 }
 
-/** 轮询到终态；aborted 由 signal 抛出，不吞掉。 */
-async function waitForSettled(bridge: CanvasBridge, nodeId: string, signal: AbortSignal) {
-  const startedAt = Date.now();
-  while (true) {
-    signal.throwIfAborted();
-    const status = await callTool(bridge, nodeId, "node:getGenerationStatus", {}, signal) as GenerationStatus;
-    if (status?.status === "succeeded") return { ok: true as const, assetPath: assetPathOf(status) };
-    if (status?.status === "failed") return { ok: false as const, error: status.error || "视频生成失败" };
-    if (Date.now() - startedAt > pollLimit) return { ok: false as const, error: "等待生成结果超时（1 小时），请到画布查看该节点状态" };
-    await delay(signal, pollDelay);
-  }
-}
-
-export type ClipHooks = {
-  onStart(clip: MtrackClip, nodeId: string): Promise<void> | void;
-  onSucceeded(clip: MtrackClip, nodeId: string, assetPath: string): Promise<void> | void;
-  onFailed(clip: MtrackClip, nodeId: string, error: string): Promise<void> | void;
-  /** 循环因暂停闸门退出时调用一次；批次自然跑完（含最后一镜跑到一半才按暂停）不调用。 */
-  onPaused?(): Promise<void> | void;
-};
-
-async function dispatchClips(options: {
-  bridge: CanvasBridge;
-  batchId: string;
-  clips: MtrackClip[];
-  cards: readonly AssetIndexCard[];
-  videoModel?: VideoModel;
-  hooks: ClipHooks;
-  signal: AbortSignal;
-  gate: { paused: boolean };
-  global?: { style?: string; systemPrompt?: string };
-}) {
-  const { bridge, clips, cards, videoModel, global, hooks, signal, gate } = options;
-  // ACT: 单条 canvas 调用有 120s 上限，这里只读一次概览；没有节点类型说明插件未启用，直接失败。
-  const call = requireCall(bridge);
-  const overview = await call({ name: "getCanvas", args: { include: ["nodeTypes"], limit: 100 } }, signal) as {
-    availableNodeTypes?: { type: string; label: string }[];
-    viewport?: { x: number; y: number; zoom: number };
-  };
-  const available = overview?.availableNodeTypes ?? [];
-  if (!available.length) throw new Error("画布没有可用节点类型，请先启用视频生成节点插件");
-  const viewport = overview?.viewport ?? { x: 0, y: 0, zoom: 1 };
-  const origin = { x: Math.round(viewport.x + 120), y: Math.round(viewport.y + 120) };
-  // ACT: 逐镜串行——本机 GPU 串行更稳，同时跑多镜只会互相抢显存（runbook §六：同一时刻 1–2 个）。
-  let stoppedByPause = false;
-  for (const [index, clip] of clips.entries()) {
-    signal.throwIfAborted();
-    // 暂停闸门只在镜头之间检查，绝不打断正在跑的镜头（对齐 LSC：当前镜跑完再停，不产生半截视频）。
-    if (gate.paused) {
-      stoppedByPause = true;
-      break;
-    }
-    let nodeId = "";
-    try {
-      nodeId = await ensureNode({ bridge, clip, index, available, origin, signal });
-      // 参考接不上时 connectReferences 抛错：不带着缺失参考上场（runbook §一 步 2）。
-      await connectReferences({ bridge, clip, nodeId, cards, signal });
-      await configureNode({ bridge, clip, nodeId, videoModel, signal });
-      const prompt = buildPrompt(clip, global);
-      if (!prompt.trim()) throw new Error("该镜没有提示词，请先补全画面描述");
-      await callTool(bridge, nodeId, "node:setPrompt", { prompt }, signal);
-      await hooks.onStart(clip, nodeId);
-      await callTool(bridge, nodeId, "node:generateVideo", {}, signal);
-      const result = await waitForSettled(bridge, nodeId, signal);
-      if (result.ok) {
-        if (!result.assetPath) throw new Error("节点报告生成成功但没有返回视频路径");
-        await hooks.onSucceeded(clip, nodeId, result.assetPath);
-      } else {
-        await hooks.onFailed(clip, nodeId, result.error);
-      }
-    } catch (error) {
-      if (signal.aborted) throw error;
-      await hooks.onFailed(clip, nodeId, messageOf(error));
-    }
-  }
-  // 最后一镜跑到一半才按暂停时 gate.paused 已置位但循环已走完，属正常收尾，不报暂停。
-  if (stoppedByPause) await hooks.onPaused?.();
-}
-
-/** 发起直连派工：先解析画布与节点类型，拿到即返回句柄，逐镜循环在 run 上后台进行。 */
-export async function beginDirectDispatch(options: {
-  bridge: CanvasBridge;
-  batchId: string;
-  clips: MtrackClip[];
-  cards: readonly AssetIndexCard[];
-  videoModel?: VideoModel;
-  global?: { style?: string; systemPrompt?: string };
-  hooks: ClipHooks;
-  signal?: AbortSignal;
-}): Promise<DispatchHandle> {
-  const controller = new AbortController();
-  if (options.signal) {
-    if (options.signal.aborted) controller.abort(options.signal.reason);
-    else options.signal.addEventListener("abort", () => controller.abort(options.signal?.reason), { once: true });
-  }
-  requireCall(options.bridge);
-  const gate = { paused: false };
-  const run = dispatchClips({ ...options, signal: controller.signal, gate });
-  run.catch(() => {}); // ACT: 调用方只 abort 不 await run 时不产生未处理拒绝；错误仍会经由 await run 抛出。
-  return { batchId: options.batchId, run, abort: () => controller.abort(), pause: () => { gate.paused = true; } };
-}
-
-/** 取消批次：对在跑的镜头逐个 node:cancelGeneration，再由 hooks 把状态回写 pending。 */
-export async function beginDirectCancel(options: {
-  bridge: CanvasBridge;
-  batchId: string;
-  clips: MtrackClip[];
-  onCancelled(clip: MtrackClip, nodeId: string): Promise<void> | void;
-  signal?: AbortSignal;
-}): Promise<DispatchHandle> {
-  const controller = new AbortController();
-  if (options.signal) {
-    if (options.signal.aborted) controller.abort(options.signal.reason);
-    else options.signal.addEventListener("abort", () => controller.abort(options.signal?.reason), { once: true });
-  }
-  const { bridge, batchId, clips, onCancelled } = options;
-  const run = (async () => {
-    for (const clip of clips) {
-      controller.signal.throwIfAborted();
-      if (!clip.nodeId) continue;
-      try {
-        await callTool(bridge, clip.nodeId, "node:cancelGeneration", {}, controller.signal);
-      } catch (error) {
-        if (controller.signal.aborted) throw error;
-        // ACT: 节点已卸载/已结束时取消失败属正常收尾，继续回写其余镜头。
-      }
-      await onCancelled(clip, clip.nodeId);
-    }
-  })();
-  run.catch(() => {});
-  // 取消批次不是可暂停的循环，pause 空实现以满足 DispatchHandle 契约。
-  return { batchId, run, abort: () => controller.abort(), pause: () => {} };
-}

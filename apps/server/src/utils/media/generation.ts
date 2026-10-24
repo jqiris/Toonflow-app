@@ -130,6 +130,7 @@ async function prepareRequest<T>(directory: string | undefined, mediaType: "imag
     videos: await references(request.videos, "video"), audios: await references(request.audios, "audio"),
     firstFrame: (await references(request.firstFrame ? [request.firstFrame] : undefined, "image"))?.[0],
     lastFrame: (await references(request.lastFrame ? [request.lastFrame] : undefined, "image"))?.[0],
+    ...(request.continueFrom ? { continueFrom: request.continueFrom } : {}),
     ratio: request.ratio, resolution: request.resolution, duration: request.duration, generateAudio: request.generateAudio, mode: request.mode,
   };
 }
@@ -204,7 +205,9 @@ export async function generateMedia(
         signal?.throwIfAborted();
         await writeWorkspaceFile(path, bytes, true);
         written.push(path);
-        result.push({ path: relative(directory, path).replace(/\\/g, "/"), mimeType, mediaType });
+        // ACT: jobId 随产物回传——多轨续接要用它作 continue_from.from_job 引用上一镜，
+        // 丢了它续接就无法精确接到「那一镜」，只能退化成独立起镜（等于假承接）。
+        result.push({ path: relative(directory, path).replace(/\\/g, "/"), mimeType, mediaType, ...(asset.jobId ? { jobId: asset.jobId } : {}) });
       } finally { release(); }
     }
     signal?.throwIfAborted();

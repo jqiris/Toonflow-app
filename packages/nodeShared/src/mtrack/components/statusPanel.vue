@@ -8,27 +8,47 @@
       <div v-if="clip" class="versionRow">
         <span class="panelMeta">视频版本</span>
         <el-select v-model="activeVersion" size="small" class="versionSelect" placeholder="选择视频版本">
-          <el-option v-for="item in versionOptions" :key="item.node" :label="item.label" :value="item.node" />
+          <el-option v-for="item in versionOptions" :key="item.key" :label="item.label" :value="item.key" />
         </el-select>
         <span class="panelMeta">共 {{ versionOptions.length }} 版</span>
+      </div>
+      <button
+        v-if="stale && clip?.assetPath"
+        type="button"
+        class="staleWarning"
+        title="点击重新生成，追加一个新版本"
+        @click="onStaleWarningClick">
+        当前成片已落后于最新设置，建议重新生成
+      </button>
+      <div v-if="versionOptions.length" class="versionActions">
+        <el-button
+          size="small"
+          text
+          :disabled="!activeVersion || clip?.status === 'generating'"
+          @click="emit('deleteVersion', activeVersion)">删除当前版本</el-button>
+        <el-button
+          size="small"
+          text
+          :disabled="versionOptions.length === 0 || clip?.status === 'generating'"
+          @click="emit('deleteAllVersions')">删除全部版本</el-button>
       </div>
       <div v-if="otherVersions.length" class="versionActions">
         <span class="panelMeta">设为默认</span>
         <el-button
           v-for="item in otherVersions"
-          :key="item.node"
+          :key="item.key"
           size="small"
           text
           :disabled="defaultLocked"
-          :title="item.node"
-          @click="emit('setDefaultVersion', item.node)"
+          :title="item.key"
+          @click="emit('setDefaultVersion', item.key)"
         >版本 {{ item.number }}</el-button>
       </div>
       <div v-if="previewUrl" class="preview">
         <video :src="previewUrl" controls playsinline preload="metadata" @error="onPreviewError" />
       </div>
       <p v-else-if="previewError" class="panelHint">预览失败：{{ previewError }}</p>
-      <p v-else-if="clip?.assetPath || (activeVersion && activeVersion !== clip?.nodeId)" class="panelHint">正在取预览地址…</p>
+      <p v-else-if="clip?.assetPath || (activeVersion && activeVersion !== clip?.assetPath)" class="panelHint">正在取预览地址…</p>
       <p v-else class="panelHint">尚未生成视频（无结果文件）。</p>
       <ul v-if="clip?.attempts.length" class="attempts">
         <li v-for="(attempt, index) in clip.attempts" :key="index">
@@ -63,79 +83,81 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { ElButton, ElMessage, ElOption, ElSelect } from "element-plus";
 import type { MtrackClip, AssetReport } from "../mtrackProject";
-import { clipStatusLabels, clipVersionNodes, localizeTime } from "../mtrackProject";
+import { clipStatusLabels, clipVersions, localizeTime } from "../mtrackProject";
 
 const props = defineProps<{
   clip?: MtrackClip;
   report?: AssetReport;
   readError: string;
   acquireUrl: (path: string, mimeType?: string) => { url: Promise<string>; release(): void };
-  /** 历史版本的产物路径只能经画布桥按 nodeId 反查（落盘名带随机后缀），由编辑器提供只读实现。 */
+  /** 旧工程的历史版本只有画布 nodeId（没有产物路径），经画布桥按 nodeId 反查节点产物；由编辑器提供只读实现。 */
   acquireNodeVideo?: (nodeId: string) => Promise<string>;
+  stale?: boolean;
 }>();
 
 const emit = defineEmits<{
-  (event: "setDefaultVersion", nodeId: string): void;
+  (event: "setDefaultVersion", version: string): void;
+  (event: "deleteVersion", version: string): void;
+  (event: "deleteAllVersions"): void;
 }>();
 
 /** 必须用 computed：statusLabel 要跟着选中片段变，静态取值会把标签永远钉在首次选中的那个片段上。 */
 const statusLabel = computed(() => props.clip ? clipStatusLabels[props.clip.status] : "未选中");
-const versionNodes = computed(() => clipVersionNodes(props.clip));
-/**
- * 版本列表对齐 LSC：attempts 序天然旧→新，当前默认（clip.nodeId）排在最后并打「默认」标记。
- * 历史工程里 nodeId 可能不在 attempts 里，补到末尾，保证当前默认始终可选。
- */
+/** 版本列表对齐 LSC：attempts 序天然旧→新，当前默认（clip.assetPath）排在最后并打「默认」标记。 */
+const versions = computed(() => clipVersions(props.clip));
 const versionOptions = computed(() => {
-  const current = props.clip?.nodeId ?? "";
-  const nodes = versionNodes.value;
-  const list = current && !nodes.includes(current) ? [...nodes, current] : nodes;
-  return list.map((node, index) => ({
-    node,
-    number: index + 1,
-    label: `版本 ${index + 1} · ${node.slice(0, 8)}${node === current ? " · 默认" : ""}`,
-    isDefault: node === current,
-  }));
+  const current = props.clip?.assetPath ?? "";
+  return versions.value.map((version, index) => {
+    const name = version.key.split("/").pop() || version.key;
+    return {
+      key: version.key,
+      number: index + 1,
+      label: `版本 ${index + 1} · ${name}${version.key === current ? " · 默认" : ""}`,
+      isDefault: version.key === current,
+    };
+  });
 });
 const otherVersions = computed(() => versionOptions.value.filter((item) => !item.isDefault));
 /** 生成中不切默认：这条镜的产物还在写，切了会和回写抢同一份工程。 */
 const defaultLocked = computed(() => props.clip?.status === "generating");
-/** 默认选中「默认版本」（clip.nodeId）：单版本时也把版本号摆在明面上，切片段跟随新片段。 */
-const activeVersion = ref(props.clip?.nodeId ?? "");
+/** 默认选中「默认版本」（clip.assetPath）：单版本时也把版本号摆在明面上，切片段跟随新片段。 */
+const activeVersion = ref(props.clip?.assetPath ?? "");
 const previewUrl = ref("");
 const previewError = ref("");
 let releasePreview: (() => void) | undefined;
 let previewJob = 0;
 
 watch(() => props.clip?.clipId, () => {
-  activeVersion.value = props.clip?.nodeId ?? "";
+  activeVersion.value = props.clip?.assetPath ?? "";
 });
 
-/** 生成完成后默认会换成新节点：预览跟随到新默认。用户主动选历史版本时 nodeId 不变，不会被覆盖。 */
-watch(() => props.clip?.nodeId, (node) => {
-  activeVersion.value = node ?? "";
+/** 生成完成后默认会换成新产物：预览跟随到新默认。用户主动选历史版本时 assetPath 不变，不会被覆盖。 */
+watch(() => props.clip?.assetPath, (path) => {
+  activeVersion.value = path ?? "";
 });
 
 /**
- * 选中版本即切换预览：当前版本用工程里的 assetPath，历史版本经画布桥读该节点真实产物路径。
+ * 选中版本即切换预览：版本条目自带产物路径时直接取文件；旧工程只有 nodeId 的条目经画布桥反查节点产物。
  * 预览切换可能在多个 await 之间重入（快速换版本），用 previewJob 丢弃过期的结果。
  */
-watch([activeVersion, () => props.clip?.assetPath], async ([version, assetPath]) => {
+watch(activeVersion, async (version) => {
   const job = ++previewJob;
   releasePreview?.();
   releasePreview = undefined;
   previewUrl.value = "";
   previewError.value = "";
-  const isCurrent = !version || version === props.clip?.nodeId;
-  if (isCurrent && !assetPath) return;
-  let path = isCurrent ? assetPath as string : "";
-  if (!isCurrent) {
+  const entry = versions.value.find(item => item.key === version);
+  if (!entry) return;
+  let path = entry.assetPath ?? "";
+  if (!path && entry.nodeId) {
     if (!props.acquireNodeVideo) {
       previewError.value = "当前界面无法读取历史版本产物";
       return;
     }
     try {
-      path = await props.acquireNodeVideo(version);
+      path = await props.acquireNodeVideo(entry.nodeId);
     } catch (reason) {
       if (job === previewJob) previewError.value = reason instanceof Error ? reason.message : String(reason);
       return;
@@ -145,6 +167,9 @@ watch([activeVersion, () => props.clip?.assetPath], async ([version, assetPath])
       previewError.value = "该版本节点上没有视频产物";
       return;
     }
+  } else if (!path) {
+    previewError.value = "该版本没有视频产物";
+    return;
   }
   const shared = props.acquireUrl(path, "video/mp4");
   releasePreview = shared.release;
@@ -165,6 +190,10 @@ function onPreviewError(event: Event) {
   const target = event.target as HTMLVideoElement | null;
   const code = target?.error?.code;
   previewError.value = code ? `视频加载失败（code ${code}）` : "视频加载失败";
+}
+
+function onStaleWarningClick() {
+  ElMessage.warning("重新生成会追加一个新版本，旧版本保留");
 }
 </script>
 
@@ -201,6 +230,24 @@ function onPreviewError(event: Event) {
 .versionActions :deep(.el-button) {
   margin-left: 0;
   padding: 0 6px;
+}
+
+.staleWarning {
+  margin: 0;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--el-color-warning-light-9, #fdf6ec);
+  color: var(--el-color-warning, #e6a23c);
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+}
+
+.staleWarning:hover {
+  text-decoration: underline;
 }
 
 .panelBlock {

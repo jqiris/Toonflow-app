@@ -10,7 +10,7 @@
 
 - `plan/story.mtrack` 是**唯一真源**：分镜、参数、参考顺序、生成状态只在这里。画布节点是执行载体，画布 JSON 不存业务语义。该文件为 JSON 内容、自定义 `.mtrack` 扩展名（宿主按 `split(".").at(-1)` 关联，`.mtrack.json` 会被识别为 json 撞关联）。
 - 它**取代** [旧方案](../../../../docs/assetCardWorkflowPlan.md) 的 `plan/segmentMap.json`（片段 → 节点映射）：`clips[].nodeId` 就是映射，不再维护第二份文件。
-- 写者只有两条通道：①多轨编辑器内核（`packages/nodeShared/src/mtrack/`，文档面板扩展与画布多轨节点共用同一实现）——界面「生成选中段」「批量生成…」与 `node:dispatchGenerate` 都是直连生成（`directDispatch.ts` 的 `beginDirectDispatch`），`status`/`nodeId`/`assetPath`/`attempts` 由编辑器写；②`planOperator`——`build` 写工程初稿，`mtrackUpdate` 在 Agent 按生成 SOP 逐镜编排（会话内路径）时写状态。**Agent 不手改该文件**（不直接写 JSON、不调 `files.writeJson`）；两条通道同经 `updatedAt` CAS 对账，谁先落盘谁更新。人工手改视为草案，下次校验会被指出。
+- 写者只有两条通道：①多轨编辑器内核（`packages/nodeShared/src/mtrack/`，文档面板扩展与画布多轨节点共用同一实现）——界面「生成选中段」「批量生成…」与 `node:dispatchGenerate` 都是直连生成（走服务端媒体任务通道：`mediaDispatch.ts` 的 `composeClipRequest` + `mediaTask.ts` 的 `submitClipTask`/`waitClipTask`，不建画布节点），`status`/`nodeId`/`assetPath`/`attempts` 由编辑器写；②`planOperator`——`build` 写工程初稿，`mtrackUpdate` 在 Agent 按生成 SOP 逐镜编排（会话内路径）时写状态。**Agent 不手改该文件**（不直接写 JSON、不调 `files.writeJson`）；两条通道同经 `updatedAt` CAS 对账，谁先落盘谁更新。人工手改视为草案，下次校验会被指出。
 - 路径一律工作区相对、`/` 分隔；写入走 `context.files`（工具）或 `ExtFiles`（扩展），不直接调 `node:fs` / `Bun.write`。
 
 ---
@@ -21,6 +21,7 @@
 {
   "version": 1,
   "projectId": "nanKe",
+  "name": "南柯记·第一集",
   "updatedAt": "2026-10-19T10:00:00+08:00",
   "global": {
     "ratio": "9:16",
@@ -43,7 +44,7 @@
         "nonDiegeticMusic": "A low guzheng and xiao motif, sparse."
       },
       "referenceIds": ["C01", "C03", "C05", "SC02"],
-      "continuity": "start",
+  "continuity": "shot",
       "status": "pending",
       "nodeId": null,
       "assetPath": null,
@@ -54,7 +55,7 @@
 }
 ```
 
-> 片段带参考时，`integratedMultimodalDescription` 要按 §四 直接写官方六段（`subject_definitions:` → `summary:` → `retention_analysis:` → `detailed_description:`），正文用 `<Picture N>` 指位；上面骨架为求简短，只示意了画面正文段。
+> 片段带参考时，`integratedMultimodalDescription` 要按 §四 直接写官方六段（`subject_definitions:` → `summary:` → `retention_analysis:` → `detailed_description:`），正文用 `{{ref N}}` 指位；上面骨架为求简短，只示意了画面正文段。
 
 ---
 
@@ -65,7 +66,8 @@
 | 字段 | 类型 | 必填 | 约束 | 说明 |
 |---|---|---|---|---|
 | `version` | number | ✅ | 当前为 `1` | 契约版本，升级时整体迁移，不原地改写 |
-| `projectId` | string | ✅ | 非空 | 项目标识，用于跨文件对账 |
+| `projectId` | string | ✅ | 非空 | 项目标识，用于跨文件对账（编辑器/建工程处写 `mtrack-<时间戳>`）。**不是显示名**，界面「项目名称」编辑的是 `name` |
+| `name` | string | 否 | — | 项目显示名（工作台与「项目与成片」浮窗头部）；additive 可选字段，缺失即留空，不参与生成与合成 |
 | `updatedAt` | string | ✅ | ISO 8601 带时区 | **写者每次保存必须刷新**，冲突判定见 §五 |
 | `global` | object | ✅ | 见下 | 全片默认值，`clips[]` 同名项覆盖它 |
 | `global.ratio` | string | ✅ | `9:16`/`16:9`/`1:1`/`4:3`/`3:4` | 默认画幅 |
@@ -82,21 +84,38 @@
 | `title` | string | ✅ | 1–120 字符 | 显示名 |
 | `sourceRange` | object | 否 | `{ fromSegment, toSegment }` | 溯源到剧本/分镜稿的段号，便于回改 |
 | `seconds` | number | ✅ | **整数 2–60** | 提交整数秒；实际成片落在引擎 `17n+5` 网格（6s→6.583s，10s→10.125s），≥30s 自动分块时参考图实限 3 张 |
-| `ratio` | string | ✅ | 五档枚举 | 与 `global.ratio` 不同则覆盖 |
+| `ratio` | string | ✅ | 五档枚举 | 与 `global.ratio` 不同则覆盖；**缺省不跟随 `global.ratio`，会静默落 `9:16`**（`mtrackProject.ts:262`），手写 JSON 必须每镜写全 |
 | `resolution` | string | ✅ | `768P`/`2K` | 来自 `durationResolutionMap`（V12） |
 | `generateAudio` | boolean | ✅ | — | H3 `audio: "optional"` 的开关 |
 | `prompt.integratedMultimodalDescription` | string | ✅ | 非空 | 画面/动作/对白；**正文用英文**，`[Shot 1]` 起，多镜头写 `[Shot 2] At 00:03.000, …`（严格递增且在时长内）；对白包 `<d>[Chinese]…</d>` |
-| `prompt.overallSoundscape` | string | ✅ | 可 `N/A` | 环境声与动作声 |
-| `prompt.nonDiegeticMusic` | string | ✅ | 可 `N/A` | 配乐 |
-| `referenceIds` | string[] | ✅ | **图 ≤4**；顺序是画布引用位次（可混入 `kind: "sound"` 音频卡，决定官方标记的编号基数） | 资产卡编号，须存在于 `assetIndex.json` 且资产已出图（V13） |
-| `continuity` | enum | ✅ | `start`/`continue`/`cut` | **首段必须 `start`** |
+| `prompt.overallSoundscape` | string | ✅ | 可 `N/A`；**留空则不下发该段** | 环境声与动作声（只写内容，`overall_soundscape:` 由引擎拼） |
+| `prompt.nonDiegeticMusic` | string | ✅ | 可 `N/A`；**留空则不下发该段** | 配乐（只写内容，`non_diegetic_music:` 由引擎拼） |
+| `referenceIds` | string[] | ✅ | **图片 ≤9**（校验器 V8 的 `MAX_IMAGE_REFERENCES = 9`）、**音频 ≤1**（同属 V8 的 `MAX_AUDIO_REFERENCES = 1`）；**视频参考并入图片桶一起计数，V8 不校验视频**（卡体系没有 `video` 这个 `kind`，「视频 ≤1」只是供应商声明）；**多轨界面勾选上限只有 4**（`referencePicker.vue` 的 `toggle` 硬编码，4 来自供应商声明的 `imageReference:4`）——超 4 张是被界面挡下的，不是校验器挡下的；顺序是画布引用位次，`{{ref N}}` 的 `N` 就是这里的下标 +1（可混入 `kind: "sound"` 音频卡） | 资产卡编号，须存在于 `assetIndex.json` 且资产已出图（V13） |
+| `mode` | enum | 否 | `ref` / `image` / `text` | 任务模式：`ref` 多图参考、`image` 单图首帧、`text` 纯文。**缺省只能推断出 `text`（无 `referenceIds`）或 `ref`（有参考）；`image` 推断不出来，要单图首帧必须显式写**（`resolveClipMode`，`mtrackProject.ts:47-51`） |
+| `continuity` | enum | ✅ | `shot`（独立起拍/切镜）/ `context`（承接上一镜） | **首段必须 `shot`**；`context` 时参考素材合计 ≤3（图片/视频/音频同口径，V16 按 `referenceIds` 总数判）、时长 ≥10 秒；三种衔接到两态的判据见 §2.3 |
 | `status` | enum | ✅ | `pending`/`generating`/`generated`/`accepted`/`failed` | 状态机见 §三 |
-| `nodeId` | string\|null | ✅ | 生成后必有 | 视频节点 ID；`generated`/`accepted` 时不得为 `null`（V13） |
-| `assetPath` | string\|null | ✅ | 工作区相对路径 | 产出视频；必须**真实可读**，否则该镜只能记 `failed` |
-| `attempts` | object[] | ✅ | 追加写，`{ at, nodeId, status, error? }` | 每次尝试留痕，重生成不覆盖历史；其中 `status === "succeeded"` 的 `nodeId` 去重后即该镜的**视频版本列表**（旧→新，见 §三 重生成口径） |
-| `notes` | string | 否 | — | 自由备注 |
+| `nodeId` | string\|null | ✅ | — | 视频节点 ID；**媒体任务通道的镜恒为 `null`**（该通道不建画布节点，`generated`/`accepted` 也不要求它，V13 对这类镜有例外），旧工程的画布节点版次才有值 |
+| `assetPath` | string\|null | ✅ | 工作区相对路径 | 产出视频；必须**真实可读**，否则该镜只能记 `failed`。也是**历史版本的身份**（见 §三）；`generated`/`accepted` 时不得为 `null`（V13） |
+| `attempts` | object[] | ✅ | 追加写，9 字段 `{ at, nodeId, status, error?, jobId?, assetPath?, signature?, index?, parentJobId? }` | 每次尝试留痕，重生成不覆盖历史；`jobId` 供续接，`assetPath` 是本次尝试的产物路径；`signature` / `index` / `parentJobId` 只在**成功**那一条写，记录落盘那一刻的参数签名、时间线位置与续接来源（父镜 `continuationJobId`），供编辑器的待更新判定比对（generationRunbook §15.9·5）。其中 `status === "succeeded"` 的记录按**产物路径**去重（旧记录回退用 `nodeId`）即该镜的**视频版本列表**（旧→新，见 §三 重生成口径） |
+| `notes` | string | 否 | — | 自由备注，**不参与提示词下发**（agent 可写，界面只作备注读；当系统提示词读会有提示词注入隐患） |
+| `systemPromptOverride` | string | 否 | — | 本镜系统提示词：非空时派工替换 `global.systemPrompt`，留空沿用全片；additive 可选字段 |
 
 > 字段名一律小驼峰（AGENTS.md）；`clips[]` 内允许的键以上表为限，不自行新增字段——新增字段会让旧版工具与编辑器直接校验失败。
+
+### 2.3 `continuity` 取值判据：三种衔接到两态
+
+`shot` / `context` 只有两个取值，按「这一段真正需要什么上下文」判定，**不要按场景编号机械决定**：
+
+| 情况 | 用什么 | 判据 |
+| --- | --- | --- |
+| **动作续接**：同一动作继续，上一镜末帧就是本镜起点 | `context` | 上一镜已成功且 `attempts` 里有 `jobId`；本镜 ≥10 秒、参考合计 ≤3 |
+| **同场切镜**：同一空间换机位/景别，身份、服装、道具、环境状态连续 | `shot` | 保持 `referenceIds` 里的身份/场景/道具卡一致即可；**不因为场景编号相同就强制延续运动上下文** |
+| **换场或时间跳转** | `shot` | 只继承剧情需要的人物与物品状态 |
+
+- **只有动作续接用 `context`**：同场切镜用 `context` 会强制延续上一镜的运动，多半得到一段拖沓的重复动作；真正的动作续接用 `shot` 则会丢掉起点的身体姿态与持物状态。
+- `context` 拿不到上一镜可用的 `jobId` 时**直接报错，不静默降级成独立镜头**：要么先生成上一镜，要么显式改成 `shot`。
+- 少数镜用 `context` 属正常，全片都用通常是判错了。
+- **批量派工是串行的**：`node:dispatchGenerate` 对目标镜按 `clips` 顺序逐个执行（上一镜出结果才开始下一镜），不是并发下发。所以同一批次里可以混用两态——轮到某镜时上一镜已落盘、`attempts` 里的 `jobId` 已经能读到；不要为了「批量就不能续接」把承接镜改成 `shot`，也不要为了续接把独立镜改成 `context`。上一镜失败时下一镜的 `context` 会报「上一镜没有可用的生成任务号」并跳过（串行必然结果），修好上一镜后用 `node:resumeBatch` 续跑该镜（沿用同一 `batchId`）。
 
 ---
 
@@ -113,52 +132,52 @@ pending ──提交生成──> generating ──成功──> generated ─�
 | `pending` | 编辑器 / Agent（经 `planOperator mtrackUpdate`）/ `build` | 待生成；参数已定稿 | 校验通过 → 提交生成 |
 | `generating` | 发起派工的一方：界面按钮或 `node:dispatchGenerate` → 编辑器；会话内逐镜 → Agent 经 `mtrackUpdate` | 已提交，供应商侧在跑 | 追终态 → `generated` / `failed` |
 | `generated` | 同上（须先读到真实产出，见下方硬门槛） | 视频已落地，**不等于交付完成** | 用户验收 → `accepted`；打回则改提示词后回 `pending` |
-| `accepted` | **只能由用户**在多轨界面单镜编辑器点「验收」写入（`clipEditor.vue:13`）；Agent 的 `mtrackUpdate` / `node:editProject` 写入枚举都不含它，代写会被校验拒绝 | 唯一进入合成清单的状态 | M4 按顺序 concat（generationRunbook §15.6） |
+| `accepted` | **只能由用户**在多轨界面单镜编辑器点「验收」写入（`packages/nodeShared/src/mtrack/components/shotEditorPane.vue:13-21`）；Agent 的 `mtrackUpdate` / `node:editProject` 写入枚举都不含它，代写会被校验拒绝 | 唯一进入合成清单的状态 | M4 按顺序 concat（generationRunbook §15.6） |
 | `failed` | 发起派工的一方写 | 含 `attempts[].error` | 修参数 → `pending` 重试 |
 
-- **重生成 = 追加版本，不覆盖旧产物**：编辑器直连链路（`directDispatch.ts` 的 `ensureNode`）对**已产出视频**的节点不再复用，改新建同 label 视频节点，旧节点与旧视频留在画布；`clip.nodeId`/`assetPath` 指向新版本，即新版本成为该镜默认。版本列表 = `attempts` 里 `status === "succeeded"` 的 `nodeId` 去重（旧→新，`mtrackProject.ts` 的 `clipVersionNodes`）。切回旧版本只改 `clip.nodeId`/`assetPath`（编辑器「设为默认」或 agent `node:editProject` 的 `patch`），**不改 `status`、不追加 `attempts`**——切换不是一次生成尝试；`accepted` 状态不受影响，合成仍按 `assetPath` 取当前默认版本（generationRunbook §15.9）。**注意**：generationRunbook §一 步 1.5 的 agent 逐镜编排（`planOperator dispatch` → `mtrackUpdate`）仍复用自己的 `nodeId`，那条路径不产生新版本。
+- **重生成 = 追加版本，不覆盖旧产物**：每次成功生成都落一个新的产物文件（`assets/<clipId>/` 下带随机后缀），旧文件不覆盖；`clip.assetPath` 指向新版本，即新版本成为该镜默认，这条 `succeeded` 的 attempt 也带同样的 `assetPath`。版本列表 = `attempts` 里 `status === "succeeded"` 的记录按**产物路径**去重（`key = attempt.assetPath || attempt.nodeId`，旧记录回退用 nodeId，旧→新，末尾补 `clip.assetPath`），即 `mtrackProject.ts` 的 `clipVersions(clip)` 返回的 `ClipVersion[]`——对齐 LSC 的 `resultVersions`（按 `file.url` 去重），**不再依赖画布 nodeId**，所以服务端媒体任务通道（不建画布节点、`nodeId` 恒为 `null`）的成片**同样出现在历史版本里**；这类条目的产物直接按路径读，只有旧工程没有 `assetPath` 的条目才经画布桥反查节点产物。切回旧版本只改 `clip.nodeId`/`assetPath`（编辑器「设为默认」或 agent `node:editProject` 的 `patch`），**不改 `status`、不追加 `attempts`**——切换不是一次生成尝试；`accepted` 状态不受影响，合成仍按 `assetPath` 取当前默认版本（generationRunbook §15.9）。**注意**：generationRunbook §一 步 1.5 的 agent 逐镜编排（`planOperator dispatch` → `mtrackUpdate`）复用已有的 `nodeId`，那条路径不新增版本。
+- **版本可删除、可判待更新**：多轨编辑器提供单版本删除与整镜全部删除（`mtrackProject.ts` 的 `deleteClipVersion(clip, key)` / `deleteAllClipVersions(clip)`，删 `succeeded` 的 attempt 条目并按 `EditorFiles.remove?` 删物理文件），删除后当前默认回落到剩余版本里最新的一条；生成中的镜禁止删除。版本新鲜度由 `clipStates(project)` 派生 `stale`（参数签名 / 时间线位置 / 续接来源三条件，对齐 LSC 的 `signatures()` / `public()`）；`stale` 是派生值，**不落盘、不进本文件字段表**，agent 侧不做删除版本（`node:editProject` / `mtrackUpdate` 没有删除版本操作）。明细见 generationRunbook §15.9·5 与 §15.9·6。
 - **回写状态的硬门槛**（§4.6 纪律 3）：写 `generated` 前必须能读到真实产出文件；`assetPath` 指向不存在或不可读的文件时，只能写 `failed` + `error: "未找到产出"`。
 - `accepted` 是唯一进入合成的状态；合成清单（`plan/composite.json`）只含 `accepted` 镜，且顺序连续、无空洞（V14）。
 
 ---
 
-## 四、参考标记：写作者直接写官方六段 + `<Picture N>`
+## 四、参考标记：写作者直接写六段 + `{{ref N}}`
 
 `referenceIds` 的数组顺序即权威。Toonflow 侧的实际顺序由 `data.referenceOrder`（键为 `encodeURIComponent(JSON.stringify([source, sourceHandle]))`）+ 入边顺序决定，**必须逐一核对**，不能假定连线手势等于数组顺序（V15）。
 
-**编号规则**：官方标记按**参考类型各自编号**——`<Picture 1>`、`<Picture 2>`… 只数**图片类**参考，`<Audio 1>` 从音频自己的第 1 个起算，`<Video 1>` 同理，三类互不共用序号。`referenceIds` 的位次是**画布引用位次**，不是 Picture 序号（它可能混入 `kind: "sound"` 的音频卡，V8 把图片 ≤4 与音频分开计）。下面这个例子是「参考全是图片」的简单情形，此时位次恰好等于 Picture 序号：
+**编号规则**：参考标记统一写 `{{ref N}}`，`N` 就是 `referenceIds` 里的位次（从 1 起）。不管参考是图片、音频还是视频，都按同一份列表连续编号：
 
 ```text
-referenceIds: ["C01", "C03", "C05", "SC02"]   ← 全是图片
-                ↓        ↓        ↓        ↓
-          <Picture 1> <Picture 2> <Picture 3> <Picture 4>
+referenceIds: ["C01", "C03", "C05", "SC02"]
+                 ↓      ↓      ↓      ↓
+            {{ref 1}} {{ref 2}} {{ref 3}} {{ref 4}}
 ```
 
-**位次 ≠ Picture 序号**：音频卡（`kind: "sound"`）会占 `referenceIds` 的一个位次，所以混排时必须按类型重新数，**绝不能**拿位次当 Picture 号——那会把图片参考的编号整体错位、把音频当成图片：
+混排音频卡（`kind: "sound"`）时位次照常往后排，不跳号：
 
 ```text
-referenceIds: ["C01", "A01", "C03"]（A01 是 kind: "sound" 的音频卡）
-画布引用位次：    1        2        3
-正确写法：  <Picture 1> <Audio 1> <Picture 2>
-错误写法：把 A01 写成 <Picture 2>（C03 的图被当成音频，位次整体错一位）
+referenceIds: ["C01", "S01", "C03"]
+                 ↓      ↓      ↓
+            {{ref 1}} {{ref 2}} {{ref 3}}
 ```
 
-视频参考同理只数视频（`<Video 1>`）。**「位次 = Picture 序号」只在参考全是图片时成立**，是特例不是通例。
+引擎下发前会按参考的媒体类型把 `{{ref N}}` 换算成模型侧标记（图片、视频、音频各自编号），写作者只需要记住「`N` = 参考列表第 N 项」这一条，不必自己按类型数。同一个资产在多处引用时，始终写同一个 `{{ref N}}`。
 
-V7 只查越界：三类标记的编号落在**该类型参考的数量范围**内——画面上限 = 非 sound 卡数、音频上限 = sound 卡数、视频或参考卡缺 `kind` 时上限 = 参考总数。**不查重号**（同一编号在正文里反复复述属正常写法），也**不要求**每个编号都出现——某张参考本镜用不上，正文里可以完全不出它的标记，但它仍要留在 `referenceIds` 里才会送进引擎。
+V7 只查越界：`{{ref N}}` 的 `N` 必须落在 `1..referenceIds.length` 内。**不查重号**（同一编号在正文里反复出现属正常写法），也**不要求**每个编号都出现——某张参考本镜用不上，正文里可以完全不出它的标记，但它仍要留在 `referenceIds` 里才会送进引擎。
 
 ### 六段由写作者直接写，引擎不再代写
 
-官方 ref2va 六段里，前四段写进 `clips[].prompt.integratedMultimodalDescription`（段首标签自己写，段间空一行），后两段分别写进 `overallSoundscape` / `nonDiegeticMusic`：
+官方 ref2va 六段里，前四段写进 `clips[].prompt.integratedMultimodalDescription`（段首标签自己写，段间空一行），后两段分别写进 `overallSoundscape` / `nonDiegeticMusic`（**字段里只写内容，不写段名**——段名由 `buildPrompt` 拼，写两遍会变成 `overall_soundscape: overall_soundscape: …`）：
 
 | 段 | 段首标签 | 写进哪个字段 | 写什么 |
 |---|---|---|---|
 | 资产定义段 | `subject_definitions:` | `integratedMultimodalDescription` | 每个参考资产一行 `<Subject N> = <卡ID>（<名称>，用途：<kind>）`，并写出该资产的外貌 / 空间结构 / 形制特征 |
 | 摘要段 | `summary:` | 同上 | 一两句总述本镜画面与动作 |
 | 参考保持分析段 | `retention_analysis:` | 同上 | 逐条写 `<Subject N>` 保留了哪些特征，用官方关系标记 `fully_preserved` / `partially_preserved` |
-| 画面正文段 | `detailed_description:` | 同上 | `[Shot 1]` 起的分镜动作与环境；被引用资产首次出现处写「被引用特征 + 画面位置 + 当前动作」，用 `<Picture N>` 指位 |
-| 环境声段 | `overall_soundscape:` | `overallSoundscape` | 环境声与动作声 |
-| 配乐段 | `non_diegetic_music:` | `nonDiegeticMusic` | 配乐 |
+| 画面正文段 | `detailed_description:` | 同上 | `[Shot 1]` 起的分镜动作与环境；被引用资产首次出现处写「被引用特征 + 画面位置 + 当前动作」，用 `{{ref N}}` 指位 |
+| 环境声段 | `overall_soundscape:`（引擎补） | `overallSoundscape`（只写内容） | 环境声与动作声 |
+| 配乐段 | `non_diegetic_music:`（引擎补） | `nonDiegeticMusic`（只写内容） | 配乐 |
 
 **硬要求：有参考的片段，`integratedMultimodalDescription` 的第一行必须是 `subject_definitions:`**（段首标签，不能只按顺序罗列六段内容）。漏写段首时 `buildPrompt`（`packages/nodeShared/src/mtrack/directDispatch.ts:106`）会兜底补一个 `detailed_description: `（有参考）/ `integrated_multimodal_description: `（无参考），等于把整段当成画面正文——`summary` 与 `retention_analysis` 直接缺失，六段结构不完整。
 
@@ -166,13 +185,13 @@ V7 只查越界：三类标记的编号落在**该类型参考的数量范围**�
 
 ```jsonc
 "prompt": {
-  "integratedMultimodalDescription": "subject_definitions:\n<Subject 1> = C01（淳于棼·人间游侠，用途：character），青灰短褐、腰间旧玉佩、束发木簪。\n<Subject 2> = C03（淳于棼·驸马，用途：character），驸马红袍、金冠、腰悬玉带。\n<Subject 3> = C05（罗云，用途：character），藕荷色襦裙、右眉浅疤、垂鬟。\n<Subject 4> = SC02（槐下饮酒·夜，用途：scene），老槐树、石桌石凳、树下灯笼。\n\nsummary:\n槐树下夜饮：C01 举碗饮尽，C05 斟酒，镜头由中景推到碗的特写。\n\nretention_analysis:\n<Subject 1> (appears in [Shot 1], [Shot 2]): fully_preserved - 青灰短褐、旧玉佩、束发木簪，与 <Picture 1> 一致。\n<Subject 3> (appears in [Shot 2]): fully_preserved - 藕荷色襦裙、右眉浅疤，与 <Picture 3> 一致。\n<Subject 4> (appears in [Shot 1], [Shot 2]): partially_preserved - 保留老槐树形态与石桌位置，夜色与灯笼暖光按本镜重打。\n\ndetailed_description:\n[Shot 1] Live-action, cinematic, dusk light under the old locust tree south of the Guangling mansion. C01 (Picture 1), a lean man in a grey short jacket with an old jade pendant, stands by the stone table and drains the ceramic bowl; C05 (Picture 3) leans in to refill it. The old locust tree and stone table from SC02 (Picture 4) frame them in the foreground shadow. [Shot 2] At 00:04.500, the camera cuts to a close shot of the bowl tilting, a drop of wine running down its rim.",
+  "integratedMultimodalDescription": "subject_definitions:\n<Subject 1> = C01（淳于棼·人间游侠，用途：character），青灰短褐、腰间旧玉佩、束发木簪。\n<Subject 2> = C03（淳于棼·驸马，用途：character），驸马红袍、金冠、腰悬玉带。\n<Subject 3> = C05（罗云，用途：character），藕荷色襦裙、右眉浅疤、垂鬟。\n<Subject 4> = SC02（槐下饮酒·夜，用途：scene），老槐树、石桌石凳、树下灯笼。\n\nsummary:\n槐树下夜饮：C01 举碗饮尽，C05 斟酒，镜头由中景推到碗的特写。\n\nretention_analysis:\n<Subject 1> (appears in [Shot 1], [Shot 2]): fully_preserved - 青灰短褐、旧玉佩、束发木簪，与 {{ref 1}} 一致。\n<Subject 3> (appears in [Shot 2]): fully_preserved - 藕荷色襦裙、右眉浅疤，与 {{ref 3}} 一致。\n<Subject 4> (appears in [Shot 1], [Shot 2]): partially_preserved - 保留老槐树形态与石桌位置，夜色与灯笼暖光按本镜重打。\n\ndetailed_description:\n[Shot 1] Live-action, cinematic, dusk light under the old locust tree south of the Guangling mansion. C01 ({{ref 1}}), a lean man in a grey short jacket with an old jade pendant, stands by the stone table and drains the ceramic bowl; C05 ({{ref 3}}) leans in to refill it. The old locust tree and stone table from SC02 ({{ref 4}}) frame them in the foreground shadow. [Shot 2] At 00:04.500, the camera cuts to a close shot of the bowl tilting, a drop of wine running down its rim.",
   "overallSoundscape": "Cicadas, wind through locust leaves, the clink of the ceramic bowl, wine pouring.",
   "nonDiegeticMusic": "A low guzheng and xiao motif, sparse."
 }
 ```
 
-下发到引擎时，`buildPrompt`（`packages/nodeShared/src/mtrack/directDispatch.ts:97-114`）看到正文已自带官方段首就**不再套字段名**（`:95` 的 `officialSection` 匹配即跳过补全），正文原样进 wire（**旧标记也不改写**），段间空一行：
+下发到引擎时，`buildPrompt`（`packages/nodeShared/src/mtrack/directDispatch.ts:97-114`）看到正文已自带官方段首就**不再套字段名**（`:95` 的 `officialSection` 匹配即跳过补全），正文原样进 wire，段间空一行：
 
 ```text
 subject_definitions:
@@ -192,16 +211,14 @@ overall_soundscape: Cicadas, wind through locust leaves, …
 non_diegetic_music: A low guzheng and xiao motif, sparse.
 ```
 
-上面是**节点 wire 层（freevideo）最终发给引擎的文本**。`buildPrompt` 的输出里旧标记仍是原样：正文残留的 `{{ref N}}` 不会被引擎层改写，要等 `packages/nodes/videoGenerationNode/src/index.vue:225-238` 的 `generationPrompt` 用 `referenceTags(refList)` 按 `dataType` 逐位替换成 `<Picture N>` / `<Video N>` / `<Audio N>`（仅 freevideo 生效；未规范书写的 `{{Picture N}}` 双花括号形式也在这一层兜底）。所以新稿直接写官方标记最稳，旧工程带 `{{ref N}}` 的片段靠这一层兜底，引擎层不做换算。
+上面是**节点 wire 层最终发给引擎的文本**。`buildPrompt` 不改写正文：正文里的 `{{ref N}}` 原样保留，到 `packages/nodes/videoGenerationNode/src/index.vue` 的 `generationPrompt` 才用 `referenceTags(refList)` 按每个参考的 `dataType` 逐位换算成模型侧标记（图片、视频、音频各自编号）；模型 id 命中 `minimax-h3` 的供应商都会换算。写作者只管按 §四 的 `{{ref N}}` 口径写，换算不用自己数。
 
 工程设了 `global.style` / `global.systemPrompt` 时，引擎会把「全片风格：…」「全片约束：…」这两行拼在整段正文最前面（`packages/nodeShared/src/mtrack/directDispatch.ts:101-105`），它们不属于官方六段；要求 wire 提示词严格以 `subject_definitions:` 开头的场合，把这两个工程字段留空。
 
 - 没有参考的片段只写画面正文段（其余五段不出现），下发时仍是 `integrated_multimodal_description: <正文>`。
-- 旧工程兼容：旧方案正文里写的 `{{ref N}}` 用**画布引用位次**（图片、音频、视频、文本混排后的位次），与官方「按类型各自编号」的基数不同。引擎层（`packages/nodeShared/src/mtrack/directDispatch.ts:97-114`）**不改写**它、原样透传，到节点 wire 层才由 `packages/nodes/videoGenerationNode/src/index.vue:212-224` 的 `referenceTags` 按 `dataType` 逐项换算成正确的官方编号。旧标记只作为兼容入口存在，新稿一律直接写官方标记，也不要教人把官方编号换算回旧标记。
-- 不要记「官方 `<Picture N>` 等于旧标记的 N」——两者编号基数不同，等号会让写作者把音频编号错写成图片编号。
-- 新工程一律直接写 `<Picture N>`，不再使用旧标记；画布 mention chip 插进 promptInput 的 `{{ref N}}` 属同一套旧格式兼容入口，wire 层同样换算成 `<Picture N>`，所以画布链路不需要任何改动。
+- 画布参考区把资产插进镜头时，mention chip 写入的也是 `{{ref N}}`（N = 参考位次），与手写同一套口径，画布链路不需要额外处理。
 - 用途取值 `character` / `scene` / `prop` / `composition`，与 `assetIndex.json` 的 `kind` 一致。
-- 每改一次 `referenceIds` 或连线，都要重新核对正文里的 `<Picture N>` 位次并重新 `setPrompt`（R9：编号漂移）。
+- 每改一次 `referenceIds` 或连线，都要重新核对正文里的 `{{ref N}}` 位次并重新 `setPrompt`（R9：编号漂移）。
 
 ### 参考形貌规则
 
@@ -212,7 +229,7 @@ non_diegetic_music: A low guzheng and xiao motif, sparse.
 - `detailed_description` 里该资产首次出现时，要同时写「被引用的特征 + 画面位置 + 当前动作」，环境与光照照常写；`[Shot 1]` 前允许用一两句英文定下风格。
 - 担心模型把第 1 张图当精确首帧时，可在 `detailed_description` 末尾自己补一句「图片仅作参考，不自动作为精确首帧。」——本仓库无 latent 续接，这是可选句子，引擎不再自动追加。
 
-"因为挂了参考图所以正文不能描述"是错的：官方 `ref-en.txt` §0 明确要求 detailed_description 尽可能详细，§5.3 要求在参考主体首次出现时描述其被引用特征；官方完整示例里同一处咖啡店砖墙、沙发、霓虹灯在 `subject_definitions`、`retention_analysis`、`detailed_description` 三处都写了一遍。正文只留一句 `<Picture 1>` 而不写特征，模型就只能靠一张图去猜，这才是画面跑偏的常见原因。
+"因为挂了参考图所以正文不能描述"是错的：官方 `ref-en.txt` §0 明确要求 detailed_description 尽可能详细，§5.3 要求在参考主体首次出现时描述其被引用特征；官方完整示例里同一处咖啡店砖墙、沙发、霓虹灯在 `subject_definitions`、`retention_analysis`、`detailed_description` 三处都写了一遍。正文只留一句 `{{ref 1}}` 而不写特征，模型就只能靠一张图去猜，这才是画面跑偏的常见原因。
 
 需要换装、换状态时，改的是**参考卡的编号**（换 `C03`），不是把参考图里没有的新外貌写成另一套；描述要与参考图一致。
 
@@ -226,7 +243,7 @@ non_diegetic_music: A low guzheng and xiao motif, sparse.
 | **保存时机** | 字段失焦即 `files.writeJson` 落盘，并显示「已保存 · <时间>」；存在未保存改动时标题加 `*` |
 | **`updatedAt` 冲突** | 每次保存前重新读一次磁盘上的 `updatedAt`，与本次编辑前读到的不一致 → 中止写入，提示「文件已被其他操作修改，请重新加载」，**不静默覆盖** |
 | **快照提示** | 编辑器与生成界面固定展示：「生成任务按提交时的快照运行，此处修改只影响下次生成。」 |
-| **空值与追加** | `nodeId`/`assetPath` 在生成成功/失败时落值；**唯一例外是切换默认版本**：编辑器把 `nodeId`/`assetPath` 指向某个历史 `succeeded` 版本（不改 `status`、不追加 `attempts`）；`attempts` 只追加，不删除、不改写历史项 |
+| **空值与追加** | `assetPath` 在生成成功/失败时落值，也是历史版本的身份；`nodeId` 只有画布节点通道的镜才有值，媒体任务通道恒为 `null`；**两个例外**：切换默认版本（编辑器把 `nodeId`/`assetPath` 指向某个历史 `succeeded` 版本，不改 `status`、不追加 `attempts`）与**删除版本**（编辑器 `deleteClipVersion` / `deleteAllClipVersions` 删掉对应的 `succeeded` attempt 条目并删物理文件，删默认版本后 `assetPath` 回落到剩余最新一条、删空则置 `null`）。除这两种情形外，`attempts` 只追加、不改写已有历史项——删除是**整条删除**，不就地改写 |
 | **Agent 边界** | Agent 不直接写该文件（不手改 JSON）：改状态只走两条通道——界面按钮/`node:dispatchGenerate` 由编辑器写，会话内逐镜由 `planOperator mtrackUpdate` 写；不在多轨生成中改文件，改完必须重新提交该镜 |
 
 ---
@@ -248,7 +265,7 @@ non_diegetic_music: A low guzheng and xiao motif, sparse.
 | `referenceIds` 存在于 `assetIndex.json` 且资产已出图；`generated`/`accepted` 的 `nodeId`/`assetPath` 必须存在 | V13 |
 | 合成清单只含 `accepted` 镜，顺序连续无空洞 | V14 |
 | `referenceIds` 顺序与画布实际 `referenceOrder` + 入边顺序逐一一致 | V15 |
-| 官方标记 `<Picture N>`/`<Video N>`/`<Audio N>` 的编号**只查越界**（上限按类型计数：画面 = 非 sound 卡数、音频 = sound 卡数、视频或参考卡缺 `kind` = 参考总数），**不查重号**、缺席某个编号不报错；旧工程遗留的 `{{ref N}}` 只报迁移 warning | V7 |
+| 参考标记 `{{ref N}}` 的编号**只查越界**（`N` 必须在 `1..referenceIds.length` 内），**不查重号**、缺席某个编号不报错 | V7 |
 | 参考数超过节点实际匹配模式上限 | V8 / V10 |
 
 `validate` 对工程文件**零写入**；只有 `build` 落盘派生文件。

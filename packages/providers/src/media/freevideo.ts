@@ -141,8 +141,12 @@ async function download(context: ProviderContext, token: string, origin: string,
   return new Uint8Array(await response.arrayBuffer());
 }
 
-/** 提交任务并轮询到终态；失败/取消抛友好错误，interrupted 自动续拍（最多 2 次）。 */
-async function runJob(context: ProviderContext, token: string, agent: string, spec: Record<string, unknown>, signal: AbortSignal): Promise<Record<string, unknown>> {
+/**
+ * 提交任务并轮询到终态；失败/取消抛友好错误，interrupted 自动续拍（最多 2 次）。
+ * ACT: 成功时把引擎任务号（`j` + 12 hex）附在结果上返回——多轨续接要用
+ * `continue_from: { from_job }` 精确引用上一镜任务，而这是唯一能拿到它的地方。
+ */
+async function runJob(context: ProviderContext, token: string, agent: string, spec: Record<string, unknown>, signal: AbortSignal): Promise<{ job: Record<string, unknown>; jobId: string }> {
   const submit = await context.tool.fetch(`${agent}/jobs`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -161,7 +165,7 @@ async function runJob(context: ProviderContext, token: string, agent: string, sp
     const answer = object(await response.json());
     const current = object(answer.job ?? answer);
     const status = String(current.status);
-    if (status === "succeeded") return current;
+    if (status === "succeeded") return { job: current, jobId };
     if (status === "failed" || status === "cancelled") {
       throw new Error(context.tool.errorMessage?.(current) || `生成${status === "cancelled" ? "已取消" : "失败"}`);
     }
@@ -206,7 +210,7 @@ export default {
 - 视频：文生 / 首帧 / 首尾帧 / 参考图、视频、音频，原生带同步音轨；2-60 秒，768P / 2K。
 - 参考图最多 4 张为 Toonflow 侧限制；引擎单块默认支持到 9 张，30 秒及以上自动分块时实限 3 张（超限由引擎报错）。
 - ≥30 秒的片段自动分块时开启 first_frame_reference，减少跨块的取景与人物漂移；单段视频不受影响。
-- 提示词按 FreeVideo 约定拼装：有参考图时六段（subject_definitions → summary → retention_analysis → detailed_description → overall_soundscape → non_diegetic_music），无参考时三段，段首写字段名、段间空一行。
+- 提示词按 FreeVideo 约定拼装：有参考图时六段（subject_definitions → summary → retention_analysis → detailed_description → overall_soundscape → non_diegetic_music），无参考时三段；前四段的段首标签由写作者写，两个声音段的段名由多轨引擎补。
 - 生成中断（引擎重启、显存波动）时自动尝试续拍，最多 2 次，已生成部分保留；续拍仍失败会明确报错。
 - 图像：文生图 / 单参考 / 多参考（最多 4 张），1K / 2K。
 - 生成耗时为分钟级（本机 GPU），请耐心等待；取消生成会同时取消本机任务。`,
@@ -216,7 +220,7 @@ export default {
       id: "MiniMax-H3",
       label: "MiniMax-H3（本地 FreeVideo）",
       type: "video",
-      // ACT: imageReference:4 为 Toonflow 产品限制（V8）；引擎单块默认支持到 9 张参考，≥30s 自动分块时实限 3（422），供应商不预拦（维持裁决）。
+      // ACT: imageReference:4 是 Toonflow 产品界面口径（不是 V8——V8 的 MAX_IMAGE_REFERENCES 是 9）；引擎单块默认支持到 9 张参考，≥30s 自动分块时实限 3（422），供应商不预拦（维持裁决）。
       mode: ["text", "startFrameOptional", ["imageReference:4", "videoReference:1", "audioReference:1"]],
       audio: "optional",
       durationResolutionMap: [{ duration: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60], resolution: ["768P", "2K"] }],
@@ -246,7 +250,7 @@ export default {
     if (images.length > 4) throw new Error(`这类模型最多支持4张参考图，当前提交了${images.length}张`);
 
     const { width, height } = imageDimensions(request.ratio, request.size);
-    const job = await runJob(this, token, agent, {
+    const { job } = await runJob(this, token, agent, {
       kind: "image",
       label: jobLabel(request, "image"),
       ref: makeRef('img', request),
@@ -269,19 +273,31 @@ export default {
     // ACT: 本机 GPU 生成较慢，单次最多等待 30 分钟。
     const signal = AbortSignal.any([AbortSignal.timeout(30 * 60_000), ...(this.signal ? [this.signal] : [])]);
 
+    // ACT: 续接（continue_from）时引擎只允许 media.references，first/last 必须为空
+    // （freevideo_engine/agent/schema.py 的 "only references when continue_from is supplied"）。
+    // 参考图与续接是官方设计好的并存组合：references 每个续接段都看得到，用来保持同一批人。
+    const continuing = Boolean(request.continueFrom);
     const media: Record<string, unknown> = {};
-    if (request.firstFrame) media.first = await upload(this, token, agent, request.firstFrame, signal);
-    if (request.lastFrame) media.last = await upload(this, token, agent, request.lastFrame, signal);
+    if (!continuing) {
+      if (request.firstFrame) media.first = await upload(this, token, agent, request.firstFrame, signal);
+      if (request.lastFrame) media.last = await upload(this, token, agent, request.lastFrame, signal);
+    }
     const references: string[] = [];
     for (const image of request.images ?? []) references.push(await upload(this, token, agent, image, signal));
     for (const video of request.videos ?? []) references.push(await upload(this, token, agent, video, signal));
     for (const audio of request.audios ?? []) references.push(await upload(this, token, agent, audio, signal));
     if (references.length) media.references = references;
+    // ACT: 续接时参考图上限是 3 张（引擎 guide："media.references with at most 3 pictures"），
+    // 超限由引擎整任务拒绝，这里提前拦下并给出可执行的处置建议。
+    if (continuing && references.length > 3) {
+      throw new Error(`续接镜头最多 3 张参考图（引擎限制），当前 ${references.length} 张；请减少参考或把该镜改为独立镜头`);
+    }
 
     const seconds = clampSeconds(request.duration);
     // ACT: first_frame_reference 只在 ≥30s 自动分块时减少跨块漂移；单段视频不受影响，
     // 运镜大/需要变化的场景规范建议关闭——保守取「≥30s 才开」，不引入开关面。
-    const job = await runJob(this, token, agent, {
+    // 续接任务由引擎自己维护上下文，不需要这个降级锚点。
+    const { job, jobId } = await runJob(this, token, agent, {
       kind: "generate",
       label: jobLabel(request, "video"),
       ref: makeRef('vid', request),
@@ -290,7 +306,8 @@ export default {
       quality: "light",
       ...(request.ratio ? { aspect: request.ratio } : {}),
       ...(request.resolution ? { megapixels: megapixels(request.resolution) } : {}),
-      ...(seconds >= 30 ? { first_frame_reference: true } : {}),
+      ...(seconds >= 30 && !continuing ? { first_frame_reference: true } : {}),
+      ...(request.continueFrom ? { continue_from: { from_job: request.continueFrom } } : {}),
       ...(Object.keys(media).length ? { media } : {}),
     }, signal);
     const result = object(job.result ?? {});
@@ -298,6 +315,6 @@ export default {
     const url = video.url ?? result.url;
     if (typeof url !== "string" || !url) throw new Error("未返回生成结果");
     const data = await download(this, token, origin, url, signal);
-    return [{ mediaType: "video", type: "binary", data, mimeType: "video/mp4" }];
+    return [{ mediaType: "video", type: "binary", data, mimeType: "video/mp4", jobId }];
   },
 } satisfies ProviderDefinition<typeof rules>;

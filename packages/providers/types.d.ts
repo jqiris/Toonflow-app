@@ -55,7 +55,11 @@ type MediaInput =
   | { type: "base64"; data: string; mimeType: string; name?: string }
   | { type: "binary"; data: Uint8Array; mimeType: string; name?: string };
 
-type MediaAsset = MediaInput & { mediaType: "image" | "video" | "audio" };
+/**
+ * 生成产物。`jobId` 是供应商侧任务号（如 FreeVideo 的 `j` + 12 hex），
+ * 供续接生成用 `continue_from` 精确引用这一镜——不参与落盘，只用于回写与续接。
+ */
+type MediaAsset = MediaInput & { mediaType: "image" | "video" | "audio"; jobId?: string };
 
 type MediaImageInfo = { width: number; height: number; format: string };
 type MediaImageResizeOptions = { width?: number; height?: number; format?: "jpeg" | "png" | "webp"; quality?: number };
@@ -136,6 +140,12 @@ interface VideoRequest extends MediaRequest {
   audios?: MediaInput[];
   firstFrame?: MediaInput;
   lastFrame?: MediaInput;
+  /**
+   * 续接上一镜：传入供应商侧任务号，由引擎加载该任务的原生上下文继续生成。
+   * 续接时**只允许 references 类媒体**（firstFrame/lastFrame 必须留空），
+   * 且参考图上限通常是 3 张——供应商按自身契约校验并给出可执行报错。
+   */
+  continueFrom?: string;
   /** 输出时长，单位秒；支持范围由供应商按模型校验。 */
   duration?: number;
   /** 画面宽高比，如 16:9。 */

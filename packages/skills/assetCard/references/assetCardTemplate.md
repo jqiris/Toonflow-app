@@ -1,6 +1,6 @@
 ﻿# 资产卡模板
 
-> 权威依据：[assets/assetCardWorkflowPlan.md](../../../../docs/assetCardWorkflowPlan.md) §1.2。编号与参考规则见 [参考接线解析规则](referenceResolution.md)。
+> 权威依据：[assets/assetCardWorkflowPlan.md](../../../../docs/assetCardWorkflowPlan.md) §1.2。编号与参考规则见 [参考接线解析规则](referenceResolution.md)，提示词写法见 [图片提示词规范](imagePrompt.md)，设计维度与验收见 [资产设计维度与验收](assetDesign.md)。
 
 ## 一、编号体系
 
@@ -33,7 +33,7 @@
 
 | 字段 | 接受的别名 | 必填 |
 |---|---|---|
-| 提示词 | `提示词` / `人物提示词` / `场景提示词` / `道具提示词` / `资产提示词` / `图片提示词` | 是（`文本类` 卡除外） |
+| 提示词 | `提示词` / `人物提示词` / `场景提示词` / `道具提示词` / `资产提示词` / `图片提示词` / `视频提示词` | 是（`文本类` 卡除外）。写法见 [imagePrompt.md](imagePrompt.md)，设计维度与验收见 [assetDesign.md](assetDesign.md) |
 | 负面提示词 | `负面提示词` / `可选负面提示词` | 否 |
 | 建议画幅 | `建议画幅` / `画幅` | 否 |
 | 身份参考（C） | `身份参考` / `参考` | 否 |

@@ -31,6 +31,13 @@ export const videoGenerationSchema = z.strictObject({
   audios: z.array(audioReference).max(64).optional(),
   firstFrame: imageReference.optional(),
   lastFrame: imageReference.optional(),
+  /**
+   * 续接上一镜：传供应商侧任务号（FreeVideo 形如 `j` + 12 位十六进制），
+   * 由引擎加载该任务的原生音视频上下文继续生成。
+   * 续接时**只允许 references 类媒体**，firstFrame/lastFrame 必须留空；
+   * 参考图上限通常为 3 张，由供应商按自身契约校验。
+   */
+  continueFrom: z.string().trim().min(1).max(64).optional(),
   resolution: z.string().trim().min(1).max(64).optional(),
   duration: z.number().finite().positive().max(3600).optional(),
   generateAudio: z.boolean().optional(),
@@ -38,7 +45,8 @@ export const videoGenerationSchema = z.strictObject({
     z.enum(["singleImage", "startEndRequired", "endFrameOptional", "startFrameOptional", "text"]),
     z.array(referenceMode).min(1).max(3),
   ]).optional(),
-});
+}).refine(args => !args.continueFrom || (!args.firstFrame && !args.lastFrame),
+  "续接镜头只允许参考媒体：continueFrom 与 firstFrame / lastFrame 不能同时使用（引擎限制）");
 export const audioGenerationSchema = z.strictObject({
   providerId: sharedFields.providerId,
   modelId: sharedFields.modelId,

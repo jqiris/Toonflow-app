@@ -16,7 +16,7 @@
  *   getNodeTools / nodeTools(node:generateX | node:getGenerationStatus | node:cancelGeneration) → 逐层生成与取消
  *
  * 边界：不生成分层、不改 planOperator、不写多轨文件、不同步等待生成。
- * 首镜实跑 738.5s（packages/skills/assetCard/references/generationRunbook.md:186），
+ * 首镜实跑 738.5s（packages/skills/assetCard/references/generationRunbook.md:217），
  * 所以生成一律「立即返回 + 轮询 + 取消」三段式。
  */
 import { z } from "zod";

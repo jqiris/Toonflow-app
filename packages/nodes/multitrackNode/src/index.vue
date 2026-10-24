@@ -11,7 +11,7 @@
     <div class="mtrackCardContent">
       <!-- ACT: 卡片头部是画布上的拖拽手柄；编辑器宿主整块 nodrag，正文没有可拖区会让节点看起来无法移动。 -->
       <div class="cardHeader">
-        <span class="cardTitle">多轨时间线</span>
+        <span class="cardTitle">镜头创作工作台</span>
         <el-button class="nodrag nopan" size="small" text :icon="IconMaximize" title="全屏编辑" aria-label="全屏编辑" @pointerdown.stop @click.stop="openFullscreen">全屏编辑</el-button>
       </div>
       <div v-if="refList.length || agentCreated" class="assetRow nodrag nopan nowheel">
@@ -28,7 +28,7 @@
       <!-- ACT: 编辑器始终单实例，全屏时靠 teleport 挪进遮罩层而不是重建，未保存状态不丢；宿主必须 v-show，v-if 会连 teleport 锚点一起卸载。 -->
       <div v-show="!editing" class="mtrackEditorHost nodrag nopan nowheel" :style="editorHostStyle">
         <teleport :to="overlayHost" :disabled="!editing">
-          <multitrackEditor ref="editorRef" :getFiles="getFiles" :directory="directory" :projectPath="projectPath" @dirtyChange="onEditorDirty" @bind="onBindProject" @compositeDone="onCompositeDone" />
+          <multitrackEditor ref="editorRef" :getFiles="getFiles" :directory="directory" :projectPath="projectPath" :nodeId="id" :resultsUi="resultsUi" @dirtyChange="onEditorDirty" @bind="onBindProject" @compositeDone="onCompositeDone" @resultsUiChange="onResultsUiChange" />
         </teleport>
       </div>
       <p v-if="editing" class="editorAwayHint">编辑器已全屏打开，点击遮罩层的「收起」返回。</p>
@@ -67,9 +67,10 @@ import multitrackEditor from "@toonflow/node-shared/mtrack/multitrackEditor";
 import { useNodeReferences } from "@toonflow/node-shared/useNodeReferences";
 import referenceItem from "@toonflow/node-shared/referenceItem";
 import { showNodeError } from "@toonflow/node-shared/showNodeError";
-import { resolveCanvasBridge } from "@toonflow/node-shared/mtrack/directDispatch";
+import { resolveCanvasBridge, resolveReferenceSources, type CanvasCall } from "@toonflow/node-shared/mtrack/directDispatch";
 import videoPlayer from "@toonflow/node-video/videoPlayer";
-import type { EditorFiles } from "@toonflow/node-shared/mtrack/mtrackProject";
+import { assetIndexPath, normalizeResultsUi } from "@toonflow/node-shared/mtrack/mtrackProject";
+import type { AssetIndex, AssetIndexCard, EditorFiles, ResultsUiGeometry } from "@toonflow/node-shared/mtrack/mtrackProject";
 
 defineOptions({
   inheritAttrs: false,
@@ -80,7 +81,7 @@ defineOptions({
   ] satisfies NodeHandle[],
 });
 
-const { node, nodeProps, files, nodeEvent, outputs } = useNode({ label: "多轨编辑器" });
+const { id, node, nodeProps, files, nodeEvent, outputs } = useNode({ label: "多轨编辑器" });
 const { refList, setReferencePreview, removeReference } = useNodeReferences();
 
 const editing = ref(false);
@@ -119,7 +120,7 @@ const savedHeight = computed(() => {
 });
 const cardStyle = computed(() => (savedWidth.value ? { width: `${savedWidth.value}px` } : { width: "clamp(640px, 44vw, 960px)" }));
 /** 编辑器宿主跟着卡片高度走：卡片被拉高时编辑区一起变高，而不是留一片空白。
-    扣掉标题栏、卡片内边距与卡片头部这层固定高度（约 200px），下限 240px 保证轨道条和左右两栏还放得下。 */
+    扣掉标题栏、卡片内边距与卡片头部这层固定高度（约 200px），下限 240px 保证 36px 工具栏 + 时间线一轮 + 底栏还放得下。 */
 const editorHostStyle = computed(() => ({ height: `${Math.max(240, (savedHeight.value || 700) - 200)}px` }));
 
 const flow = useVueFlow();
@@ -175,6 +176,22 @@ function onBindProject(path: string) {
   (node.data as { projectPath?: string }).projectPath = path;
 }
 
+/**
+ * 「项目与成片」浮窗几何：写进 node.data.resultsUi，与 cardWidth/cardHeight 同一套画布自动保存链路，
+ * 刷新/重开画布后浮窗位置不丢。读侧统一经 normalizeResultsUi 兜底（旧节点没有该字段时按 t1 缺省几何）。
+ * 浮窗与节点在画布世界层同坐标系（teleport 到 transformationpane），不随节点拖动移动是有意的：
+ * 几何只记录用户拖浮窗自身的结果；锚点缺省摆放只在首次打开（data 无 resultsUi）时用一次。
+ */
+const resultsUi = computed(() => normalizeResultsUi((node.data as { resultsUi?: unknown }).resultsUi, {
+  x: node.computedPosition?.x ?? 0,
+  y: node.computedPosition?.y ?? 0,
+  width: node.dimensions?.width || 640,
+}));
+
+function onResultsUiChange(ui: ResultsUiGeometry) {
+  (node.data as { resultsUi?: ResultsUiGeometry }).resultsUi = ui;
+}
+
 const outputFile = computed(() => outputs.value.video?.dataType === "VIDEO" ? outputs.value.video.value : undefined);
 const previewUrl = files.useFileUrl(outputFile, error => showNodeError(error, "成片读取失败"));
 const downloadName = computed(() => outputFile.value?.url.split(/[\\/]/).at(-1));
@@ -186,6 +203,8 @@ function getFiles(): EditorFiles {
     readJson: <T,>(path: string) => workspaceFiles.readJson<T>(path),
     writeJson: (path: string, data: unknown, exclusive?: boolean) => workspaceFiles.writeJson(path, data, exclusive),
     mkdir: (path: string) => workspaceFiles.mkdir(path),
+    remove: (path: string) => workspaceFiles.remove(path),
+    write: (path: string, content: Blob | ArrayBuffer, exclusive?: boolean) => workspaceFiles.write(path, content, exclusive),
     acquireUrl: (path: string, mimeType?: string) => {
       const acquire = workspaceFiles.acquireUrl;
       if (!acquire) throw new Error("当前宿主不支持预览媒体文件");
@@ -224,8 +243,12 @@ async function runRefreshOutput() {
     outputs.value.video = url
       ? { dataType: "VIDEO", value: { url, mimeType: "video/mp4" } }
       : undefined;
-  } catch {
-    outputs.value.video = undefined;
+  } catch (reason) {
+    // ACT: 只有「清单确实不存在」(404) 才清空成片输出。瞬时失败（网络/权限/宿主未就绪）也清空的话，
+    // 下一次 save 钩子刷新成功又会写回 url → 标脏 → 再保存，形成清空/恢复的抖动循环（历史上出现过 66 次写盘/秒）。
+    const message = reason instanceof Error ? reason.message : String(reason);
+    if (/404|不存在|not found/i.test(message)) outputs.value.video = undefined;
+    else console.warn("[multitrackNode] 读取合成清单失败，保留原成片输出：", message);
   } finally {
     loadingOutput.value = false;
   }
@@ -313,7 +336,7 @@ nodeEvent.on("save", async () => {
 /** 复制/创建副本产生的节点算人工添加，不带 agent 标记。 */
 nodeEvent.on("copy", () => ({ agentCreated: false }));
 
-/** ============ agent 命令式操作入口：13 个公开节点函数，全部薄代理编辑器内核 API ============ */
+/** ============ agent 命令式操作入口：14 个公开节点函数，全部薄代理编辑器内核 API ============ */
 
 function requireEditor() {
   const editor = editorRef.value;
@@ -339,8 +362,8 @@ const clipPatchSchema = z.strictObject({
     nonDiegeticMusic: z.string(),
   }).optional(),
   referenceIds: z.array(z.string()).optional(),
-  continuity: z.string().optional(),
-  // ACT: 写入路径不收 accepted——验收是用户在多轨界面点「验收」的人工判定（clipEditor.vue:9-13 → multitrackEditor.vue 的 acceptClip），
+  continuity: z.enum(["shot", "context"]).optional(),
+  // ACT: 写入路径不收 accepted——验收是用户在多轨界面点「验收」的人工判定（packages/nodeShared/src/mtrack/multitrackEditor.vue 的 acceptClip），
   // agent 经 node:editProject 只能把镜头改到 pending/generating/generated/failed，不能自己把未验收的镜头标成 accepted 去凑合成条件。
   // 读盘路径不受影响：磁盘上已有的 accepted 仍由 mtrackProject 的 normalizeProject/readStatus 原样接受。
   status: z.enum(["pending", "generating", "generated", "failed"]).optional(),
@@ -403,6 +426,124 @@ nodeTools.register({
     return requireEditor().readRange(from, to);
   },
 });
+
+nodeTools.register({
+  name: "readReferenceMap",
+  description: "一次读全四段映射链，不用自己拿 readClips + assetIndex + getReferenceOrder 三处缝合。按镜返回 { clipId, clipNodeId, items, unconnectedCardIds, missingCardIds, orphanSources }：items 逐位给出该镜 referenceIds 的期望位次（expectedIndex/expectedRef）与画布上视频节点实际生效的位次（actualIndex/actualRef，未派工时不返回）、解析到的资产卡（cardId/kind）、画布节点（nodeId/sourceHandle）以及该节点到视频节点 in 端口是否已连线（connected）。missingCardIds = referenceIds 里有、但画布上根本没有可用产出的卡片 id（真断点，派工会报「参考图未就绪」）；unconnectedCardIds = 已派工镜头里卡有产出但没连上视频节点的卡片 id（断线）；未派工的镜头（clipNodeId 为 null）连线尚未建立属正常，只报 missingCardIds、不算 unconnected。orphanSources = 视频节点 in 端口上连了、但 referenceIds 里没有的来源。来源解析与派工共用同一个 resolveReferenceSources，查到的就是派工真会接的。from/to 为分镜号（含端点），可省 = 全量",
+  parameters: z.strictObject({ from: clipIdSchema.optional(), to: clipIdSchema.optional() }),
+  async execute({ from, to }, { signal }) {
+    signal?.throwIfAborted();
+    const range = await requireEditor().readRange(from, to);
+    signal?.throwIfAborted();
+    const call = readBridge()?.call as CanvasCall | undefined;
+    if (!call) throw new Error("未取到画布上下文：请先打开画布并等待加载完成，再查询参考映射");
+    const cardList = await readIndexCards();
+    // ACT: 同一张卡会被多镜共用（SC01 几乎每镜都有），逐镜重查画布会退化成 O(镜数×参考数) 次调用。
+    // 这里按卡片 id 记忆一次解析结果，整次查询内复用。上限：只记忆本次调用，不跨调用缓存（画布随时可能改名/删节点）。
+    // ACT: 存 Promise 而不是结果——同一镜里两次引用同一张卡（或并发镜）若都先未命中再 await，会重复查两遍画布；
+    // 记忆在途 Promise 才能真做到每卡一次调用。上限：只在本次工具调用内记忆，不跨调用缓存。
+    const resolvedByCard = new Map<string, Promise<{ nodeId: string; sourceHandle: string } | undefined>>();
+    const resolveCard = (cardId: string) => {
+      if (!resolvedByCard.has(cardId)) {
+        resolvedByCard.set(cardId, resolveReferenceSources({ call, clip: { referenceIds: [cardId] }, cards: cardList, signal: signal ?? new AbortController().signal })
+          .then(single => {
+            const picked = single.picked[0];
+            return picked ? { nodeId: picked.nodeId, sourceHandle: picked.sourceHandle } : undefined;
+          }));
+      }
+      return resolvedByCard.get(cardId)!;
+    };
+    const clips: {
+      clipId: string;
+      clipNodeId: string | null;
+      items: {
+        expectedIndex: number; expectedRef: string; cardId: string; kind: string;
+        nodeId: string | null; sourceHandle: string | null; connected: boolean;
+        actualIndex?: number; actualRef?: string;
+      }[];
+      unconnectedCardIds: string[];
+      missingCardIds: string[];
+      orphanSources: { nodeId: string; sourceHandle: string }[];
+    }[] = [];
+    // ACT: 单次 nodeTools 调用已有 120 秒上限，画布查询额外受 64 KiB 限制；这里只按镜逐条读入边与参考顺序，
+    // 不做整图扫描。上限：每镜 2 次画布调用，超大工程建议配合 from/to 分段查。
+    for (const clip of range.clips) {
+      signal?.throwIfAborted();
+      const resolved = await Promise.all(clip.referenceIds.map(async cardId => ({ cardId, picked: await resolveCard(cardId) })));
+      const clipNodeId = clip.nodeId;
+      // 画布实况只在镜已派工（有视频节点）时才有意义；未派工时位次就是 referenceIds 顺序本身。
+      const incoming = clipNodeId ? await readIncomingSources(call, clipNodeId, signal) : [];
+      const actualOrder = clipNodeId ? await readActualOrder(call, clipNodeId, signal) : undefined;
+      const items = clip.referenceIds.map((cardId, index) => {
+        const card = cardList.find(item => item.id === cardId);
+        const picked = resolved.find(item => item.cardId === cardId)?.picked;
+        const actualIndex = picked && actualOrder ? actualOrder.findIndex(item => item.nodeId === picked.nodeId && item.sourceHandle === picked.sourceHandle) : -1;
+        return {
+          expectedIndex: index + 1,
+          expectedRef: `{{ref ${index + 1}}}`,
+          cardId,
+          kind: card?.kind ?? "",
+          nodeId: picked?.nodeId ?? null,
+          sourceHandle: picked?.sourceHandle ?? null,
+          connected: Boolean(picked) && incoming.some(item => item.nodeId === picked!.nodeId && item.sourceHandle === picked!.sourceHandle),
+          ...(actualIndex >= 0 ? { actualIndex: actualIndex + 1, actualRef: `{{ref ${actualIndex + 1}}}` } : {}),
+        };
+      });
+      const pickedKeys = new Set(resolved.flatMap(item => item.picked ? [`${item.picked.nodeId}:${item.picked.sourceHandle}`] : []));
+      const missingCardIds = clip.referenceIds.filter(cardId => !resolved.find(item => item.cardId === cardId)?.picked);
+      clips.push({
+        clipId: clip.clipId,
+        clipNodeId: clipNodeId ?? null,
+        items,
+        // ACT: 未派工的镜头还没有视频节点，连线自然为空——那是「待生成」不是「断线」，
+        // 只把真断点（画布无可用产出）报进 missingCardIds，避免 200 镜全量查询时满屏假 gap。
+        unconnectedCardIds: clipNodeId ? clip.referenceIds.filter(cardId => {
+          const picked = resolved.find(item => item.cardId === cardId)?.picked;
+          return Boolean(picked) && !incoming.some(item => item.nodeId === picked!.nodeId && item.sourceHandle === picked!.sourceHandle);
+        }) : [],
+        missingCardIds,
+        orphanSources: incoming.filter(item => !pickedKeys.has(`${item.nodeId}:${item.sourceHandle}`)),
+      });
+    }
+    return { updatedAt: range.updatedAt, conflict: range.conflict, clips };
+  },
+});
+
+/** 资产卡索引：与编辑器同一份 plan/assetIndex.json；缺文件按空索引处理（老工程没有索引是正常态）。 */
+async function readIndexCards(): Promise<AssetIndexCard[]> {
+  try {
+    const index = await files.getWorkspaceFiles().readJson<AssetIndex>(assetIndexPath);
+    return Array.isArray(index?.cards) ? index.cards : [];
+  } catch {
+    return [];
+  }
+}
+
+/** 已派工镜头视频节点 in 端口的入边来源；节点已从画布删除时按「没有连线」处理。 */
+async function readIncomingSources(call: CanvasCall, nodeId: string, signal?: AbortSignal) {
+  try {
+    const listed = await call({ name: "getCanvasEdges", args: { nodeIds: [nodeId], direction: "incoming", limit: 200 } }, signal) as {
+      edges?: { source: string; sourceHandle?: string | null; targetHandle?: string | null }[];
+    };
+    return (listed?.edges ?? [])
+      .filter(edge => (edge.targetHandle ?? "in") === "in")
+      .map(edge => ({ nodeId: edge.source, sourceHandle: edge.sourceHandle ?? "" }));
+  } catch {
+    return [];
+  }
+}
+
+/** 视频节点上生效的参考顺序（{{ref N}} 的真源）；节点没有引用函数（已删除/非视频节点）时返回 undefined。 */
+async function readActualOrder(call: CanvasCall, nodeId: string, signal?: AbortSignal) {
+  try {
+    const result = await call({ name: "nodeTools", args: { nodeId, name: "node:getReferenceOrder", args: { handleId: "in" } } }, signal) as {
+      references?: { nodeId: string; sourceHandle: string }[];
+    };
+    return result?.references;
+  } catch {
+    return undefined;
+  }
+}
 
 nodeTools.register({
   name: "editProject",
@@ -515,7 +656,7 @@ nodeTools.register({
 
 nodeTools.register({
   name: "retryClip",
-  description: "重试单个镜头（UI「单镜重试/重新生成本镜」等价物）：只派 clipId 这一镜，生成成功后作为新版本追加——旧版本视频与画布节点保留，attempts 历史（succeeded+nodeId 去重）即版本列表，新视频自动成为该镜默认；不连带同批其他镜头。生成进行中（dispatching 或 batchRunning 为真）时直接抛错并带原因，需先 node:pauseBatch 等当前镜结束或 node:cancelBatch；受理成功返回编辑器 status 快照",
+  description: "重试单个镜头（UI「单镜重试/重新生成本镜」等价物）：只派 clipId 这一镜，生成成功后作为新版本追加——旧版本视频保留，attempts 里的 succeeded 记录按产物文件路径去重即版本列表，新视频自动成为该镜默认；不连带同批其他镜头。生成进行中（dispatching 或 batchRunning 为真）时直接抛错并带原因，需先 node:pauseBatch 等当前镜结束或 node:cancelBatch；受理成功返回编辑器 status 快照",
   parameters: z.strictObject({ clipId: clipIdSchema }),
   async execute({ clipId }, { signal }) {
     signal?.throwIfAborted();

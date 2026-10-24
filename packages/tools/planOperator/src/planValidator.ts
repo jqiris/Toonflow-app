@@ -53,6 +53,8 @@ export interface MultitrackClip {
   status: string;
   nodeId: string | null;
   assetPath: string | null;
+  /** 生成尝试记录；媒体任务通道的镜用 `batch:<uuid>` / `task:<id>` 标记，见 V13 的 nodeId 例外 */
+  attempts?: { at?: string; nodeId?: string | null; status: string; error?: string }[];
 }
 
 export interface MultitrackLite {
@@ -77,7 +79,9 @@ export interface SnapshotLite {
 
 const RESOLUTIONS = new Set(["768P", "2K"]);
 const RATIOS = new Set(["1:1", "16:9", "9:16", "4:3", "3:4"]);
-const MAX_IMAGE_REFERENCES = 4;
+// MiniMax H3 Ref2VA 独立镜头最多支持 9 张参考图
+const MAX_IMAGE_REFERENCES = 9;
+// ACT: 卡片体系（CardKind）没有 video 类型，视频参考当前并入图片桶计数，本常量暂无引用（V8 不校验视频参考）。
 const MAX_VIDEO_REFERENCES = 1;
 const MAX_AUDIO_REFERENCES = 1;
 const MIN_SECONDS = 2;
@@ -144,7 +148,7 @@ export function validatePlan(input: ValidateInput): Finding[] {
 
   const clipIds = new Set<string>();
   // ---- V11：多轨结构完整 ----
-  for (const clip of mtrack.clips) {
+  for (const [index, clip] of mtrack.clips.entries()) {
     if (clipIds.has(clip.clipId)) findings.push({ rule: "V11", level: "error", message: `片段 id 重复：${clip.clipId}`, ref: clip.clipId });
     clipIds.add(clip.clipId);
     if (!/^S\d{3}$/.test(clip.clipId)) findings.push({ rule: "V11", level: "error", message: `片段 id 格式应为 S001：${clip.clipId}`, ref: clip.clipId });
@@ -154,8 +158,26 @@ export function validatePlan(input: ValidateInput): Finding[] {
     if (!["pending", "generating", "generated", "accepted", "failed"].includes(clip.status)) {
       findings.push({ rule: "V11", level: "error", message: `片段 ${clip.clipId} 状态非法：${clip.status}`, ref: clip.clipId });
     }
-    if (clip.continuity !== "start" && clip.continuity !== "cut" && clip.continuity !== "continue") {
-      findings.push({ rule: "V11", level: "error", message: `片段 ${clip.clipId} continuity 非法：${clip.continuity}`, ref: clip.clipId });
+    // ACT: 衔接方式与 LSC 多轨编辑器（continuity_mode）同口径：shot（独立起拍/切镜）或 context（承接上一镜）。
+    // 旧工程的 start/continue/cut 由编辑器归一再写入，这里只拦真正非法的取值。
+    if (clip.continuity !== "shot" && clip.continuity !== "context"
+      && clip.continuity !== "start" && clip.continuity !== "cut" && clip.continuity !== "continue") {
+      findings.push({ rule: "V11", level: "error", message: `片段 ${clip.clipId} 衔接方式非法：${clip.continuity}（应为 shot 或 context）`, ref: clip.clipId });
+    }
+    // 首镜没有上一镜可承接，必须独立起拍。
+    // ACT: planOperator 入口的 normalizeProject 已把首镜衔接归一为 shot，所以正常输入下这条不触发；
+    // 「被归一改过」这件事由 index.ts 的 firstClipContinuityFindings 以 warning 报出（审计 F4）。
+    // 保留本条是给「绕过归一、直接构造 mtrack 对象」的调用方兜底。
+    if (index === 0 && (clip.continuity === "context" || clip.continuity === "continue")) {
+      findings.push({ rule: "V11", level: "error", message: `片段 ${clip.clipId} 是首镜，衔接方式不能是承接上一镜，请改为独立起拍（shot）`, ref: clip.clipId });
+    }
+    // 续接镜头走引擎 continue_from，此时参考图上限是 3 张（独立镜头的 V8 阈值见上面 MAX_IMAGE_REFERENCES）。
+    if ((clip.continuity === "context" || clip.continuity === "continue") && clip.referenceIds.length > 3) {
+      findings.push({ rule: "V16", level: "error", message: `片段 ${clip.clipId} 承接上一镜时最多 3 张参考图（引擎限制），当前 ${clip.referenceIds.length} 张`, ref: clip.clipId });
+    }
+    // 续接镜头时长下限是 10 秒（引擎原文：Each continued part must be at least 10 seconds）。
+    if ((clip.continuity === "context" || clip.continuity === "continue") && clip.seconds < 10) {
+      findings.push({ rule: "V16", level: "error", message: `片段 ${clip.clipId} 承接上一镜时最短 10 秒（引擎限制），当前 ${clip.seconds} 秒`, ref: clip.clipId });
     }
   }
 
@@ -185,19 +207,23 @@ export function validatePlan(input: ValidateInput): Finding[] {
       }
     }
     if (clip.status === "generated" || clip.status === "accepted") {
-      if (!clip.nodeId) findings.push({ rule: "V13", level: "error", message: `片段 ${clip.clipId} 状态为 ${clip.status} 却无 nodeId`, ref: clip.clipId });
+      // ACT: 媒体任务通道（界面「生成视频」/`node:dispatchGenerate`）不建画布视频节点，nodeId 恒为 null，
+      // 产物与状态由 mediaTask 写回 attempts（`batch:<uuid>` / `task:<id>`）。不识别这层会把界面正常产出的镜
+      // 判成「accepted 却无 nodeId」，让「生成前 validate error 清零」永远过不了。上限：仅按 attempts 标记识别，
+      // 手改 attempts 的人仍能骗过这一条；accepted 的产物存在性由下游 composite 逐段 ffprobe 兜底。
+      const isMediaChannel = !clip.nodeId && (clip.attempts ?? []).some(item => /^(batch|task):/.test(String(item?.error ?? "")));
+      if (!clip.nodeId && !isMediaChannel) findings.push({ rule: "V13", level: "error", message: `片段 ${clip.clipId} 状态为 ${clip.status} 却无 nodeId`, ref: clip.clipId });
       if (!clip.assetPath) findings.push({ rule: "V13", level: "error", message: `片段 ${clip.clipId} 状态为 ${clip.status} 却无 assetPath`, ref: clip.clipId });
     }
-    if (clip.status === "accepted" && snapshot) {
+    if (clip.status === "accepted" && snapshot && clip.nodeId) {
       const node = snapshot.nodes.find(n => n.id === clip.nodeId);
       const ok = node?.outputs?.some(o => o.mediaType === "video" && (o.path || o.url));
       if (!ok) findings.push({ rule: "V13", level: "error", message: `片段 ${clip.clipId} 标为 accepted，但画布节点 ${clip.nodeId} 无可读视频产出`, ref: clip.clipId });
     }
   }
 
-  // ---- V7：提示词参考标记：官方 <Picture N>/<Video N>/<Audio N> 落在本镜同类型参考的编号范围内 ----
-  // 官方格式允许某张参考图只在 subject_definitions/retention_analysis 里出现，因此不再要求「每个编号至少出现一次」。
-  // 同一编号在正文里反复复述是正常写法（如「同前述画面中的男人」），因此不查重号、也不跨字段合并比较。
+  // ---- V7：提示词参考标记：统一写 {{ref N}}，N 为参考顺序里的序号 ----
+  // 同一编号在正文里反复出现是正常写法，因此不查重号、也不要求每个编号都出现。
   for (const clip of mtrack.clips) {
     const refs = clip.referenceIds ?? [];
     const prompt = clip.prompt ?? { integratedMultimodalDescription: "", overallSoundscape: "", nonDiegeticMusic: "" };
@@ -206,49 +232,34 @@ export function validatePlan(input: ValidateInput): Finding[] {
       ["overallSoundscape", prompt.overallSoundscape ?? ""],
       ["nonDiegeticMusic", prompt.nonDiegeticMusic ?? ""],
     ];
-    // 参考类型来自资产卡：sound 是音频，其余（character/scene/prop/keyframe）都算画面参考。
-    const kinds = refs.map(id => cardById.get(id)?.kind);
-    const hasUnknownKind = kinds.some(kind => kind === undefined);
-    const pictureCount = kinds.filter(kind => kind !== "sound").length;
-    const audioCount = kinds.filter(kind => kind === "sound").length;
-    // ACT: 保守上限。官方标记按类型各自从 1 编号（生成侧在 packages/nodes/videoGenerationNode/src/index.vue 的
-    // referenceTags 里逐项换算），所以每种标记的上限是「本镜该类型参考的数量」；
-    // 视频参考在资产卡里没有独立类型（keyframe 与图片同属 picture），拿不到类型就退回参考总数当上限；
-    // 参考卡缺失 kind 时也退回总数。这只是保守兜底、只防明显越界，宁可漏报也不把合法旧工程误判成 error；
-    // 类型级精确校验留给生成时换算（升级路径：多轨 story 补上参考媒体类型后即可收紧）。
-    const boundOf = (type: string) => {
-      if (type === "video" || hasUnknownKind) return refs.length;
-      return type === "audio" ? audioCount : pictureCount;
-    };
+    const range = refs.length ? `1..${refs.length}` : "空（本镜没有参考）";
     for (const [field, text] of fields) {
       if (!text) continue;
-      // 旧格式占位标记：旧工程遗留，读入时仍要被看见（不静默漏检），但只提示迁移、不再按 error 卡住。
-      // ref 两侧空白均可省略：{{ref1}}、{{ref 1}}、{{ ref1 }}、{{ REF 1 }} 都命中。
-      const legacy = [...text.matchAll(/\{\{\s*ref\s*(\d+)\s*\}\}/gi)].map(matched => matched[0]);
-      if (legacy.length) {
+      // 行内媒体标签不是本项目的参考写法：生成侧按 {{ref N}} 换算，尖括号会被当普通文本透传。
+      for (const matched of text.matchAll(/<\s*(picture|video|audio)\s*(\d+)\s*>/gi)) {
         findings.push({
           rule: "V7",
-          level: "warning",
-          message: `片段 ${clip.clipId} 的 ${field} 仍含旧格式参考标记 ${legacy.join("、")}：旧格式，建议迁移为 MiniMax H3 官方标记 <Picture N>/<Video N>/<Audio N>`,
+          level: "error",
+          message: `片段 ${clip.clipId} 的 ${field} 含 ${matched[0]}：参考标记统一写 {{ref N}}，N 为参考顺序里的序号（本镜范围为 ${range}）`,
           ref: clip.clipId,
         });
       }
-      // 官方标记大小写与内部空白均容忍：<Picture 1>、< picture 1 >、<PICTURE  1> 都命中。
-      for (const matched of text.matchAll(/<\s*(picture|video|audio)\s*(\d+)\s*>/gi)) {
-        const type = matched[1]!.toLowerCase();
-        const n = Number(matched[2]);
-        const bound = boundOf(type);
-        if (n < 1 || n > bound) {
-          const label = `${type[0]!.toUpperCase()}${type.slice(1)}`;
-          const scope = type === "audio" ? "音频" : type === "video" ? "视频" : "画面";
-          const range = bound ? `1..${bound}` : "空（本镜没有该类型参考）";
-          findings.push({ rule: "V7", level: "error", message: `片段 ${clip.clipId} 提示词含越界标记 <${label} ${n}>，本镜${scope}参考编号范围为 ${range}`, ref: clip.clipId });
+      // ref 两侧空白均可省略：{{ref1}}、{{ref 1}}、{{ ref1 }}、{{ REF 1 }} 都命中。
+      for (const matched of text.matchAll(/\{\{\s*ref\s*(\d+)\s*\}\}/gi)) {
+        const n = Number(matched[1]);
+        if (n < 1 || n > refs.length) {
+          findings.push({
+            rule: "V7",
+            level: "error",
+            message: `片段 ${clip.clipId} 的 ${field} 含越界参考标记 {{ref ${n}}}：本镜参考编号范围为 ${range}`,
+            ref: clip.clipId,
+          });
         }
       }
     }
   }
 
-  // ---- V8：参考数量上限（图 ≤4 / 视频 ≤1 / 音频 ≤1）----
+  // ---- V8：参考数量上限（MiniMax H3 独立镜 图 ≤9 / 音频 ≤1）。视频参考与图片同桶计数（下面的过滤器只排除 sound）。----
   for (const clip of mtrack.clips) {
     const images = clip.referenceIds.filter(id => (cardById.get(id)?.kind ?? "scene") !== "sound");
     const sounds = clip.referenceIds.filter(id => (cardById.get(id)?.kind ?? "") === "sound");
@@ -269,6 +280,13 @@ export function validatePlan(input: ValidateInput): Finding[] {
     if (curNum !== prevNum + 1) {
       findings.push({ rule: "V14", level: "error", message: `合成清单不连续：${acceptedSorted[i - 1].clipId} 之后是 ${acceptedSorted[i].clipId}`, ref: acceptedSorted[i].clipId });
     }
+  }
+
+  // ACT: V14 只判镜号连续性，但合成按工程顺序拼接；工程被 move 过时会悄悄按新顺序出片（审计 P2-4）。
+  const acceptedOrder = accepted.map(c => c.clipId);
+  const acceptedAsc = [...acceptedOrder].sort((a, b) => a.localeCompare(b));
+  if (acceptedOrder.join(",") !== acceptedAsc.join(",")) {
+    findings.push({ rule: "V14", level: "warning", message: `accepted 片段在工程里的顺序（${acceptedOrder.join(" → ")}）与镜号升序不一致；合成按工程顺序拼接，成片顺序将与镜号不同`, ref: acceptedOrder[0] });
   }
 
   // ---- V15：referenceIds 顺序与画布 referenceOrder + 入边顺序一致 ----

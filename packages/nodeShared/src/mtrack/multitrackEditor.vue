@@ -1,18 +1,5 @@
 <template>
-  <div class="mtrackEditor">
-    <header class="editorHeader">
-      <div class="headingMain">
-        <h2 class="editorTitle">多轨编辑器</h2>
-        <p class="editorSubtitle">
-          <span class="metric">{{ clips.length }} 镜 / {{ totalSeconds(clips).toFixed(0) }} 秒</span>
-          <span class="meta">{{ projectMetaText }}</span>
-        </p>
-      </div>
-      <span class="headerActions">
-        <el-button size="small" :disabled="!bound" @click="addClip">＋ 添加片段</el-button>
-        <el-button size="small" :disabled="!bound" :loading="loadingReport" @click="loadReport">校验{{ findingsCount ? ` ${findingsCount}` : "" }}</el-button>
-      </span>
-    </header>
+  <div ref="editorRoot" class="mtrackEditor">
     <div v-if="!bound" class="bindBar">
       <p class="bindHint">这个节点还没有绑定工程文件。绑定后才有镜头可编辑；同一工作区的多个节点可以共用同一份工程，也可以各自新建。</p>
       <div class="bindActions">
@@ -24,168 +11,287 @@
       </div>
     </div>
     <template v-else>
-      <trackBar
-        :clips="clips"
-        :selectedId="selectedId"
-        :multiSelectedIds="multiSelectedIds"
-        :ratio="project?.global.ratio ?? ''"
-        :modelLabel="modelLabel"
-        :modelOptions="modelOptions"
-        @select="onSelect"
-        @updateRatio="handleRatioChange"
-        @updateModel="handleModelChange"
-      />
-      <dispatchBar
-        v-model:includeFinished="includeFinished"
-        :clips="selectedClips"
-        :busy="dispatching"
-        :batchId="activeBatchId"
-        :skippedCount="skippedCount"
-        :compositeBusy="compositeBusy"
-        :hasAccepted="hasAccepted"
-        @generate="generateSelection"
-        @cancel="cancelBatch"
-        @openBatch="batchPanelVisible = true"
-        @reconcile="reconcileFromPanel"
-        @composite="handleComposite"
-      />
-      <p v-if="!props.directory" class="editorHint">未绑定工作目录，无法合成成片。</p>
-      <p v-else-if="!hasAccepted" class="editorHint">没有已确认的片段，合成成片按钮暂不可用。</p>
-      <batchPanel
-        v-model="batchPanelVisible"
-        v-model:includeFinished="includeFinished"
-        :clips="clips"
-        :batchId="activeBatchId"
-        :batchClipIds="batchClipIds"
-        :batchPaused="batchPaused"
-        :batchRunning="batchRunning"
-        :selectedIds="selectedIds"
-        @start="startBatch"
-        @pause="pauseBatch"
-        @resume="panelResume"
-        @retry="panelRetry"
-        @cancel="cancelBatch"
-        @reconcile="reconcileFromPanel"
-      />
       <div v-if="conflictError" class="conflictBar" role="alert">
         <span>{{ conflictError }}</span>
         <el-button size="small" type="primary" @click="reloadProject">重新加载</el-button>
       </div>
-      <div v-else class="editorWorkspace">
-        <div class="editorMain">
-          <clipEditor
-            v-if="selectedClip"
-            :key="selectedClip.clipId"
-            :clip="selectedClip"
-            :index="selectedIndex"
-            :clipCount="clips.length"
-            :indexCards="indexCards"
-            :thumbnails="referenceThumbnails"
-            @patch="onPatch"
-            @duplicate="duplicateClip"
-            @move="moveClip"
-            @remove="removeClip"
-            @accept="acceptClip"
-            @rewrite="rewriteClipPrompt"
-            @regenerate="regenerateClip"
-            :rewriteBusy="rewriteBusy"
-            :rewritePending="pendingRewrite"
-            @adoptRewrite="adoptRewrite"
-            @discardRewrite="discardRewrite"
-            @updateRewriteDraft="updateRewriteDraft"
-            @bulkDuration="bulkDuration"
-            @bulkAdd="bulkAdd"
-          />
-          <p v-else class="editorHint">选中一个片段后在这里编辑。</p>
-        </div>
-        <div class="editorSide">
-          <statusPanel
-            :clip="selectedClip"
-            :report="report"
-            :readError="reportReadError"
-            :acquireUrl="acquireUrl"
-            :acquireNodeVideo="acquireNodeVideo"
-            @setDefaultVersion="setDefaultVersion"
-          />
-        </div>
-      </div>
-      <details class="sectionResults">
-        <summary class="sectionSummary">生成结果</summary>
-        <ul v-if="producedClips.length" class="resultList">
-          <li v-for="clip in producedClips" :key="clip.clipId" class="resultItem">
-            <span class="resultClip">{{ clip.clipId }} · {{ clip.title || "未命名" }}</span>
-            <span class="resultStatus">{{ clipStatusLabel(clip.status) }}</span>
-            <span class="resultPath">{{ clip.assetPath }}</span>
-          </li>
-        </ul>
-      </details>
-      <details class="sectionAdvanced">
-        <summary class="sectionSummary">高级设置 · 全片约束</summary>
-        <div class="advancedGrid">
-          <label class="fieldColumn">
-            <span class="fieldLabel">全片风格</span>
-            <el-input
-              type="textarea"
-              :rows="2"
-              :modelValue="project?.global.style ?? ''"
-              @input="onGlobalPatch({ style: String($event) })"
-            />
-          </label>
-          <label class="fieldColumn">
-            <span class="fieldLabel">系统提示词（全片共用，渲染时拼到画面正文开头）</span>
-            <el-input
-              type="textarea"
-              :rows="3"
-              :modelValue="project?.global.systemPrompt ?? ''"
-              @input="onGlobalPatch({ systemPrompt: String($event) })"
-            />
-          </label>
-        </div>
-      </details>
-      <footer class="editorFooter">
-        <p v-if="loadError" class="footerError" role="alert">{{ loadError }}</p>
-        <div class="footerBar">
-          <div class="saveState" aria-live="polite">
-            <span class="saveText" :class="{ saveDirty: dirty && !saving }">{{ saveText }}</span>
-            <span v-if="dirty" class="dirtyStar" aria-label="有未保存的修改">*</span>
+      <template v-else>
+        <div class="workbenchScroll">
+          <!-- ① 头部：LSC native-h3-scene.js:1330 的 nh-editor-heading（预览与项目管理移交「项目与成片」浮窗）。 -->
+          <header class="editorHeading">
+            <div class="headingText">
+              <h2>镜头创作</h2>
+              <p class="editorSubtitle">{{ clips.length }} 个镜头 · 约 {{ totalSecondsText }} 秒 · 预览与项目管理已独立</p>
+              <p class="editorMeta">{{ projectMetaText }}</p>
+            </div>
+          </header>
+          <!-- ② 快捷设置行：LSC :1332 的 nh-quick-settings（画幅下拉 + 模型下拉 + 分辨率显示；复用既有 global.ratio / global.model 处理，不新建全片区）。 -->
+          <div class="quickSettings">
+            <label class="quickField">
+              <span class="fieldLabel">画幅</span>
+              <el-select :modelValue="project?.global.ratio ?? ''" size="small" placeholder="未设置" @change="handleRatioChange(String($event))">
+                <el-option v-for="item in ratioOptions" :key="item" :label="item" :value="item" />
+              </el-select>
+            </label>
+            <label class="quickField">
+              <span class="fieldLabel">视频模型</span>
+              <el-select
+                v-if="modelOptions.length"
+                :modelValue="currentModelValue"
+                size="small"
+                :placeholder="modelLabel || '未设置'"
+                @change="onModelSelect"
+              >
+                <el-option v-for="item in modelOptions" :key="`${item.value.providerId}/${item.value.modelId}`" :label="item.label" :value="item.value" />
+              </el-select>
+              <span v-else class="quickModelText">{{ modelLabel || "未设置" }}</span>
+            </label>
+            <span class="quickMeta">{{ dimensionsText }}</span>
           </div>
-          <div class="footerActions">
-            <el-button v-if="undoStack.length" size="small" text @click="undoRemove">撤销删除</el-button>
-            <el-button size="small" :loading="saving" :disabled="!dirty" @click="() => void saveProject()">保存</el-button>
+          <!-- ③ 01 选择镜头：LSC :1333 的 nh-section-heading（批量调整 details + ＋添加镜头）与 nh-tabs 页签条。 -->
+          <div class="sectionHeading">
+            <h3 class="sectionTitle"><span class="stepIndex">01</span>选择镜头</h3>
+            <div class="shotManagement">
+              <details class="bulkDetails">
+                <summary class="bulkSummary">批量调整</summary>
+                <div class="bulkPanel">
+                  <h3 class="bulkTitle">批量调整镜头</h3>
+                  <div class="bulkControls">
+                    <label class="bulkField">
+                      统一时长 / 秒
+                      <el-input-number v-model="bulkSeconds" size="small" :min="2" :max="60" :step="1" :stepStrictly="true" />
+                    </label>
+                    <el-button size="small" @click="bulkDuration(bulkSeconds)">应用到全部镜头</el-button>
+                    <label class="bulkField">
+                      添加镜头数
+                      <el-input-number v-model="bulkAddCount" size="small" :min="1" :max="100" :step="1" :stepStrictly="true" />
+                    </label>
+                    <el-button size="small" @click="bulkAdd(bulkAddCount)">批量添加</el-button>
+                  </div>
+                  <p class="bulkHint">新镜头默认 5 秒；统一时长按工程契约限制在 2–60 秒整数内。页签上 Ctrl/⌘ 或 Shift 多选保留给批量调整入口，并作为逐镜面板的预填范围。</p>
+                </div>
+              </details>
+              <el-button size="small" @click="addClip">＋ 添加镜头</el-button>
+            </div>
           </div>
+          <shotTabs
+            :clips="clips"
+            :selectedId="selectedId"
+            :multiSelectedIds="multiSelectedIds"
+            @select="onSelect"
+          />
+          <!-- ④ 02 镜头内容：LSC :1334-1338 的 nh-workspace（左镜头编辑主区 + 右参考素材 aside）。 -->
+          <div class="workspace">
+            <shotEditorPane
+              v-if="selectedClip"
+              :key="selectedClip.clipId"
+              :clip="selectedClip"
+              :index="selectedIndex"
+              :clipCount="clips.length"
+              :previousClipId="previousClipId"
+              :previousClipJobId="previousClipJobId"
+              :rewriteBusy="rewriteBusy"
+              :rewritePending="pendingRewrite"
+              :canUndo="undoStack.length > 0"
+              @patch="onPatch"
+              @duplicate="duplicateClip"
+              @move="moveClip"
+              @remove="removeClip"
+              @accept="acceptClip"
+              @rewrite="rewriteClipPrompt"
+              @regenerate="regenerateClip"
+              @adoptRewrite="adoptRewrite"
+              @discardRewrite="discardRewrite"
+              @updateRewriteDraft="updateRewriteDraft"
+              @undoRemove="undoRemove"
+            />
+            <referencePicker
+              v-if="selectedClip"
+              :referenceIds="selectedClip.referenceIds"
+              :mode="selectedClip.mode"
+              :items="pickerItems"
+              :thumbnails="referenceThumbnails"
+              :connectionBound="Boolean(nodeId)"
+              :detachedIds="detachedReferenceIds"
+              @update:referenceIds="onPatch({ referenceIds: $event })"
+              @update:mode="onPatch({ mode: $event })"
+            />
+            <p v-else class="workspaceEmpty">在上方页签条点选一个镜头开始编辑。</p>
+          </div>
+          <!-- 生成结果与校验：LSC :1340 details('results') 的同位区块；版本切换与校验发现沿用 statusPanel，改版收进折叠区。 -->
+          <details class="sectionResults">
+            <summary class="sectionSummary">生成结果 · 校验{{ findingsCount ? ` ${findingsCount}` : "" }}</summary>
+            <statusPanel
+              :clip="selectedClip"
+              :report="report"
+              :readError="reportReadError"
+              :acquireUrl="acquireUrl"
+              :acquireNodeVideo="acquireNodeVideo"
+              :stale="selectedStale"
+              @setDefaultVersion="setDefaultVersion"
+              @deleteVersion="(version: string) => deleteVersionInClip(selectedId, version)"
+              @deleteAllVersions="deleteAllVersionsInClip(selectedId)"
+            />
+          </details>
+          <!-- ⑤ 高级设置：LSC :1342-1348（项目设置 + 公共约束与系统提示词 + 生成范围；采样/LoRA 不暴露——agent API 无此参数）。 -->
+          <details class="sectionAdvanced">
+            <summary class="sectionSummary">高级设置 · 项目、约束与生成范围</summary>
+            <div class="advancedBody">
+              <div class="advancedSection">
+                <h3 class="advancedTitle">项目设置</h3>
+                <label class="field">
+                  <span class="fieldLabel">项目名称</span>
+                  <!-- 项目显示名走协议字段 project.name（additive 可选）；projectId 保留给跨文件对账标识，界面不读不写。 -->
+                  <el-input size="small" maxlength="80" :modelValue="project?.name ?? ''" @input="onProjectNameInput(String($event))" />
+                </label>
+              </div>
+              <details class="nestedDetails">
+                <summary class="nestedSummary">公共约束与系统提示词</summary>
+                <div class="advancedSection">
+                  <label class="fieldColumn">
+                    <span class="fieldLabel">全片风格（渲染时拼到画面正文开头）</span>
+                    <el-input type="textarea" :rows="2" :modelValue="project?.global.style ?? ''" @input="onGlobalPatch({ style: String($event) })" />
+                  </label>
+                  <label class="fieldColumn">
+                    <span class="fieldLabel">系统提示词（全片共用）</span>
+                    <el-input type="textarea" :rows="3" :modelValue="project?.global.systemPrompt ?? ''" @input="onGlobalPatch({ systemPrompt: String($event) })" />
+                  </label>
+                  <label class="fieldColumn">
+                    <span class="fieldLabel">本镜头的系统提示词（留空沿用全片）</span>
+                    <!-- 本镜覆盖走协议字段 clip.systemPromptOverride，派工时经 effectiveGlobal 覆盖 global.systemPrompt 后由 buildPromptText 前拼，空值自然回落到全片。
+                         notes 是纯备注字段，不参与提示词下发（agent 有 notes 写入口，当提示词读会有注入隐患）。 -->
+                    <el-input type="textarea" :rows="2" :modelValue="selectedClip?.systemPromptOverride ?? ''" :disabled="!selectedClip" @input="onPatch({ systemPromptOverride: String($event) })" />
+                  </label>
+                </div>
+              </details>
+              <div class="advancedSection">
+                <h3 class="advancedTitle">生成范围</h3>
+                <div class="rangeGrid">
+                  <label class="field">
+                    <span class="fieldLabel">从第几个镜头开始</span>
+                    <el-input-number v-model="rangeStart" size="small" :min="1" :max="clips.length || 1" :step="1" />
+                  </label>
+                  <label class="field">
+                    <span class="fieldLabel">生成镜头数（-1 表示到最后）</span>
+                    <el-input-number v-model="rangeCount" size="small" :min="-1" :max="clips.length || 1" :step="1" />
+                  </label>
+                </div>
+                <div class="rangeRow">
+                  <el-checkbox v-model="includeFinished" size="small">包含已生成</el-checkbox>
+                  <el-checkbox v-model="autoMerge" size="small">完成后自动合并</el-checkbox>
+                  <!-- ACT: 「带上前面已完成镜头」不引入新状态（契约 §3.2）：合成清单本就是 accepted 镜按工程顺序拼接，勾上验收即带上。 -->
+                  <el-checkbox :modelValue="true" size="small" disabled title="合成按工程顺序包含全部已验收镜头（V14 连续性复核），断点会明确报错">合并时带上前面已完成镜头</el-checkbox>
+                  <el-button size="small" text @click="batchPanelVisible = true">逐镜面板…</el-button>
+                  <el-button size="small" text :loading="loadingReport" @click="loadReport">校验{{ findingsCount ? ` ${findingsCount}` : "" }}</el-button>
+                  <el-button size="small" text @click="reconcileFromPanel">刷新状态</el-button>
+                  <el-button size="small" text :disabled="!hasAccepted || compositeBusy" :loading="compositeBusy" @click="handleComposite">合成成片</el-button>
+                  <!-- 查看成片 = 把画布视口移到「项目与成片」浮窗（LSC 的独立预览窗口位；我们是画布世界层浮窗，跳转即打开）。 -->
+                  <el-button v-if="nodeId" size="small" text @click="focusResults">查看成片</el-button>
+                </div>
+                <p class="rangeText">{{ rangeText }}</p>
+              </div>
+            </div>
+          </details>
         </div>
-        <p class="snapshotNotice">生成任务按提交时的快照运行，此处修改只影响下次生成。</p>
-      </footer>
+        <!-- ⑥ 03 生成视频 footer：LSC :1351 的 nh-run-footer（错误行 + 范围提示 + 按钮组 + 状态行）。 -->
+        <runFooter
+          :start="rangeStart"
+          :count="rangeCount"
+          :clipCount="clips.length"
+          :error="footerError"
+          :dirty="dirty"
+          :saving="saving"
+          :busy="dispatching"
+          :batchRunning="batchRunning"
+          :batchPaused="batchPaused"
+          :batchId="activeBatchId"
+          :batchMessage="batchMessage"
+          @save="() => void saveProject()"
+          @run="generateFromRange"
+          @pause="pauseBatch"
+          @resume="footerResume"
+          @finish="cancelBatch"
+        />
+      </template>
     </template>
+    <batchPanel
+      v-model="batchPanelVisible"
+      v-model:includeFinished="includeFinished"
+      :clips="clips"
+      :batchId="activeBatchId"
+      :batchClipIds="batchClipIds"
+      :batchPaused="batchPaused"
+      :batchRunning="batchRunning"
+      :selectedIds="selectedIds"
+      @start="startBatch"
+      @pause="pauseBatch"
+      @resume="panelResume"
+      @retry="panelRetry"
+      @cancel="cancelBatch"
+      @reconcile="reconcileFromPanel"
+    />
+    <!-- 项目与成片浮窗：只在画布卡片宿主（传了 nodeId）挂载；组件内部 teleport 到画布世界层，
+         文档面板宿主没有变换层，留在这里只会每秒探测告警，故整块不渲染。 -->
+    <resultsOverlay
+      v-if="nodeId"
+      :clips="clips"
+      :projectName="project?.name"
+      :selectedClipId="selectedId"
+      :acquireUrl="acquireUrl"
+      :acquireNodeVideo="acquireNodeVideo"
+      :geometry="resultsGeometry"
+      :resolveTarget="resolveResultsTarget"
+      :states="states"
+      @geometry="onResultsGeometry"
+      @focusEditor="focusEditorNode"
+      @previewSelect="selectClipFromOverlay"
+      @setDefaultVersion="setClipDefaultVersion"
+      @toggleAccept="toggleClipAccept"
+      @deleteVersion="deleteVersionInClip"
+      @deleteAllVersions="deleteAllVersionsInClip"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
-import { ElButton, ElInput, ElMessage, ElMessageBox } from "element-plus";
-import type { AssetIndex, AssetIndexCard, AssetReport, EditorFiles, MtrackClip, MtrackProject } from "./mtrackProject";
+import { ElButton, ElCheckbox, ElInput, ElInputNumber, ElMessage, ElMessageBox, ElOption, ElSelect } from "element-plus";
+import { useVueFlow } from "@vue-flow/core";
+import type { AssetIndex, AssetIndexCard, AssetReport, ClipState, EditorFiles, MtrackClip, MtrackProject, ResultsUiGeometry } from "./mtrackProject";
 import {
   assetIndexPath,
   assetReportPath,
   defaultProjectPath,
   normalizeProject,
+  normalizeResultsUi,
+  continuationJobId,
   createClip,
   nextClipId,
-  clipStatusLabels,
   localizeTime,
   totalSeconds,
   cloneClips,
+  normalizeContinuityOrder,
+  clipVersions,
+  clipStates,
+  deleteClipVersion,
+  deleteAllClipVersions,
   ratioOptions,
+  hasPrompt,
 } from "./mtrackProject";
-import { beginDirectCancel, beginDirectDispatch, readClipGeneration, resolveCanvasBridge, findCardNodeIds, imagePathOf, readNodeDetail, type CanvasCall } from "./directDispatch";
+import { readClipGeneration, resolveCanvasBridge, findCardNodeIds, imagePathOf, labelMatchesCard, readNodeDetail, type CanvasCall } from "./directDispatch";
+import { composeClipRequest } from "./mediaDispatch";
+import { cancelClipTasks, readClipTask, submitClipTask, waitClipTask, type MediaTaskStatus } from "./mediaTask";
 import { attemptsOfBatch, batchMarker } from "./batchMark";
 import { applyClipOperations } from "./mtrackEdit";
 import type { EditOp } from "./mtrackEdit";
-import trackBar from "./components/trackBar.vue";
-import clipEditor from "./components/clipEditor.vue";
+import shotTabs from "./components/shotTabs.vue";
+import shotEditorPane from "./components/shotEditorPane.vue";
+import referencePicker from "./components/referencePicker.vue";
+import type { ReferencePickerItem } from "./components/referencePicker.vue";
+import runFooter from "./components/runFooter.vue";
 import statusPanel from "./components/statusPanel.vue";
-import dispatchBar from "./components/dispatchBar.vue";
 import batchPanel from "./components/batchPanel.vue";
+import resultsOverlay from "./components/resultsOverlay.vue";
 
 const props = defineProps<{
   /** 每次操作时重新取文件能力：文档面板扩展传 context.files，画布节点传工作区文件包装。 */
@@ -194,9 +300,46 @@ const props = defineProps<{
   directory: string;
   /** 绑定的工程文件路径；空字符串表示这个节点还没有绑定工程，不读取任何已有工程。 */
   projectPath?: string;
+  /** 卡片形态的多轨节点自己的 nodeId；派工时优先复用它 in 端口上用户手接的参考连线。独立编辑器不传。 */
+  nodeId?: string;
+  /** 「项目与成片」浮窗初始几何（宿主把 node.data.resultsUi 归一后传入；缺省时浮窗按锚点缺省摆放）。 */
+  resultsUi?: ResultsUiGeometry;
 }>();
 
-const emit = defineEmits<{ dirtyChange: [value: boolean]; bind: [path: string]; compositeDone: [output: string] }>();
+const emit = defineEmits<{ dirtyChange: [value: boolean]; bind: [path: string]; compositeDone: [output: string]; resultsUiChange: [ui: ResultsUiGeometry] }>();
+
+/** 画布实例：只有卡片宿主（传了 nodeId）才取——独立编辑器没有 VueFlow，取了也是空实例还会告警。 */
+let flow: ReturnType<typeof useVueFlow> | undefined;
+if (props.nodeId) {
+  try {
+    flow = useVueFlow();
+  } catch {
+    flow = undefined;
+  }
+}
+
+/** 编辑器根 DOM：teleport 目标解析的锚点（节点卡片子树内 closest 到画布变换层）。 */
+const editorRoot = ref<HTMLElement>();
+
+/** 浮窗锚点：本节点（nodeId）的世界位置与宽度；取不到节点时回落到原点。 */
+function resolveResultsAnchor() {
+  const node = props.nodeId ? flow?.findNode(props.nodeId) : undefined;
+  if (!node) return { x: 0, y: 0, width: 0 };
+  return { x: node.computedPosition?.x ?? 0, y: node.computedPosition?.y ?? 0, width: node.dimensions?.width || 0 };
+}
+
+/** 变换层解析：编辑器挂在节点卡片子树里，closest 找到所属画布的变换层；全屏 teleport 到 body 时回落到全局首查。 */
+function resolveResultsTarget(): Element | null {
+  return editorRoot.value?.closest(".vue-flow")?.querySelector(".vue-flow__transformationpane")
+    ?? document.querySelector(".vue-flow__transformationpane");
+}
+
+/** 宿主传入的几何优先；没有时按 t1 约定用节点锚点算缺省（节点右缘外 64px、顶边平齐，1360×1480）。 */
+const resultsGeometry = computed(() => props.resultsUi ?? normalizeResultsUi(undefined, resolveResultsAnchor()));
+
+function onResultsGeometry(ui: ResultsUiGeometry) {
+  emit("resultsUiChange", ui);
+}
 
 /**
  * ACT: 工程路径由宿主决定。文档面板扩展传打开的文件路径；画布节点把自己的绑定写进 node.data，
@@ -295,6 +438,7 @@ async function createProject() {
 function bindProject(path: string) {
   projectPath.value = path;
   loadError.value = "";
+  runError.value = "";
   probe.value = { exists: false, clips: 0, updatedAt: "" };
   emit("bind", path);
 }
@@ -325,6 +469,8 @@ const report = ref<AssetReport | undefined>();
 const reportReadError = ref("");
 const loadingReport = ref(false);
 const loadError = ref("");
+/** 生成链路的最近一次失败原文（发起/取消/后台轮询）；与文件读取错误分开，footer 错误行合并展示。 */
+const runError = ref("");
 const conflictError = ref("");
 const saving = ref(false);
 const savedAt = ref("");
@@ -334,6 +480,8 @@ const undoStack = ref<MtrackClip[][]>([]);
 const lastSaved = ref<MtrackProject | null>(null);
 const dirtyVersion = ref(0);
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
+/** 画布桥未就绪时的模型清单补拉句柄：卸载时一并清掉，避免回调已卸载组件。 */
+let modelRetryTimer: ReturnType<typeof setTimeout> | undefined;
 
 const clips = computed(() => project.value?.clips ?? []);
 /** 用内容比较而不是对象身份：保存后 lastSaved 必然是新克隆，身份比较会把 dirty 永远卡在 true。 */
@@ -343,265 +491,50 @@ const dirty = computed(() => {
 });
 const selectedClip = computed(() => clips.value.find(clip => clip.clipId === selectedId.value));
 const selectedIndex = computed(() => clips.value.findIndex(clip => clip.clipId === selectedId.value));
-const selectedTitle = computed(() => selectedClip.value?.title || selectedClip.value?.clipId || "");
-/** ISO 时间串统一本地化展示的入口在 mtrackProject，这里只负责页头与绑定探测两处文案。 */
+
+/** 每镜的设置签名状态（对齐 LSC signatures/context_ok）：工作台与浮窗共用这一份，避免各自遍历。 */
+const states = computed<Record<string, ClipState>>(() => (project.value ? clipStates(project.value) : {}));
+/** 选中镜是否已落后于当前设置：工作台版本区据此提示，浮窗据此在每格上标「待更新」。 */
+const selectedStale = computed(() => (selectedId.value ? states.value[selectedId.value]?.stale ?? false : false));
+
+/** 上一镜（按分镜顺序）与它可用于续接的任务号：给「承接上一镜」的引导文案用。 */
+const previousClip = computed(() => (selectedIndex.value > 0 ? clips.value[selectedIndex.value - 1] : undefined));
+const previousClipId = computed(() => previousClip.value?.clipId ?? "");
+const previousClipJobId = computed(() => continuationJobId(previousClip.value));
+
+/** ISO 时间串统一本地化展示的入口在 mtrackProject，这里只负责头部与绑定探测两处文案。 */
 const projectUpdatedAt = computed(() => project.value?.updatedAt ?? "");
-/** 页头副标题的更新时间：本地化时间，工程尚未写过时与 LSC 一致显示「尚未保存」。 */
+/** 头部的更新时间：本地化时间，工程尚未写过时与 LSC 一致显示「尚未保存」。 */
 const projectSavedText = computed(() => localizeTime(projectUpdatedAt.value, "尚未保存"));
-/** 页头路径行：未绑定工程时说明状态，不能显示由空路径拼出的「 · 尚未保存」。 */
+/** 头部路径行：未绑定工程时说明状态，不能显示由空路径拼出的「 · 尚未保存」。 */
 const projectMetaText = computed(() => bound.value ? `${projectPath.value} · ${projectSavedText.value}` : "未绑定工程");
+const totalSecondsText = computed(() => totalSeconds(clips.value).toFixed(1));
 const findingsCount = computed(() => report.value?.findings?.length ?? 0);
-/** 生成结果折叠区的清单：只列真实有产出文件的镜头。 */
-const producedClips = computed(() => clips.value.filter(clip => clip.assetPath && clip.status !== "pending" && clip.status !== "failed"));
-/** 底栏保存状态，分支顺序与 LSC 一致：保存中 → 已修改 → 已保存 → 未修改（读取错误单独一行展示）。 */
-const saveText = computed(() => {
-  if (saving.value) return "保存中…";
-  if (dirty.value) return `已修改${selectedTitle.value ? ` · 选中 ${selectedTitle.value}` : ""}`;
-  if (savedAt.value) return `已保存 · ${new Date(savedAt.value).toLocaleTimeString()}`;
-  return "未修改";
+
+/**
+ * 快捷设置行的分辨率显示「W × H · 24fps」：ACT: 显示估算——长边按 megapixels(resolution)×1e6 与画幅比例换算
+ * （与 freevideo 实际下发口径同源：aspect=ratio + megapixels=1.0/2.0，freevideo.ts:61-67、:306-308），
+ * 仅供预览参考，引擎侧按这两个参数自行取整。
+ */
+const dimensionsText = computed(() => {
+  const ratio = selectedClip.value?.ratio || project.value?.global.ratio || "9:16";
+  const resolution = selectedClip.value?.resolution || "768P";
+  const [a, b] = ratio.split(":").map(Number);
+  if (!a || !b) return `${ratio} · 24fps`;
+  const megapixels = resolution.toUpperCase().includes("2K") ? 2 : 1;
+  const scale = Math.sqrt((megapixels * 1_000_000) / (a * b));
+  return `${Math.round(a * scale)} × ${Math.round(b * scale)} · 24fps`;
 });
 
-async function readProject() {
-  loadError.value = "";
-  conflictError.value = "";
-  // 重新读盘（重载/切换工程）后旧待采用稿的基线不再可信，直接清空，避免采用时把稿套到新内容上。
-  rewritePending.value = null;
-  if (!bound.value) {
-    project.value = null;
-    lastSaved.value = null;
-    return;
-  }
-  try {
-    const raw = await props.getFiles().readJson<MtrackProject>(projectPath.value);
-    project.value = normalizeProject(raw);
-    lastSaved.value = cloneProject(project.value);
-    if (!clips.value.some(clip => clip.clipId === selectedId.value)) selectedId.value = clips.value[0]?.clipId ?? "";
-    multiSelectedIds.value = [];
-  } catch (reason) {
-    project.value = null;
-    lastSaved.value = null;
-    loadError.value = reason instanceof Error ? reason.message : String(reason);
-  }
-}
-
-function cloneProject(source: MtrackProject): MtrackProject {
-  return { ...source, global: { ...source.global }, clips: cloneClips(source.clips) };
-}
-
-async function reloadProject() {
-  await readProject();
-}
-
-/** 工作区文件不存在时服务端回 ENOENT：缺失和读取失败要分开，缺失不该被当成读取出错。 */
-function isMissingFile(reason: unknown) {
-  const error = reason as { response?: { data?: { data?: { code?: string } } } } | undefined;
-  return error?.response?.data?.data?.code === "ENOENT";
-}
+/** 批量调整（01 区）：本地数字，动作落到既有 bulkDuration/bulkAdd。 */
+const bulkSeconds = ref(5);
+const bulkAddCount = ref(1);
 
 /**
- * ACT: loadReport 可能被并发触发（宿主 projectPath prop 变化与 openExisting/bindCommand 各自调用），
- * 同一时刻的重复读取结果相同、后到的还会覆盖先到的。这里只合并并发调用，不做缓存——
- * 缓存会让用户手动改过 assetIndex.json 后读回旧数据。
- */
-let loadReportInFlight: Promise<void> | undefined;
-async function loadReport() {
-  if (loadReportInFlight) return loadReportInFlight;
-  const running = runLoadReport();
-  loadReportInFlight = running;
-  try {
-    await running;
-  } finally {
-    if (loadReportInFlight === running) loadReportInFlight = undefined;
-  }
-}
-
-async function runLoadReport() {
-  // ACT: 进函数就置位，让并发调用在这里合并；绑定的路径在 await 之后复查，换过工程就丢弃这批结果。
-  const pathAtStart = projectPath.value;
-  loadingReport.value = true;
-  reportReadError.value = "";
-  if (!bound.value) {
-    report.value = undefined;
-    indexCards.value = [];
-    loadingReport.value = false;
-    return;
-  }
-  // 报告与索引各读各的：报告只是校验结果快照，索引才是参考绑定的唯一来源，缺一个不该拖垮另一个。
-  try {
-    report.value = await props.getFiles().readJson<AssetReport>(assetReportPath);
-  } catch (reason) {
-    // 报告缺失（九宫格拆图只写 assetIndex）按「未读取到」处理：不写错误，也不拿空报告假装校验通过。
-    report.value = undefined;
-    reportReadError.value = isMissingFile(reason) ? "" : reason instanceof Error ? reason.message : String(reason);
-  }
-  try {
-    indexCards.value = normalizeIndex(await props.getFiles().readJson<AssetIndex>(assetIndexPath));
-  } catch {
-    // 老工程没有 assetIndex.json 属正常；显式清空，避免切换工程后残留上一份的卡片。
-    indexCards.value = [];
-  }
-  // 读取期间换了工程路径：这批结果属于上一个工程，不能覆盖当前工程的卡片与报告。
-  if (projectPath.value !== pathAtStart) return;
-  loadingReport.value = false;
-}
-
-function normalizeIndex(source: AssetIndex): AssetIndexCard[] {
-  return Array.isArray(source.cards) ? source.cards : [];
-}
-
-/** cardId → 缩略图 URL；取不到的卡片不出现在表里，列表端显示「无预览」占位。 */
-const referenceThumbnails = ref<Record<string, string>>({});
-let thumbnailJob = 0;
-/** 每个卡片持有的 blob URL 释放句柄，切卡片/卸载时统一 release，避免只增不减。 */
-let thumbnailReleases = new Map<string, () => void>();
-
-function releaseThumbnails() {
-  thumbnailReleases.forEach(release => release());
-  thumbnailReleases = new Map();
-}
-
-/**
- * 经画布桥反查资产节点的已出图产物作缩略图。九宫格拆图会把真实图片节点 id 写进卡片；
- * 读数与 directDispatch.resolveReferenceSources 对齐，按「card.nodeId + cardId 的 label 前缀」
- * 并集去重找候选（图片节点 label 是「图片 · 行-列」，本来就不以 cardId 开头），任一命中即可。
- * 查询只读，逐卡 getCanvasNodes(outputs)，静默失败。
- * ACT: 产物 url 是工作区相对路径，必须经 acquireUrl 转成 blob 才能给 <img :src>（同 statusPanel 的预览通道）；
- * 直接塞相对路径会变成 /assets/... 打站点根，必然 404。
- */
-async function resolveReferenceThumbnails() {
-  const version = ++thumbnailJob;
-  const bridge = readBridge();
-  if (!bridge) return;
-  const call = ((request, signal) => bridge.call?.(request, signal) ?? Promise.reject(new Error("画布桥不可用"))) as CanvasCall;
-  const next: Record<string, string> = {};
-  const releases = new Map<string, () => void>();
-  for (const card of indexCards.value) {
-    if (!card.id || card.textOnly === true) continue;
-    try {
-      const cardNodeIds = card.nodeId ? [card.nodeId] : [];
-      const nodeIds = [...new Set([...cardNodeIds, ...(await findCardNodeIds(call, card.id, AbortSignal.timeout(5000)))])];
-      for (const nodeId of nodeIds) {
-        const detail = await readNodeDetail(call, nodeId, AbortSignal.timeout(5000));
-        const path = detail ? imagePathOf(detail) : "";
-        if (path) {
-          const shared = acquireUrl(path, "image/png");
-          releases.set(card.id, shared.release);
-          const url = await shared.url;
-          if (version !== thumbnailJob) {
-            releases.forEach(release => release());
-            return;
-          }
-          next[card.id] = url;
-          break;
-        }
-      }
-    } catch {
-      // 画布未打开或节点缺失都只影响这一个缩略图，不打断其余卡片。
-    }
-    if (version !== thumbnailJob) return;
-  }
-  if (version !== thumbnailJob) return;
-  releaseThumbnails();
-  thumbnailReleases = releases;
-  referenceThumbnails.value = next;
-}
-
-watch(indexCards, () => {
-  void resolveReferenceThumbnails();
-}, { deep: true });
-
-function acquireUrl(path: string, mimeType?: string) {
-  return props.getFiles().acquireUrl(path, mimeType);
-}
-
-/**
- * 历史版本预览的产物路径：落盘名是 `video<uuid>.mp4`，不能按 nodeId 拼路径，
- * 只能经画布桥读该节点 outputs.video.value.url（与 resolveReferenceThumbnails 同一条只读路径）。
- */
-async function acquireNodeVideo(nodeId: string) {
-  const call = readBridge()?.call;
-  if (!call) throw new Error("画布未打开，读不到历史版本产物");
-  const detail = await readNodeDetail(call, nodeId, AbortSignal.timeout(5000));
-  if (!detail) throw new Error("该版本节点已从画布删除");
-  const video = detail.outputs?.video as { value?: { url?: string } } | undefined;
-  const url = video?.value?.url || "";
-  if (!url) throw new Error("该版本节点上没有视频产物");
-  return url;
-}
-
-/**
- * 切换默认版本：历史版本是独立的画布节点，产物落盘名带随机后缀，只能经画布桥按 nodeId 读
- * outputs.video.value.url；它就是工作区相对路径，与 clip.assetPath 同一口径，合成成片按
- * accepted 镜的 assetPath 取文件，所以写回后自动生效。不追加 attempts：切换不是一次生成尝试。
- */
-async function setDefaultVersion(nodeId: string) {
-  // onPatch 按当前选中项写回：await 期间换了镜头就不能再落，否则会把 nodeId/assetPath 写到另一条镜上。
-  const clip = selectedClip.value;
-  if (!clip) return;
-  const call = readBridge()?.call;
-  if (!call) return ElMessage.error("画布未打开，无法切换默认版本");
-  let detail: Awaited<ReturnType<typeof readNodeDetail>>;
-  try {
-    detail = await readNodeDetail(call, nodeId, AbortSignal.timeout(5000));
-  } catch (reason) {
-    return ElMessage.error(reason instanceof Error ? reason.message : "读取画布节点失败");
-  }
-  if (!detail) return ElMessage.error("该版本对应的画布节点已不存在");
-  const video = detail.outputs?.video as { value?: { url?: string } } | undefined;
-  const url = video?.value?.url || "";
-  if (!url) return ElMessage.error("该版本节点上没有视频产物");
-  if (selectedClip.value?.clipId !== clip.clipId) return ElMessage.warning("选中的镜头已变化，请重新切换默认版本");
-  onPatch({ nodeId, assetPath: url });
-  ElMessage.success(`已切换默认版本：${nodeId.slice(0, 8)}`);
-}
-
-async function runSave(): Promise<void> {
-  if (!project.value) return;
-  saving.value = true;
-  let failed = false;
-  try {
-    const current = await props.getFiles().readJson<MtrackProject>(projectPath.value);
-    const diskUpdatedAt = current?.updatedAt ?? "";
-    const memoryUpdatedAt = lastSaved.value?.updatedAt ?? "";
-    if (diskUpdatedAt !== memoryUpdatedAt) {
-      conflictError.value = "文件已被其他操作修改，请重新加载";
-      failed = true;
-      return;
-    }
-    project.value.updatedAt = new Date().toISOString();
-    // 先克隆快照再写盘：写盘 await 期间落进 project 的新改动不会进文件，靠收尾的 dirty 复查补排一轮保存。
-    const snapshot = cloneProject(project.value);
-    await props.getFiles().writeJson(projectPath.value, snapshot);
-    lastSaved.value = snapshot;
-    savedAt.value = new Date().toISOString();
-  } catch (reason) {
-    failed = true;
-    loadError.value = reason instanceof Error ? reason.message : String(reason);
-  } finally {
-    saving.value = false;
-    if (!failed && dirty.value) dirtyVersion.value += 1;
-  }
-}
-
-let inFlight: Promise<void> | undefined;
-
-/** 保存入口：并发调用复用同一个在途 Promise，宿主 flushSave 等到写盘结束才返回，不丢保存请求。 */
-function saveProject(): Promise<void> {
-  if (!inFlight) {
-    const task = runSave();
-    inFlight = task;
-    void task.then(() => {
-      inFlight = undefined;
-    });
-  }
-  return inFlight;
-}
-
-/**
- * 选段语义（对齐桥契约 §1）：
+ * 选段语义（对齐桥契约 §1，页签条与时间线同规则）：
  * - 单击 = 单选；
- * - Ctrl/⌘ 单击 = 追加或取消单个片段（离散多选）；
- * - Shift 单击 = 以当前单选为起点选到该片段（连续起止范围）。
+ * - Ctrl/⌘ 单击 = 追加或取消单个镜头（离散多选，保留给批量调整入口）；
+ * - Shift 单击 = 以当前单选为起点选到该镜头（连续起止范围）。
  * 选段范围最终表示为按轨道顺序的有序 clipId 列表，而不是只记起止号。
  */
 function onSelect(payload: { clipId: string; additive: boolean; range: boolean }) {
@@ -649,20 +582,74 @@ function bulkAdd(count: number) {
   for (let added = 0; added < total; added += 1) addClip();
 }
 
+/**
+ * 生成范围（LSC v.start / v.count，与 batchPanel 同一语义：镜数 -1 = 到最后一镜）。
+ * 数字是唯一真源：页签改选不回写范围，范围也不被面板覆盖（面板按钮读同一组数字之外的自己的本地态，互不干扰）。
+ */
+const rangeStart = ref(1);
+const rangeCount = ref(-1);
+/** 「完成后自动合并」：纯 UI 会话态，不持久化进工程（契约 §3.2）。 */
+const autoMerge = ref(false);
+
+function clampRange() {
+  const total = clips.value.length;
+  rangeStart.value = Math.min(Math.max(1, Math.round(rangeStart.value || 1)), Math.max(1, total));
+  const max = Math.max(1, total - rangeStart.value + 1);
+  rangeCount.value = rangeCount.value < 0 ? -1 : Math.min(Math.max(1, Math.round(rangeCount.value || 1)), max);
+}
+
+watch([rangeStart, rangeCount, () => clips.value.length], clampRange);
+
+/** 范围 → clipId 清单：换算逐字对齐 batchPanel.vue:143-148。 */
+const rangeClips = computed(() => {
+  const total = clips.value.length;
+  const from = Math.min(Math.max(1, rangeStart.value), Math.max(1, total));
+  const count = rangeCount.value < 0 ? total - from + 1 : Math.max(1, rangeCount.value);
+  return clips.value.slice(from - 1, Math.min(from - 1 + count, total)).map(clip => clip.clipId);
+});
+
+const rangeText = computed(() => {
+  const total = clips.value.length;
+  if (!total) return "工程里还没有镜头。";
+  if (!rangeClips.value.length) return "当前范围没有镜头，请调整起始镜头。";
+  const last = clips.value.findIndex(clip => clip.clipId === rangeClips.value[rangeClips.value.length - 1]) + 1;
+  // 只校验范围内提示词：无提示词的镜头会被生成内核拒绝（composeClipRequest 抛「没有提示词」），提前提示避免跑到一半才发现。
+  const noPrompt = rangeClips.value.map(clipId => clips.value.find(clip => clip.clipId === clipId)).filter(clip => clip && !hasPrompt(clip));
+  const base = rangeCount.value < 0
+    ? `本批 ${rangeClips.value.length} 镜：第 ${rangeStart.value} 镜 → 最后一镜（第 ${last} 镜）`
+    : `本批 ${rangeClips.value.length} 镜：第 ${rangeStart.value} 镜起，共 ${rangeCount.value} 镜`;
+  return noPrompt.length ? `${base} · ${noPrompt.length} 镜缺提示词（${noPrompt.slice(0, 5).map(clip => clip!.clipId).join("、")}${noPrompt.length > 5 ? " 等" : ""}）` : base;
+});
+
 /** 高级设置里的全片字段：只改 global 对象，保存走原有的整份快照写盘。 */
 function onGlobalPatch(patch: Partial<MtrackProject["global"]>) {
   if (!project.value) return;
   project.value.global = { ...project.value.global, ...patch };
 }
 
+/** 项目名称：写协议字段 project.name（additive 可选）；projectId 是对账标识，界面不再借用。 */
+function onProjectNameInput(value: string) {
+  if (!project.value) return;
+  project.value.name = value;
+}
+
 /** 全片比例：只接受 ratioOptions 里的值，写回 global.ratio，脏标记推进版本号后由既有防抖队列落盘。 */
 function handleRatioChange(value: string) {
   if (!project.value || project.value.global.ratio === value) return;
   if (!(ratioOptions as readonly string[]).includes(value)) return;
+  /*
+   * ACT: 只写 global.ratio 时已存在的镜仍带旧 clip.ratio，改画幅后旧镜会按旧比例生成（审计 t25-P1-2）。
+   * 未产出（pending/failed）的镜跟着换成新比例；已生成/已验收的镜不动，避免与已有成片冲突。
+   */
+  for (const clip of clips.value) {
+    if (clip.status !== "pending" && clip.status !== "failed") continue;
+    if (clip.ratio === value) continue;
+    writeClipRun(clip.clipId, { ratio: value });
+  }
   onGlobalPatch({ ratio: value });
 }
 
-/** 全片视频模型：写回 global.model，派工时作为 node:setConfig 的 providerId/modelId 下发。 */
+/** 全片视频模型：写回 global.model，派工时作为媒体请求的 providerId/modelId 下发。 */
 function handleModelChange(value: { providerId: string; modelId: string }) {
   if (!project.value || !value.providerId || !value.modelId) return;
   const current = project.value.global.model;
@@ -688,6 +675,17 @@ const modelLabel = computed(() => {
     ?? `${model.providerId} / ${model.modelId}`;
 });
 
+const currentModelValue = computed(() => {
+  const model = project.value?.global.model;
+  if (!model?.providerId || !model.modelId) return undefined;
+  return modelOptions.value.find(option => option.value.providerId === model.providerId && option.value.modelId === model.modelId)?.value;
+});
+
+/** 下拉的 change 载荷是 unknown，这里收口成 handleModelChange 的入参类型。 */
+function onModelSelect(value: unknown) {
+  handleModelChange(value as { providerId: string; modelId: string });
+}
+
 /**
  * ACT: 没有画布桥（文档面板、画布未激活）时静默返回，不报错也不弹提示——
  * 多轨编辑器常在没有画布的宿主里打开，缺清单只该让选择器降级成只读。
@@ -706,6 +704,338 @@ async function loadVideoModels(force = false) {
   } catch {
     // 画布正在重挂/节点工具暂不可用：保留已有清单，本轮不覆盖。
   }
+}
+
+async function readProject() {
+  loadError.value = "";
+  conflictError.value = "";
+  // 重新读盘（重载/切换工程）后旧待采用稿的基线不再可信，直接清空，避免采用时把稿套到新内容上。
+  rewritePending.value = null;
+  if (!bound.value) {
+    project.value = null;
+    lastSaved.value = null;
+    return;
+  }
+  try {
+    const raw = await props.getFiles().readJson<MtrackProject>(projectPath.value);
+    project.value = normalizeProject(raw);
+    lastSaved.value = cloneProject(project.value);
+    if (!clips.value.some(clip => clip.clipId === selectedId.value)) selectedId.value = clips.value[0]?.clipId ?? "";
+    multiSelectedIds.value = [];
+  } catch (reason) {
+    project.value = null;
+    lastSaved.value = null;
+    loadError.value = reason instanceof Error ? reason.message : String(reason);
+  }
+}
+
+function cloneProject(source: MtrackProject): MtrackProject {
+  return { ...source, global: { ...source.global }, clips: cloneClips(source.clips) };
+}
+
+async function reloadProject() {
+  await readProject();
+}
+
+/** 工作区文件不存在时服务端回 ENOENT：缺失和读取失败要分开，缺失不该被当成读取出错。 */
+function isMissingFile(reason: unknown) {
+  const error = reason as { response?: { data?: { data?: { code?: string } } } } | undefined;
+  return error?.response?.data?.data?.code === "ENOENT";
+}
+
+/**
+ * ACT: loadReport 可能被并发触发（宿主 projectPath prop 变化与 openExisting/bindCommand 各自调用），
+ * 同一时刻的重复读取结果相同、后到的还会覆盖先到的。这里只合并并发调用，不做缓存——
+ * 缓存会让用户手动改过 assetIndex.json 后读回旧数据。
+ */
+let loadReportInFlight: { path: string; running: Promise<void> } | undefined;
+async function loadReport() {
+  // ACT: 合并只对同一工程生效——切工程时若沿用上一工程的 in-flight，新工程会永远等不到自己的读数。
+  if (loadReportInFlight?.path === projectPath.value) return loadReportInFlight.running;
+  const path = projectPath.value;
+  const running = runLoadReport();
+  loadReportInFlight = { path, running };
+  try {
+    await running;
+  } finally {
+    if (loadReportInFlight?.running === running) loadReportInFlight = undefined;
+  }
+}
+
+async function runLoadReport() {
+  // ACT: 进函数就置位，让并发调用在这里合并；绑定的路径在 await 之后复查，换过工程就丢弃这批结果。
+  const pathAtStart = projectPath.value;
+  loadingReport.value = true;
+  reportReadError.value = "";
+  if (!bound.value) {
+    report.value = undefined;
+    indexCards.value = [];
+    loadingReport.value = false;
+    return;
+  }
+  // 报告与索引各读各的：报告只是校验结果快照，索引才是参考绑定的唯一来源，缺一个不该拖垮另一个。
+  // ACT: 结果先落在局部变量，确认路径没变再写状态——否则读完时用户已切到别的工程，旧数据会盖掉新工程的卡片。
+  let nextReport: AssetReport | undefined;
+  let nextReportError = "";
+  try {
+    nextReport = await props.getFiles().readJson<AssetReport>(assetReportPath);
+  } catch (reason) {
+    // 报告缺失（九宫格拆图只写 assetIndex）按「未读取到」处理：不写错误，也不拿空报告假装校验通过。
+    nextReportError = isMissingFile(reason) ? "" : reason instanceof Error ? reason.message : String(reason);
+  }
+  let nextCards: AssetIndexCard[] = [];
+  try {
+    nextCards = normalizeIndex(await props.getFiles().readJson<AssetIndex>(assetIndexPath));
+  } catch {
+    // 老工程没有 assetIndex.json 属正常；显式清空，避免切换工程后残留上一份的卡片。
+    nextCards = [];
+  }
+  // 读取期间换了工程路径：这批结果属于上一个工程，不能覆盖当前工程的卡片与报告。
+  if (projectPath.value !== pathAtStart) return;
+  report.value = nextReport;
+  reportReadError.value = nextReportError;
+  indexCards.value = nextCards;
+  loadingReport.value = false;
+}
+
+function normalizeIndex(source: AssetIndex): AssetIndexCard[] {
+  return Array.isArray(source.cards) ? source.cards : [];
+}
+
+/** cardId → 缩略图 URL；取不到的卡片不出现在表里，网格端显示「无预览」占位。 */
+const referenceThumbnails = ref<Record<string, string>>({});
+let thumbnailJob = 0;
+/** 每个卡片持有的 blob URL 释放句柄，切卡片/卸载时统一 release，避免只增不减。 */
+let thumbnailReleases = new Map<string, () => void>();
+
+function releaseThumbnails() {
+  thumbnailReleases.forEach(release => release());
+  thumbnailReleases = new Map();
+}
+
+/** 这一批采集被新版本顶掉时，已拿到的 blob URL 也要释放，否则句柄只增不减。 */
+function abandonThumbnails(releases: Map<string, () => void>) {
+  releases.forEach(release => release());
+  releases.clear();
+}
+
+/**
+ * 经画布桥反查资产节点的已出图产物作缩略图。九宫格拆图会把真实图片节点 id 写进卡片；
+ * 读数与 directDispatch.resolveReferenceSources 对齐，按「card.nodeId + cardId 的 label 前缀」
+ * 并集去重找候选（图片节点 label 是「图片 · 行-列」，本来就不以 cardId 开头），任一命中即可。
+ * 查询只读，逐卡 getCanvasNodes(outputs)，静默失败。
+ * ACT: 产物 url 是工作区相对路径，必须经 acquireUrl 转成 blob 才能给 <img :src>（同 statusPanel 的预览通道）；
+ * 直接塞相对路径会变成 /assets/... 打站点根，必然 404。
+ */
+async function resolveReferenceThumbnails() {
+  const version = ++thumbnailJob;
+  const bridge = readBridge();
+  if (!bridge) return;
+  const call = ((request, signal) => bridge.call?.(request, signal) ?? Promise.reject(new Error("画布桥不可用"))) as CanvasCall;
+  const next: Record<string, string> = {};
+  const releases = new Map<string, () => void>();
+  for (const card of indexCards.value) {
+    if (!card.id || card.textOnly === true) continue;
+    try {
+      const cardNodeIds = card.nodeId ? [card.nodeId] : [];
+      const nodeIds = [...new Set([...cardNodeIds, ...(await findCardNodeIds(call, card.id, AbortSignal.timeout(5000)))])];
+      for (const nodeId of nodeIds) {
+        const detail = await readNodeDetail(call, nodeId, AbortSignal.timeout(5000));
+        const path = detail ? imagePathOf(detail) : "";
+        if (path) {
+          const shared = acquireUrl(path, "image/png");
+          releases.set(card.id, shared.release);
+          const url = await shared.url;
+          if (version !== thumbnailJob) {
+            abandonThumbnails(releases);
+            return;
+          }
+          next[card.id] = url;
+          break;
+        }
+      }
+    } catch {
+      // 画布未打开或节点缺失都只影响这一个缩略图，不打断其余卡片。
+    }
+    if (version !== thumbnailJob) {
+      abandonThumbnails(releases);
+      return;
+    }
+  }
+  if (version !== thumbnailJob) {
+    abandonThumbnails(releases);
+    return;
+  }
+  releaseThumbnails();
+  thumbnailReleases = releases;
+  referenceThumbnails.value = next;
+}
+
+watch(indexCards, () => {
+  void resolveReferenceThumbnails();
+}, { deep: true });
+
+/**
+ * in 端口连线来源（reactive）：与 node:getReferenceOrder（useNodeReferences.referenceOrderOf）
+ * 和 directDispatch.readMultitrackSources 同一份数据源、同一排序口径——按节点 data.referenceOrder.in
+ * 的键序排，未显式排序时按入边顺序；复用这套而非再走桥查询，是为了网格随连线增删实时刷新。
+ * ACT: referenceKey 编码与 useNodeReferences.referenceKeyOf 同形（JSON 键对 encodeURIComponent），
+ * 该函数在对方模块私有，跨模块共享超出本任务范围，两处改动需同步。
+ */
+const connectedSources = computed(() => {
+  if (!flow || !props.nodeId) return [];
+  const target = flow.findNode(props.nodeId);
+  const order = new Map(((target?.data as { referenceOrder?: Record<string, string[]> } | undefined)?.referenceOrder?.in ?? [])
+    .map((key, index) => [key, index]));
+  const rank = (nodeId: string, sourceHandle: string) => order.get(encodeURIComponent(JSON.stringify([nodeId, sourceHandle]))) ?? order.size;
+  return flow.getEdges.value
+    .filter(edge => edge.target === props.nodeId && (edge.targetHandle ?? "in") === "in")
+    .map(edge => ({ nodeId: edge.source, sourceHandle: edge.sourceHandle ?? "", rank: rank(edge.source, edge.sourceHandle ?? "") }))
+    .sort((left, right) => left.rank - right.rank)
+    .map(source => ({ nodeId: source.nodeId, sourceHandle: source.sourceHandle }));
+});
+
+/** 连线上游节点 → 资产卡：先认 card.nodeId 精确回写，再按画布 label 前缀边界匹配（与 directDispatch 的匹配口径同源）。 */
+function matchCardForNode(nodeId: string, label: string): AssetIndexCard | undefined {
+  return indexCards.value.find(card => card.nodeId === nodeId)
+    ?? indexCards.value.find(card => card.id && labelMatchesCard(label, card.id));
+}
+
+/**
+ * 参考网格条目。**两套数据源是有意的**：
+ * - 画布卡片宿主（nodeId + 取到 flow）：只列本节点 in 端口连进来的来源（要求 1/2——「画布全部素材」是用户报的 bug），
+ *   顺序即连线位次；连进来但对不上资产卡的节点以「非资产卡」占位展示、不可勾选（referenceIds 的语义是 cardId，
+ *   没有卡就无可写值，派工对账也会报「参考未就绪」）。
+ * - 文档面板宿主（无 nodeId、没有画布连线语义）：保留 assetIndex.json 全量资产卡的现有行为——
+ *   该形态打开时通常画布根本没挂，全量列表是它唯一的候选来源，改版前语义不变（要求 3）。
+ */
+const pickerItems = computed<ReferencePickerItem[]>(() => {
+  if (!flow || !props.nodeId) {
+    return indexCards.value
+      .filter(card => card.id)
+      .map(card => ({ key: card.id, cardId: card.id, name: card.name || card.id, textOnly: card.textOnly === true }));
+  }
+  const items: ReferencePickerItem[] = [];
+  const usedCards = new Set<string>();
+  for (const source of connectedSources.value) {
+    const node = flow.findNode(source.nodeId);
+    const label = typeof node?.data?.label === "string" ? node.data.label : "";
+    const card = matchCardForNode(source.nodeId, label);
+    if (card && !usedCards.has(card.id)) {
+      usedCards.add(card.id);
+      items.push({ key: card.id, cardId: card.id, name: card.name || card.id, textOnly: card.textOnly === true });
+    } else {
+      // 对不上卡、或同卡第二条入边（去重后不重复列出）：占位展示来源节点本身。
+      items.push({ key: source.nodeId, cardId: "", name: label || source.nodeId });
+    }
+  }
+  // 断线旧引用：本镜 referenceIds 里有、连线却没有了的卡，仍列在网格尾部（置灰、不能再勾、可取消勾选清掉旧值）。
+  for (const clipId of selectedClip.value?.referenceIds ?? []) {
+    if (usedCards.has(clipId)) continue;
+    const card = indexCards.value.find(item => item.id === clipId);
+    items.push({ key: clipId, cardId: clipId, name: card?.name || clipId, textOnly: card?.textOnly === true, selectable: false });
+  }
+  return items;
+});
+
+/** 断线旧引用清单：连线上的可勾卡之外、本镜 referenceIds 里剩的卡，供 picker 的清除指引提示条。 */
+const detachedReferenceIds = computed(() => {
+  if (!flow || !props.nodeId) return [];
+  const connected = new Set(connectedSources.value.flatMap(source => {
+    const node = flow?.findNode(source.nodeId);
+    const label = typeof node?.data?.label === "string" ? node.data.label : "";
+    const card = matchCardForNode(source.nodeId, label);
+    return card ? [card.id] : [];
+  }));
+  return (selectedClip.value?.referenceIds ?? []).filter(id => !connected.has(id));
+});
+
+function acquireUrl(path: string, mimeType?: string) {
+  return props.getFiles().acquireUrl(path, mimeType);
+}
+
+/**
+ * 历史版本预览的产物路径：落盘名是 `video<uuid>.mp4`，不能按 nodeId 拼路径，
+ * 只能经画布桥读该节点 outputs.video.value.url（与 resolveReferenceThumbnails 同一条只读路径）。
+ */
+async function acquireNodeVideo(nodeId: string) {
+  const call = readBridge()?.call;
+  if (!call) throw new Error("画布未打开，读不到历史版本产物");
+  const detail = await readNodeDetail(call, nodeId, AbortSignal.timeout(5000));
+  if (!detail) throw new Error("该版本节点已从画布删除");
+  const video = detail.outputs?.video as { value?: { url?: string } } | undefined;
+  const url = video?.value?.url || "";
+  if (!url) throw new Error("该版本节点上没有视频产物");
+  return url;
+}
+
+/**
+ * 切换默认版本：版本键就是产物路径（服务端媒体任务通道不建画布节点），写回 clip.assetPath 即生效——
+ * 合成成片按 accepted 镜的 assetPath 取文件。旧工程的 attempt 只有 nodeId 时经画布桥反查节点产物。
+ * 不追加 attempts：切换不是一次生成尝试。
+ */
+async function setDefaultVersion(version: string) {
+  // onPatch 按当前选中项写回：await 期间换了镜头就不能再落，否则会把 nodeId/assetPath 写到另一条镜上。
+  const clip = selectedClip.value;
+  if (!clip) return;
+  const entry = clipVersions(clip).find(item => item.key === version);
+  const nodeId = entry?.nodeId ?? null;
+  let path = entry?.assetPath ?? "";
+  if (!path && nodeId) {
+    try {
+      path = await acquireNodeVideo(nodeId);
+    } catch (reason) {
+      return ElMessage.error(reason instanceof Error ? reason.message : "读取画布节点失败");
+    }
+  }
+  if (!path) return ElMessage.error("该版本没有视频产物");
+  if (selectedClip.value?.clipId !== clip.clipId) return ElMessage.warning("选中的镜头已变化，请重新切换默认版本");
+  onPatch({ nodeId, assetPath: path });
+  ElMessage.success(`已切换默认版本：${path.split("/").pop() || version}`);
+}
+
+/** 返回是否真写盘成功：冲突/读写异常都落成 false，调用方（editProject 等）据此回报 saved。 */
+async function runSave(): Promise<boolean> {
+  if (!project.value) return false;
+  saving.value = true;
+  let failed = false;
+  try {
+    const current = await props.getFiles().readJson<MtrackProject>(projectPath.value);
+    const diskUpdatedAt = current?.updatedAt ?? "";
+    const memoryUpdatedAt = lastSaved.value?.updatedAt ?? "";
+    if (diskUpdatedAt !== memoryUpdatedAt) {
+      conflictError.value = "文件已被其他操作修改，请重新加载";
+      failed = true;
+      return false;
+    }
+    project.value.updatedAt = new Date().toISOString();
+    // 先克隆快照再写盘：写盘 await 期间落进 project 的新改动不会进文件，靠收尾的 dirty 复查补排一轮保存。
+    const snapshot = cloneProject(project.value);
+    await props.getFiles().writeJson(projectPath.value, snapshot);
+    lastSaved.value = snapshot;
+    savedAt.value = new Date().toISOString();
+  } catch (reason) {
+    failed = true;
+    loadError.value = reason instanceof Error ? reason.message : String(reason);
+  } finally {
+    saving.value = false;
+    if (!failed && dirty.value) dirtyVersion.value += 1;
+  }
+  return !failed;
+}
+
+let inFlight: Promise<boolean> | undefined;
+
+/** 保存入口：并发调用复用同一个在途 Promise，宿主 flushSave 等到写盘结束才返回，不丢保存请求。 */
+function saveProject(): Promise<boolean> {
+  if (!inFlight) {
+    const task = runSave();
+    inFlight = task;
+    void task.then(() => {
+      inFlight = undefined;
+    });
+  }
+  return inFlight;
 }
 
 type CompositeSegment = { clipId: string };
@@ -729,6 +1059,7 @@ async function postComposite(execute: boolean): Promise<CompositeResult> {
 /**
  * 合成成片：先 execute=false 拿段数出清单做二次确认，再 execute=true 真拼。
  * 失败文案一律用服务端原文（含 ffmpeg、规格不一致、V14 顺序断点等定位信息），只在「输出已存在」上补一句处置建议。
+ * 「完成后自动合并」勾选后，批次成功收尾时走的也是这同一条两步流程（契约 §3.2，不另造合并状态）。
  */
 async function handleComposite() {
   if (compositeBusy.value) return;
@@ -753,10 +1084,6 @@ async function handleComposite() {
   } finally {
     compositeBusy.value = false;
   }
-}
-
-function clipStatusLabel(status: MtrackClip["status"]): string {
-  return clipStatusLabels[status];
 }
 
 type TextModelOption = { providerId: string; modelId: string; label: string };
@@ -872,6 +1199,8 @@ function adoptRewrite(text: string) {
   rewritePending.value = null;
   if (index < 0) return ElMessage.warning("这一镜已不存在，整理结果已丢弃");
   const clip = clips.value[index];
+  // ACT: 整理稿只覆盖画面正文段，环境声与配乐原样保留（展开 ...clip.prompt 再盖一个字段）。
+  // 单框编辑时三段同框，若这里整组覆盖，采用一次就会把用户写好的两个声音段抹掉。
   clips.value[index] = { ...clip, prompt: { ...clip.prompt, integratedMultimodalDescription: value } };
   ElMessage.success("已采用整理结果");
 }
@@ -887,11 +1216,37 @@ function updateRewriteDraft(text: string) {
   rewritePending.value = { ...rewritePending.value, text };
 }
 
+/**
+ * 参考位次变了（取消勾选或改序）就把正文里的 `{{ref N}}` 按新位次重排；
+ * 被取消的那张图对应的引用整段移除并清理残留标点，避免派工时编号指到别的素材
+ * （与 LSC remapPromptReferences 同义）。越界编号原样保留，交给派工前的校验提示。
+ */
+function remapPromptReferences(prompt: MtrackClip["prompt"], previous: string[], next: string[]) {
+  const rewrite = (text: string) => (text ? text
+    .replace(/\{\{\s*ref\s*(\d+)\s*\}\}/gi, (mention, n: string) => {
+      const cardId = previous[Number(n) - 1];
+      if (!cardId) return mention;
+      const index = next.indexOf(cardId);
+      return index === -1 ? "" : `{{ref ${index + 1}}}`;
+    })
+    .replace(/[ 	]{2,}/g, " ")
+    .replace(/[ 	]+([，。；、！？）】])/g, "$1")
+    .replace(/([（【])[ 	]+/g, "$1")
+    .replace(/[ 	]+$/gm, "") : text);
+  prompt.integratedMultimodalDescription = rewrite(prompt.integratedMultimodalDescription);
+  prompt.overallSoundscape = rewrite(prompt.overallSoundscape);
+  prompt.nonDiegeticMusic = rewrite(prompt.nonDiegeticMusic);
+}
+
 function onPatch(patch: Partial<MtrackClip>) {
   const index = selectedIndex.value;
   if (index < 0) return;
   const current = clips.value[index];
-  clips.value[index] = { ...current, ...patch, prompt: { ...current.prompt, ...(patch.prompt ?? {}) } };
+  const prompt = { ...current.prompt, ...(patch.prompt ?? {}) };
+  if (patch.referenceIds && patch.referenceIds.join("|") !== current.referenceIds.join("|")) {
+    remapPromptReferences(prompt, current.referenceIds, patch.referenceIds);
+  }
+  clips.value[index] = { ...current, ...patch, prompt };
   selectedId.value = clips.value[index].clipId;
 }
 
@@ -916,6 +1271,9 @@ function moveClip(offset: number) {
   const [item] = list.splice(index, 1);
   list.splice(target, 0, item);
   selectedId.value = item.clipId;
+  // 与改序同口径的收口：被挪到首位的镜头没有可承接的前镜，衔接归一为 shot；
+  // 反向同理——首镜被挪走时新首镜也可能是承接态（同 normalizeProject 的首镜约束）。
+  normalizeContinuityOrder(project.value.clips);
 }
 
 function removeClip() {
@@ -924,6 +1282,9 @@ function removeClip() {
   const snapshot = cloneClips(clips.value);
   undoStack.value = [snapshot];
   project.value.clips.splice(index, 1);
+  // ACT: 删掉首镜后新首镜没有可承接的前镜，衔接归一为 shot（与 normalizeProject / moveClip 同口径，
+  // 否则编辑后的工程落盘就是「首镜承接」的非法态）。
+  normalizeContinuityOrder(project.value.clips);
   // 删掉的正是待采用稿所属镜头：清空，避免撤销后编号被新镜头复用、旧稿套到新镜头的内容上。
   if (rewritePending.value?.clipId === snapshot[index].clipId) rewritePending.value = null;
   multiSelectedIds.value = multiSelectedIds.value.filter(id => id !== snapshot[index].clipId);
@@ -936,6 +1297,99 @@ function acceptClip(accepted: boolean) {
   if (accepted && clip.status !== "generated") return;
   if (!accepted && clip.status !== "accepted") return;
   onPatch({ status: accepted ? "accepted" : "generated" });
+}
+
+/** 浮窗「用于合并」勾选：按 clipId 直接改 status（generated ⇄ accepted），不依赖工作台当前选中。 */
+function toggleClipAccept(clipId: string) {
+  const index = clips.value.findIndex(clip => clip.clipId === clipId);
+  if (index < 0) return;
+  const clip = clips.value[index];
+  if (clip.status === "generated") clips.value[index] = { ...clip, status: "accepted" };
+  else if (clip.status === "accepted") clips.value[index] = { ...clip, status: "generated" };
+}
+
+/** 删版本文件：宿主不提供删除能力时只清记录、不报文件失败；缺失文件不算失败。 */
+async function deleteVersionFiles(paths: string[]): Promise<number> {
+  const remove = props.getFiles().remove;
+  if (!remove) return paths.length;
+  let failed = 0;
+  for (const path of paths) {
+    try {
+      await remove(path);
+    } catch (reason) {
+      if (!/404|not found|ENOENT|不存在/i.test(reason instanceof Error ? reason.message : String(reason))) failed += 1;
+    }
+  }
+  return failed;
+}
+
+/** 删单个历史版本：记录与文件一起清掉，当前默认回落到剩余版本里最新的一条（对齐 LSC：单版本无确认）。 */
+async function deleteVersionInClip(clipId: string, version: string) {
+  const index = clips.value.findIndex(clip => clip.clipId === clipId);
+  if (index < 0) return;
+  const clip = clips.value[index];
+  if (clip.status === "generating") return ElMessage.warning("该镜头正在生成，请等生成结束再删除版本");
+  const removed = deleteClipVersion(clip, version);
+  const failed = await deleteVersionFiles(removed.paths);
+  if (clips.value[index]?.clipId !== clip.clipId) return;
+  clips.value[index] = removed.clip;
+  dirtyVersion.value += 1;
+  const name = version.split("/").pop() || version;
+  ElMessage.success(failed
+    ? `已删除版本 ${name}，有 ${failed} 个文件删除失败`
+    : `已删除版本 ${name}${removed.clip.assetPath ? "，默认已回落到剩余版本" : "，该镜头已无成片"}`);
+}
+
+/** 删整镜全部版本：整镜是不可撤销动作，走确认弹窗；脚本与其他镜头不受影响。 */
+async function deleteAllVersionsInClip(clipId: string) {
+  const index = clips.value.findIndex(clip => clip.clipId === clipId);
+  if (index < 0) return;
+  const clip = clips.value[index];
+  if (clip.status === "generating") return ElMessage.warning("该镜头正在生成，请等生成结束再删除版本");
+  const total = clipVersions(clip).length;
+  if (!total) return;
+  try {
+    await ElMessageBox.confirm(
+      `将永久删除 ${total} 个视频版本，不可撤销。镜头脚本与其他镜头保留；依赖被删版本的续接镜头需要重新生成。`,
+      `永久删除「${clip.title || clip.clipId}」的全部版本？`,
+      { type: "warning", confirmButtonText: "永久删除", cancelButtonText: "取消" },
+    );
+  } catch {
+    return;
+  }
+  const removed = deleteAllClipVersions(clip);
+  const failed = await deleteVersionFiles(removed.paths);
+  if (clips.value[index]?.clipId !== clip.clipId) return;
+  clips.value[index] = removed.clip;
+  dirtyVersion.value += 1;
+  ElMessage.success(failed ? `已删除 ${total} 个版本，有 ${failed} 个文件删除失败` : `已删除 ${total} 个视频版本`);
+}
+
+/** 浮窗「设为默认」：先把选中镜切到目标镜，再走既有 setDefaultVersion（await 后的选中复查正好因此成立）。 */
+async function setClipDefaultVersion(clipId: string, version: string) {
+  if (selectedId.value !== clipId) selectedId.value = clipId;
+  await setDefaultVersion(version);
+}
+
+/** 浮窗大预览换镜 → 工作台选中同一镜（与 selectedClipId → 浮窗的 watch 构成双向联动，同值写入不成环）。 */
+function selectClipFromOverlay(clipId: string) {
+  if (clips.value.some(clip => clip.clipId === clipId)) selectedId.value = clipId;
+}
+
+/** 「镜头编辑」：视口移回本节点并缩到可读档，工作台随之回到用户眼前（浮窗按钮触发）。 */
+function focusEditorNode() {
+  const node = props.nodeId ? flow?.findNode(props.nodeId) : undefined;
+  if (!node || !flow) return;
+  const width = node.dimensions?.width || 640;
+  const height = node.dimensions?.height || 700;
+  void flow.setCenter(node.computedPosition.x + width / 2, node.computedPosition.y + height / 2, { zoom: 0.9, duration: 240 });
+}
+
+/** 高级设置「查看成片」：视口移到浮窗中心（几何来自最新 resultsGeometry，含宿主回写值）。 */
+function focusResults() {
+  if (!flow) return;
+  const ui = resultsGeometry.value;
+  void flow.setCenter(ui.x + ui.width / 2, ui.y + ui.height / 2, { zoom: 0.6, duration: 240 });
 }
 
 function undoRemove() {
@@ -972,13 +1426,15 @@ async function acquireBridge(): Promise<ReturnType<typeof resolveCanvasBridge>> 
 const includeFinished = ref(false);
 const dispatching = ref(false);
 const activeBatchId = ref("");
-/** 面板可见性由编辑器持有：关面板不中断生成，重开还能看到同一批。 */
+/** 逐镜面板可见性由编辑器持有：关面板不中断生成，重开还能看到同一批。 */
 const batchPanelVisible = ref(false);
 /** 暂停是「本镜结束后停」的软闸门，与整批取消（abort）分开记账。 */
 const batchPaused = ref(false);
 let dispatchController: AbortController | undefined;
 /** 当前在跑的直连派工句柄：暂停闸门与取消抢占都要用它，批次自然收尾时清空。 */
-const batchHandle = shallowRef<{ abort(): void; pause(): void }>();
+const batchHandle = shallowRef<{ abort(): void; pause(): void; run?: Promise<void> }>();
+/** 在跑批次的服务端任务号：取消时对它们发 tasks/cancel，不依赖画布节点。 */
+const activeTaskIds = ref<string[]>([]);
 // 本地在途循环的种类：生成或取消。取消当前活动批次时据此判断可否抢占生成循环。
 let dispatchKind: "generate" | "cancel" | "" = "";
 
@@ -994,9 +1450,24 @@ const selectedClips = computed(() => clips.value.filter(clip => selectedIds.valu
 const batchClipIds = ref<string[]>([]);
 /** 批次是否在跑：dispatching 只覆盖「取画布桥 + 建节点」的启动相位，生成循环在 run 上后台推进。 */
 const batchRunning = computed(() => Boolean(batchHandle.value));
-/** 只有待生成/失败的镜头默认参与派工；其余状态需勾选「包含已生成」才纳入。 */
-const dispatchableClips = computed(() => selectedClips.value.filter(clip => includeFinished.value || clip.status === "pending" || clip.status === "failed"));
-const skippedCount = computed(() => selectedClips.value.length - dispatchableClips.value.length);
+
+/** footer 状态行的批次消息：与逐镜面板 progressText 同源（batchClipIds + clips 状态推导），footer 再按优先级包装。 */
+const batchMessage = computed(() => {
+  if (!activeBatchId.value || !batchClipIds.value.length) return "";
+  const total = batchClipIds.value.length;
+  const batchClips = batchClipIds.value.map(clipId => clips.value.find(clip => clip.clipId === clipId)).filter(Boolean) as MtrackClip[];
+  const done = batchClips.filter(clip => clip.status === "generated" || clip.status === "accepted").length;
+  if (batchPaused.value) return `已在镜头间暂停，已完成 ${done}/${total} 镜；点「继续 / 重试」接着跑。`;
+  if (batchRunning.value) {
+    const at = batchClips.findIndex(clip => clip.status === "generating");
+    return at >= 0 ? `正在生成第 ${at + 1}/${total} 镜 · 已完成 ${done} 镜` : `正在生成 · 已完成 ${done}/${total} 镜`;
+  }
+  const failed = batchClips.filter(clip => clip.status === "failed").length;
+  return `本批已结束：成功 ${done} 镜${failed ? `，失败 ${failed} 镜` : ""}，共 ${total} 镜。`;
+});
+
+/** footer 错误行：文件读取错误与最近一次生成链路失败合并展示（LSC v.error 位）。 */
+const footerError = computed(() => loadError.value || runError.value);
 
 /**
  * 派工选段校验：clipIds 缺省用 UI 选段；文案与三条本地校验逐字沿用原 generateSelection。
@@ -1006,9 +1477,10 @@ function pickDispatchTargets(clipIds?: string[], finishedOverride?: boolean): { 
   const wanted = clipIds && clipIds.length
     ? clips.value.filter(clip => clipIds.includes(clip.clipId))
     : selectedClips.value;
-  if (!wanted.length) return { clips: [], skipped: 0, issue: "请先在轨道上选择要生成的分镜" };
+  if (!wanted.length) return { clips: [], skipped: 0, issue: "请先选择要生成的分镜" };
   const withFinished = finishedOverride ?? includeFinished.value;
-  const targets = wanted.filter(clip => withFinished || clip.status === "pending" || clip.status === "failed");
+  // ACT: generating 的镜永远不进目标——否则勾「包含已生成」会把在跑的镜再派一次（双份计费，审计 P1-1）。
+  const targets = wanted.filter(clip => clip.status !== "generating" && (withFinished || clip.status === "pending" || clip.status === "failed"));
   if (!targets.length) return { clips: [], skipped: wanted.length, issue: "选段内没有可生成的分镜，可勾选「包含已生成」后再试" };
   if (!props.directory) return { clips: [], skipped: 0, issue: "当前没有工作目录，无法发起生成" };
   return { clips: targets, skipped: wanted.length - targets.length, issue: "" };
@@ -1026,16 +1498,28 @@ function finishDispatchRun(controller: AbortController) {
  * 把一次生成尝试写回镜头：状态、节点号、产物路径和 attempts 记录一起落盘，
  * 使「生成中」在界面、状态快照和 agent 的 mtrackRead 里都可见。
  */
-function writeClipRun(clipId: string, patch: Partial<MtrackClip>, attempt?: { nodeId: string; status: string; error?: string }) {
-  const clip = project.value?.clips.find(item => item.clipId === clipId);
-  if (!clip) return;
+function writeClipRun(clipId: string, patch: Partial<MtrackClip>, attempt?: { nodeId: string; status: string; error?: string; jobId?: string }) {
+  const current = project.value;
+  const clip = current?.clips.find(item => item.clipId === clipId);
+  if (!current || !clip) return;
   Object.assign(clip, patch);
   if (attempt) {
+    // 成功尝试把产物路径一起记下：历史版本的身份就是它（服务端通道不建画布节点，nodeId 恒为空）。
+    const succeededPath = attempt.status === "succeeded" ? patch.assetPath : undefined;
+    // 成功尝试同时记下设置签名与时间线位置：clipStates 靠这两个值判定这条成片是否已落后于当前设置。
+    const clipIndex = current.clips.findIndex(item => item.clipId === clipId);
+    const parentJobId = continuationJobId(clipIndex > 0 ? current.clips[clipIndex - 1] : undefined);
     clip.attempts.push({
       at: new Date().toISOString(),
       nodeId: attempt.nodeId || null,
       status: attempt.status,
       ...(attempt.error ? { error: attempt.error } : {}),
+      // ACT: jobId 必须随成功尝试一起落盘——下一镜要「承接本镜」时全靠它做 continue_from.from_job。
+      ...(attempt.jobId ? { jobId: attempt.jobId } : {}),
+      ...(succeededPath ? { assetPath: succeededPath } : {}),
+      ...(attempt.status === "succeeded"
+        ? { signature: clipStates(current)[clipId]?.signature ?? "", index: clipIndex, parentJobId }
+        : {}),
     });
   }
   // 生成期间 dirty 往往已经是 true，watch(dirty) 不会再触发；直接推进版本号让防抖写盘照常排上。
@@ -1043,15 +1527,32 @@ function writeClipRun(clipId: string, patch: Partial<MtrackClip>, attempt?: { no
 }
 
 /**
+ * 本镜的系统提示词覆盖位（高级设置 · 公共约束）：clip.systemPromptOverride 有值时替换全片 systemPrompt 下发，
+ * 留空沿用全片。notes 一律不参与下发（纯备注字段）。
+ * schema 与 composeClipRequest 签名都不动，只在调用方换算有效 global。
+ */
+function effectiveGlobal(clip: MtrackClip): MtrackProject["global"] | undefined {
+  const global = project.value?.global;
+  const override = clip.systemPromptOverride?.trim();
+  if (!global || !override) return global;
+  return { ...global, systemPrompt: override };
+}
+
+/**
  * 发起直连派工（不等流）：本地校验或画布未就绪时抛错、不返回 batchId。
- * 拿到画布桥即返回 {batchId,skipped}，逐镜生成在后台经画布 nodeTools 推进，
- * 全程不经过对话模型——视频供应商只认画布节点这一条生成路径。
+ * 拿到画布桥后**逐镜组装一份请求**交给服务端媒体通道（`/api/ai/media/generate` + taskId 异步任务），
+ * 不再为每镜新建画布视频生成节点——对齐 LSC 的「时间线 = 请求体」模型：
+ * 参数、参考素材与提示词在这一步一次性提交，画布只提供参考素材路径。
  * batchId 传入时沿用该批次（暂停后继续）：attempts 标记与面板行都靠它对齐。
  */
 async function launchDispatch(clipIds?: string[], options?: { includeFinished?: boolean; batchId?: string }): Promise<{ batchId: string; skipped: number }> {
   if (dispatching.value || batchHandle.value) throw new Error("已有派工操作正在进行，请等待结束");
   const picked = pickDispatchTargets(clipIds, options?.includeFinished);
   if (picked.issue) throw new Error(picked.issue);
+  const videoModel = project.value?.global.model;
+  if (!videoModel?.providerId || !videoModel.modelId) throw new Error("工程没有指定视频模型，请在快捷设置里选择后再发起生成");
+  if (!props.directory) throw new Error("当前没有工作目录，无法发起生成");
+  runError.value = "";
   dispatching.value = true;
   const controller = new AbortController();
   dispatchController = controller;
@@ -1059,61 +1560,90 @@ async function launchDispatch(clipIds?: string[], options?: { includeFinished?: 
   const batchId = options?.batchId || crypto.randomUUID();
   const marker = batchMarker(batchId);
   const batchClips = picked.clips;
-  // 本次 run 是否真的因闸门停下：onPaused 只在这种情况被调用，用它决定收尾时要不要留暂停态。
   let pausedByGate = false;
-  // 面板可能在取桥之前就被打开/暂停，先把批次号与镜单落到界面可见状态。
   batchClipIds.value = batchClips.map(clip => clip.clipId);
   activeBatchId.value = batchId;
   try {
     const bridge = await acquireBridge();
-    if (!bridge) throw new Error("未取到画布上下文：请先打开画布并等待加载完成，再回到多轨界面发起生成");
-    const handle = await beginDirectDispatch({
-      bridge,
-      batchId,
-      clips: picked.clips,
-      cards: indexCards.value,
-      videoModel: project.value?.global.model,
-      global: project.value?.global,
-      signal: controller.signal,
-      hooks: {
-        onStart(clip, nodeId) {
-          writeClipRun(clip.clipId, { status: "generating", nodeId }, { nodeId, status: "generating", error: marker });
-        },
-        onSucceeded(clip, nodeId, assetPath) {
-          writeClipRun(clip.clipId, { status: "generated", nodeId, assetPath }, { nodeId, status: "succeeded", error: marker });
-        },
-        onFailed(clip, nodeId, error) {
-          writeClipRun(clip.clipId, { status: "failed", ...(nodeId ? { nodeId } : {}) }, { nodeId, status: "failed", error: `${marker} ${error}` });
-        },
-        onPaused() {
-          pausedByGate = true;
-          // 最后一镜跑到一半才按暂停时闸门已置位，但镜单已全部收尾，属正常结束，不报暂停。
-          const allDone = batchClips.every(clip => {
-            const current = project.value?.clips.find(item => item.clipId === clip.clipId);
-            return !current || current.status === "generated" || current.status === "accepted";
+    if (!bridge?.call) throw new Error("未取到画布上下文：请先打开画布并等待加载完成，再回到多轨界面发起生成");
+    const call = bridge.call;
+    const directory = props.directory;
+    const gate = { paused: false };
+    const run = (async () => {
+      for (const clip of batchClips) {
+        controller.signal.throwIfAborted();
+        if (gate.paused) { pausedByGate = true; return; }
+        const taskId = crypto.randomUUID();
+        try {
+          const request = await composeClipRequest({
+            call,
+            clip,
+            cards: indexCards.value,
+            videoModel: { providerId: videoModel.providerId!, modelId: videoModel.modelId! },
+            global: effectiveGlobal(clip),
+            signal: controller.signal,
+            // 续接对齐 LSC 多轨编辑器：按分镜顺序取**上一镜**，用它的供应商任务号走 continue_from，
+            // 由引擎加载原生上下文继续生成；本镜的多参考图照常下发（上限 3 张）。
+            previousClip: (() => {
+              const index = clips.value.findIndex(item => item.clipId === clip.clipId);
+              return index > 0 ? clips.value[index - 1] : undefined;
+            })(),
+            // 任务号只存在于「成功」的那次尝试里；拿不到就让 composeClipRequest 报错，不静默降级。
+            resolveContinueFrom: previous => ({
+              jobId: previous.attempts.findLast(attempt => attempt.status === "succeeded" && attempt.jobId)?.jobId ?? "",
+            }),
           });
-          batchPaused.value = !allDone;
-        },
-      },
-    });
+          writeClipRun(clip.clipId, { status: "generating", nodeId: null }, { nodeId: "", status: "generating", error: `${marker} task:${taskId}` });
+          // ACT: 先登记再提交——提交途中点取消才能取消到这个任务，否则服务端会白跑到超时（审计 P2-2）。
+          activeTaskIds.value = [...activeTaskIds.value, taskId];
+          try {
+            await submitClipTask(directory, request, taskId, controller.signal);
+          } catch (error) {
+            activeTaskIds.value = activeTaskIds.value.filter(id => id !== taskId);
+            throw error;
+          }
+          const result = await waitClipTask(directory, taskId, controller.signal);
+          activeTaskIds.value = activeTaskIds.value.filter(id => id !== taskId);
+          if (result.state === "succeeded") {
+            const file = result.files[0];
+            if (!file?.path) throw new Error("服务端报告生成成功但没有返回文件路径");
+            // jobId 一定要存进 attempts：它是下一镜「承接本镜」时 continue_from.from_job 的唯一来源。
+            writeClipRun(clip.clipId, { status: "generated", nodeId: null, assetPath: file.path },
+              { nodeId: "", status: "succeeded", error: `${marker} task:${taskId}`, ...(file.jobId ? { jobId: file.jobId } : {}) });
+          } else if (result.state === "cancelled" || result.state === "lost") {
+            // ACT: 任务在服务端已不存在（重启/过期）时也退回 pending，不能落 failed——用户没做错任何事（审计 P2-1）。
+            writeClipRun(clip.clipId, { status: "pending" }, { nodeId: "", status: "cancelled", error: `${marker} task:${taskId}${result.state === "lost" ? " 任务已丢失，已退回待生成" : ""}` });
+          } else {
+            writeClipRun(clip.clipId, { status: "failed" }, { nodeId: "", status: "failed", error: `${marker} ${result.error}` });
+          }
+        } catch (error) {
+          if (controller.signal.aborted) throw error;
+          writeClipRun(clip.clipId, { status: "failed" }, { nodeId: "", status: "failed", error: `${marker} ${error instanceof Error ? error.message : String(error)}` });
+        }
+      }
+    })();
+    const handle = { abort: () => controller.abort(), pause: () => { gate.paused = true; }, run };
     batchHandle.value = handle;
-    // 新 run 一律从开闸开始：继承上一批残留的暂停态会让它一启动就撞闸门（onPaused → 剩余镜头一镜不发）。
-    // 取桥窗口内不可能出现新的暂停请求（pauseBatch 要 batchHandle 才受理），所以这里直接开闸即可。
     batchPaused.value = false;
-    handle.run.catch((reason: unknown) => {
-      if (!controller.signal.aborted) ElMessage.error(reason instanceof Error ? reason.message : "生成失败");
-      // 生成循环死亡即批次无人推进：清掉残留批次号，避免 UI 显示一个不会执行的批次（在途批次仍可从 attempts 找回）。
+    run.catch((reason: unknown) => {
+      if (!controller.signal.aborted) {
+        const message = reason instanceof Error ? reason.message : "生成失败";
+        runError.value = message;
+        ElMessage.error(message);
+      }
       if (activeBatchId.value === batchId) activeBatchId.value = "";
     }).finally(() => {
-      // 批次收尾即软闸门失效，但只在「本次 run 确实被闸门停下」时才保留暂停态：
-      // 无条件清会抹掉暂停态，继续生成按钮这就不出现了，用户没法接着跑剩下的镜。
-      // 自然跑完（allDone）、取消（launchCancel）、新批次启动（catch 分支）三条路径各自复位，不依赖这里。
       if (batchHandle.value === handle) batchHandle.value = undefined;
-      // 镜单必须和暂停态一起留下：闸门停下时还没开跑的镜头一条 attempts 都没有，清掉镜单它们就
-      // 从面板里消失，「继续生成」会误判「剩余镜头已全部完成」而一镜都不发（暂停态的台账即续跑清单）。
       if (!pausedByGate && activeBatchId.value === batchId) batchClipIds.value = [];
       batchPaused.value = pausedByGate;
       finishDispatchRun(controller);
+      // 「完成后自动合并」：批次全部镜头成功收尾（非暂停、非中止）、勾了自动合并且有已验收镜头时，
+      // 走与「合成成片」按钮完全相同的两步流程（清单确认 + 真拼），不另造第二套合并逻辑。
+      const allDone = batchClips.every(clip => {
+        const live = clips.value.find(item => item.clipId === clip.clipId);
+        return Boolean(live && (live.status === "generated" || live.status === "accepted"));
+      });
+      if (!pausedByGate && !controller.signal.aborted && allDone && autoMerge.value && hasAccepted.value) void handleComposite();
     });
     return { batchId, skipped: picked.skipped };
   } catch (reason) {
@@ -1123,15 +1653,16 @@ async function launchDispatch(clipIds?: string[], options?: { includeFinished?: 
     }
     batchPaused.value = false;
     finishDispatchRun(controller);
-    // abort 触发的收尾不弹提示（卸载/取消竞态），命令式调用方仍能拿到 silent 标记。
     if (controller.signal.aborted) throw Object.assign(new Error("派工已中止"), { silent: true });
     throw reason;
   }
 }
 
 /**
- * 发起批次取消（不等流）：batchId 缺省取消当前活动批次。在途生成直接 abort，
- * 再对批次内状态为 generating 的镜头逐个 node:cancelGeneration，并把它们回写 pending。
+ * 发起批次取消（不等流）：batchId 缺省取消当前活动批次。
+ * ACT: 新通道的生成在服务端任务里跑，取消要**两件事一起做**——abort 本地轮询（立刻停手），
+ * 并对在跑任务发 `tasks/cancel`（让服务端也停）。旧实现靠对画布节点 node:cancelGeneration，
+ * 那条路径已经没有节点可用了。
  */
 async function launchCancel(batchId?: string): Promise<{ batchId: string }> {
   const target = batchId ?? activeBatchId.value;
@@ -1149,72 +1680,30 @@ async function launchCancel(batchId?: string): Promise<{ batchId: string }> {
   }
   dispatchKind = "cancel";
   try {
-    const bridge = await acquireBridge();
-    if (!bridge) throw new Error("未取到画布上下文：请先打开画布并等待加载完成");
     const marker = batchMarker(target);
     const running = clips.value.filter(clip => clip.status === "generating" && attemptsOfBatch(clip, target).length > 0);
-    const handle = await beginDirectCancel({
-      bridge,
-      batchId: target,
-      clips: running,
-      signal: controller.signal,
-      onCancelled(clip, nodeId) {
-        writeClipRun(clip.clipId, { status: "pending" }, { nodeId, status: "cancelled", error: marker });
-      },
-    });
-    handle.run.catch((reason: unknown) => {
-      if (!controller.signal.aborted) ElMessage.error(reason instanceof Error ? reason.message : "取消批次失败");
-    }).finally(() => finishDispatchRun(controller));
+    const taskIds = activeTaskIds.value;
+    const cancelled = await cancelClipTasks(props.directory, taskIds, controller.signal);
+    if (!cancelled) {
+      // ACT: 取消失败时保留任务号与 generating 状态，只报错——写 pending 会让用户以为已停（审计 t25-P1-1）。
+      runError.value = "取消请求失败：服务端任务可能仍在生成，请稍后再次取消";
+      finishDispatchRun(controller);
+      return { batchId: target };
+    }
+    for (const clip of running) {
+      writeClipRun(clip.clipId, { status: "pending" }, { nodeId: clip.nodeId ?? "", status: "cancelled", error: marker });
+    }
+    activeTaskIds.value = [];
     activeBatchId.value = "";
     // 取消即批次终结：镜单一起清掉，否则「暂停 → 整批取消」后面板还会列着一批已不存在的镜头
     // （暂停态没有在途 run，不会有 finally 替它清）。
     batchClipIds.value = [];
+    finishDispatchRun(controller);
     return { batchId: target };
   } catch (reason) {
     finishDispatchRun(controller);
     if (controller.signal.aborted) throw Object.assign(new Error("取消已中止"), { silent: true });
     throw reason;
-  }
-}
-
-/**
- * 多轨编辑器可位于文档面板或画布节点弹窗内。画布面板非 active 时 `canvasHost.vue` 的
- * `getCanvasContext()` 不返回上下文；宿主为此提供了 `getAgentCanvasContext`（经
- * `provide("agentCanvas")`）。编辑器组件不随面板切换卸载时，生成循环继续在后台跑。
- * UI 入口：先弹本地校验 warning，再交给 launchDispatch 不等流，loading 跟 dispatching。
- */
-async function generateSelection() {
-  if (dispatching.value || batchHandle.value) return;
-  const picked = pickDispatchTargets();
-  if (picked.issue) return ElMessage.warning(picked.issue);
-  try {
-    const { batchId } = await launchDispatch();
-    ElMessage.success(`批次 ${batchId.slice(0, 8)} 已开始生成，进度见轨道与右侧状态`);
-  } catch (reason) {
-    // 原 generateSelection 对 aborted 静默（卸载/取消竞态不弹错），silent 标记保持同一行为。
-    if ((reason as { silent?: boolean })?.silent) return;
-    ElMessage.error(reason instanceof Error ? reason.message : "发起生成失败");
-  }
-}
-
-/**
- * UI 入口：重新生成本镜。LSC 对齐——已生成/已验收的镜也直接重跑，强制 includeFinished；
- * 每次重跑在画布上追加一个新版本节点（旧版本保留，历史版本列表可切回），新视频完成后成为该镜默认。
- * 与 generateSelection 同构：先弹本地校验 warning，再交给 launchDispatch 不等流。
- */
-async function regenerateClip() {
-  if (dispatching.value || batchHandle.value) return;
-  const clip = selectedClip.value;
-  if (!clip) return;
-  const picked = pickDispatchTargets([clip.clipId], true);
-  if (picked.issue) return ElMessage.warning(picked.issue);
-  try {
-    const { batchId } = await launchDispatch([clip.clipId], { includeFinished: true });
-    ElMessage.success(`批次 ${batchId.slice(0, 8)} 已开始重新生成，新版本完成后自动成为默认视频`);
-  } catch (reason) {
-    // 与 generateSelection 完全一致：aborted（卸载/取消竞态）静默，其余弹错。
-    if ((reason as { silent?: boolean })?.silent) return;
-    ElMessage.error(reason instanceof Error ? reason.message : "发起生成失败");
   }
 }
 
@@ -1228,24 +1717,35 @@ async function cancelBatch() {
     ElMessage.success(`批次 ${batchId.slice(0, 8)} 已请求取消`);
   } catch (reason) {
     if ((reason as { silent?: boolean })?.silent) return;
-    ElMessage.error(reason instanceof Error ? reason.message : "取消批次失败");
+    const message = reason instanceof Error ? reason.message : "取消批次失败";
+    runError.value = message;
+    ElMessage.error(message);
   }
 }
 
-/** 面板「开始生成」：范围由面板数字给出，镜数 -1 已在面板里换成到最后一镜。 */
+/** 「生成视频」与逐镜面板「开始生成」共用：范围数字是唯一真源，镜数 -1 已在 rangeClips 换算到最后一镜。 */
 async function startBatch(payload: { clips: string[]; includeFinished: boolean }) {
   if (!payload.clips.length) return ElMessage.warning("当前范围没有可生成的分镜");
   try {
     const { batchId, skipped } = await launchDispatch(payload.clips, { includeFinished: payload.includeFinished });
-    ElMessage.success(`批次 ${batchId.slice(0, 8)} 已开始生成${skipped ? `，跳过 ${skipped} 段` : ""}；面板逐镜显示进度`);
+    ElMessage.success(`批次 ${batchId.slice(0, 8)} 已开始生成${skipped ? `，跳过 ${skipped} 段` : ""}；逐镜进度见页签状态与「逐镜面板」`);
   } catch (reason) {
     if ((reason as { silent?: boolean })?.silent) return;
-    ElMessage.error(reason instanceof Error ? reason.message : "发起生成失败");
+    const message = reason instanceof Error ? reason.message : "发起生成失败";
+    runError.value = message;
+    ElMessage.error(message);
   }
 }
 
+/** footer「生成视频」：把「生成范围」的两个数字换算成镜单后走 startBatch 同一条链。 */
+function generateFromRange() {
+  if (dispatching.value || batchHandle.value) return;
+  if (!clips.value.length) return ElMessage.warning("工程里还没有镜头，请先添加镜头");
+  void startBatch({ clips: rangeClips.value, includeFinished: includeFinished.value });
+}
+
 /**
- * 面板「本镜结束后暂停」：只置闸门，不中断正在跑的镜头（软暂停）；整批取消才走 abort。
+ * 「本镜结束后暂停」：只置闸门，不中断正在跑的镜头（软暂停）；整批取消才走 abort。
  * ACT: 取桥相位（handle 还没建）里点的暂停由 launchDispatch 启动后补一次 handle.pause()。
  */
 function pauseBatch() {
@@ -1256,7 +1756,7 @@ function pauseBatch() {
 }
 
 /**
- * 面板「继续生成」：沿用同一批次号续跑剩余镜头，attempts 标记与面板行都不变。
+ * 「继续 / 重试」：沿用同一批次号续跑剩余镜头，attempts 标记与面板行都不变。
  * ACT: 被拒一律抛错（而不是只弹提示后返回 status 快照）——node:resumeBatch 代理本函数，
  * 抛错才能让 agent 区分「已受理 / 被拒 / 失败」并拿到原因；界面侧的提示由 panelResume 兜。
  */
@@ -1272,13 +1772,22 @@ async function resumeBatch(payload: { clips: string[]; includeFinished: boolean 
   return { batchId };
 }
 
-/** 面板「单镜重试/重新生成本镜」：只派这一镜，强制 includeFinished；已生成的镜生成新版本追加（旧视频保留），failed 的镜照常重跑。被拒同样抛错。 */
+/** footer「继续 / 重试」的界面入口：批次台账里 pending/failed 的镜全部续跑（同 batchPanel 的 pendingClips 判据）。 */
+function footerResume() {
+  const pending = batchClipIds.value
+    .map(clipId => clips.value.find(clip => clip.clipId === clipId))
+    .filter(clip => clip && (clip.status === "pending" || clip.status === "failed"))
+    .map(clip => clip!.clipId);
+  void panelResume({ clips: pending, includeFinished: includeFinished.value });
+}
+
+/** 「单镜重试/重新生成本镜」：只派这一镜，强制 includeFinished；已生成的镜生成新版本追加（旧视频保留），failed 的镜照常重跑。被拒同样抛错。 */
 async function retryClip(payload: { clipId: string }): Promise<{ batchId: string }> {
   if (dispatching.value || batchHandle.value) throw new Error("生成进行中，请先暂停或取消后重试单镜");
   return await launchDispatch([payload.clipId], { includeFinished: true });
 }
 
-/** 面板「继续生成」的界面入口：把 resumeBatch 的抛错翻成提示，行为与抛错前一致。 */
+/** 「继续生成」的界面入口：把 resumeBatch 的抛错翻成提示，行为与抛错前一致。 */
 async function panelResume(payload: { clips: string[]; includeFinished: boolean }) {
   try {
     const { batchId } = await resumeBatch(payload);
@@ -1286,23 +1795,46 @@ async function panelResume(payload: { clips: string[]; includeFinished: boolean 
   } catch (reason) {
     if ((reason as { silent?: boolean })?.silent) return;
     const message = reason instanceof Error ? reason.message : "继续生成失败";
+    runError.value = message;
     if (message.includes("没有需要续跑的镜头")) ElMessage.info(message);
     else ElMessage.error(message);
   }
 }
 
-/** 面板「单镜重试」的界面入口：同上。 */
+/** 「单镜重试」的界面入口：同上。 */
 async function panelRetry(payload: { clipId: string }) {
   try {
     const { batchId } = await retryClip(payload);
     ElMessage.success(`已重试 ${payload.clipId}，批次 ${batchId.slice(0, 8)}`);
   } catch (reason) {
     if ((reason as { silent?: boolean })?.silent) return;
-    ElMessage.error(reason instanceof Error ? reason.message : "单镜重试失败");
+    const message = reason instanceof Error ? reason.message : "单镜重试失败";
+    runError.value = message;
+    ElMessage.error(message);
   }
 }
 
-/** 面板「刷新状态」：只读画布节点状态，把已结束的生成补写成终态，不改在跑批次。 */
+/** UI 入口：重新生成本镜。LSC 对齐——已生成/已验收的镜也直接重跑，强制 includeFinished；
+ *  每次重跑生成新版本（旧版本保留，历史版本列表可切回），新视频完成后成为该镜默认。 */
+async function regenerateClip() {
+  if (dispatching.value || batchHandle.value) return;
+  const clip = selectedClip.value;
+  if (!clip) return;
+  const picked = pickDispatchTargets([clip.clipId], true);
+  if (picked.issue) return ElMessage.warning(picked.issue);
+  try {
+    const { batchId } = await launchDispatch([clip.clipId], { includeFinished: true });
+    ElMessage.success(`批次 ${batchId.slice(0, 8)} 已开始重新生成，新版本完成后自动成为默认视频`);
+  } catch (reason) {
+    // 与发起生成完全一致：aborted（卸载/取消竞态）静默，其余弹错并进 footer 错误行。
+    if ((reason as { silent?: boolean })?.silent) return;
+    const message = reason instanceof Error ? reason.message : "发起生成失败";
+    runError.value = message;
+    ElMessage.error(message);
+  }
+}
+
+/** 「刷新状态」：只读画布节点状态，把已结束的生成补写成终态，不改在跑批次。 */
 async function reconcileFromPanel() {
   try {
     const result = await reconcileGenerating();
@@ -1321,6 +1853,50 @@ function throwCanvasUnavailable(reason: unknown): never {
   throw new Error("画布暂不可用，未能对账，请稍后重试", { cause: reason });
 }
 
+/** 一次媒体任务尝试的找回凭据：taskId + 写 attempts 时的前缀，尽量不丢上下文。 */
+function mediaTaskAttempt(clip: MtrackClip) {
+  const attempt = clip.attempts.findLast(item => item.status === "generating");
+  const found = / task:([0-9a-f-]{36})$/i.exec(attempt?.error ?? "");
+  if (!found) return undefined;
+  return { taskId: found[1], prefix: (attempt?.error ?? "").slice(0, found.index) };
+}
+
+/** 恢复监听中断的媒体任务：服务端还活着，等它结束后按主循环同一口径落工程。 */
+function resumeMediaWatch(clipId: string, recovery: { taskId: string; prefix: string }, signal: AbortSignal) {
+  void waitClipTask(props.directory, recovery.taskId, signal)
+    .then(result => applyMediaTaskResult(clipId, recovery, result))
+    .catch(() => {
+      // 等待期间页面关闭/卸载属正常中断，不改工程状态；下次对账会重新接回。
+    });
+}
+
+/** 把媒体任务终态写回工程。与主循环成功/失败/取消三条写回分支保持同一口径。 */
+function applyMediaTaskResult(clipId: string, recovery: { taskId: string; prefix: string }, result: MediaTaskStatus) {
+  if (result.state === "succeeded") {
+    const file = result.files[0];
+    if (!file?.path) {
+      writeClipRun(clipId, { status: "failed" }, { nodeId: "", status: "failed", error: `${recovery.prefix} 服务端报告成功但没有返回文件路径` });
+      return;
+    }
+    writeClipRun(clipId, { status: "generated", nodeId: null, assetPath: file.path },
+      { nodeId: "", status: "succeeded", error: `${recovery.prefix} task:${recovery.taskId}`, ...(file.jobId ? { jobId: file.jobId } : {}) });
+    return;
+  }
+  if (result.state === "cancelled" || result.state === "lost") {
+    writeClipRun(clipId, { status: "pending" }, { nodeId: "", status: "cancelled", error: `${recovery.prefix} task:${recovery.taskId}${result.state === "lost" ? " 任务已丢失，已退回待生成" : ""}` });
+    return;
+  }
+  const message = result.state === "failed" ? result.error : "等待生成结果超时（1 小时）";
+  writeClipRun(clipId, { status: "failed" }, { nodeId: "", status: "failed", error: `${recovery.prefix} ${message}` });
+}
+
+/** 对账用的独立取消信号：编辑器卸载时一并中断，避免恢复监听悬挂。 */
+let reconcileController: AbortController | undefined;
+function checkedCancelledSignal() {
+  if (!reconcileController || reconcileController.signal.aborted) reconcileController = new AbortController();
+  return reconcileController.signal;
+}
+
 /**
  * 断点续跑对账：生成循环中断或编辑器重挂后，循环没了，但画布节点还在内存里跑着供应商任务。
  * 对每个停在 generating 且不属于本实例在跑批次的镜头只读一次节点状态，按终态补写工程，
@@ -1334,7 +1910,9 @@ async function reconcileGenerating(): Promise<{ checked: number; restored: numbe
   const empty = { checked: 0, restored: 0, failed: 0 };
   if (dispatching.value || batchHandle.value || !project.value) return empty;
   const inFlight = new Set(batchClipIds.value);
-  const stuck = clips.value.filter(clip => clip.status === "generating" && Boolean(clip.nodeId) && !inFlight.has(clip.clipId));
+  // ACT: 媒体任务通道的镜头写的是 nodeId=null（生成在服务端任务里，不建画布节点）。这类镜头重开后
+  // 同样卡在 generating，但画布上没节点可查——只能按「重启后任务已追不回」退回 pending，否则永久卡生成。
+  const stuck = clips.value.filter(clip => clip.status === "generating" && !inFlight.has(clip.clipId));
   if (!stuck.length) return empty;
   const bridge = await acquireBridge();
   if (!bridge) throwCanvasUnavailable(new Error("未取到画布上下文"));
@@ -1342,10 +1920,43 @@ async function reconcileGenerating(): Promise<{ checked: number; restored: numbe
   let restored = 0;
   let failed = 0;
   for (const clip of stuck) {
-    const nodeId = clip.nodeId!;
     const live = project.value.clips.find(item => item.clipId === clip.clipId);
     // 对账期间这一镜又被派工了（状态被改写）就跳过，绝不能覆盖在跑中的状态。
     if (!live || live.status !== "generating") continue;
+    if (!clip.nodeId) {
+      /*
+       * 媒体任务通道：服务端任务与 taskId 都在，只是刷新后客户端丢了轮询循环。
+       * taskId 记在这一次 generating 尝试的 error 里（`<marker> task:<uuid>`），据此接回：
+       * 任务还在跑 → 恢复监听；已出结果 → 补写 generated；任务已过期/服务端重启 → 退回待生成。
+       * ACT: 服务端任务在页面断连 30 分钟后才会被终止，结算结果落盘并保留 24 小时
+       * （apps/server/src/utils/media/tasks.ts），所以正常情况能拿回成片；只有真的追不回来才落 pending，
+       * 不能永久卡 generating。
+       */
+      const recovery = mediaTaskAttempt(clip);
+      if (!recovery) {
+        writeClipRun(clip.clipId, { status: "pending" }, { nodeId: "", status: "pending", error: "重启后回退（媒体任务通道）" });
+        continue;
+      }
+      let taskStatus: Awaited<ReturnType<typeof readClipTask>> | undefined;
+      try {
+        taskStatus = await readClipTask(props.directory, recovery.taskId, new AbortController().signal);
+      } catch {
+        // 查不出来（任务已过期/服务端重启）：退回待生成，让用户能重新派这一镜。
+        writeClipRun(clip.clipId, { status: "pending" }, { nodeId: "", status: "pending", error: `${recovery.prefix} 重启后任务已过期，已退回待生成` });
+        continue;
+      }
+      checked += 1;
+      if (taskStatus.state === "running") {
+        // 任务仍在服务端跑：接回轮询，结束后按主循环同一口径补写工程。
+        resumeMediaWatch(clip.clipId, recovery, checkedCancelledSignal());
+        continue;
+      }
+      applyMediaTaskResult(clip.clipId, recovery, taskStatus);
+      if (taskStatus.state === "succeeded") restored += 1;
+      else if (taskStatus.state === "failed") failed += 1;
+      continue;
+    }
+    const nodeId = clip.nodeId;
     let found: Awaited<ReturnType<typeof readClipGeneration>>;
     try {
       found = await readClipGeneration(bridge, nodeId);
@@ -1369,7 +1980,7 @@ async function reconcileGenerating(): Promise<{ checked: number; restored: numbe
     writeClipRun(clip.clipId, { status: "failed", nodeId }, { nodeId, status: "failed", error: reason });
     failed += 1;
   }
-  // 提示统一由调用方（面板按钮 / 打开编辑器）发出，这里只回报计数，避免一次对账弹两条。
+  // 提示统一由调用方（刷新状态按钮 / 打开编辑器）发出，这里只回报计数，避免一次对账弹两条。
   return { checked, restored, failed };
 }
 
@@ -1453,13 +2064,17 @@ async function applyOperations(ops: EditOp[], save = true): Promise<{ applied: b
   if (!project.value) throw new Error("applyOperations 失败：工程未加载");
   const result = applyClipOperations(project.value, ops);
   if (!result.applied) return { applied: false, issues: result.issues, conflict: false, saved: false, updatedAt: project.value.updatedAt };
+  let saved = false;
+  let issues: string[] = [];
   if (save) {
     clearTimeout(saveTimer);
-    await saveProject();
+    saved = await saveProject();
     // ACT: applyClipOperations 置脏后，watch 的微任务回调会重新 arm 800ms 防抖；写完盘再清一次，避免重复整文件写。
     clearTimeout(saveTimer);
+    // runSave 失败不抛错（冲突/IO 异常都记进状态），这里必须把失败回报给调用方，否则 agent 会以为已落盘。
+    if (!saved) issues = [conflictError.value || loadError.value || "保存未生效，请查看状态后重试"];
   }
-  return { applied: true, issues: [], conflict: false, saved: save, updatedAt: project.value.updatedAt };
+  return { applied: true, issues, conflict: Boolean(issues.length && conflictError.value), saved, updatedAt: project.value.updatedAt };
 }
 
 /** 命令式绑定：open 绑已有（缺省默认工程路径）；new 新建空白（给了 path 用该路径，缺省沿用顺延探测）。 */
@@ -1522,17 +2137,21 @@ onMounted(async () => {
   void loadTextModels();
   // 模型清单要等画布桥就绪：挂载瞬间可能还没建好，1.5 秒后补一次；仍取不到就保持空清单（选择器降级）。
   void loadVideoModels().then(() => {
-    if (!videoModelsLoaded) setTimeout(() => void loadVideoModels(true), 1500);
+    if (videoModelsLoaded) return;
+    // ACT: 记句柄，节点在 1.5 秒内被删/切走时不再回调已卸载的编辑器。
+    modelRetryTimer = setTimeout(() => void loadVideoModels(true), 1500);
   });
   // 打开编辑器即对账一次：上一次会话中断后停在 generating 的镜头在这里补成终态。
   void reconcileGenerating().catch(() => {});
 });
 
 onBeforeUnmount(() => {
-  // ACT: 直连生成随节点卸载中断（轮询停止），供应商侧任务留在画布节点上，重开画布可继续看状态。升级路径：宿主级派工注册表，把轮询提升到 workspace 层继续。
+  reconcileController?.abort();
+  // ACT: 直连生成随节点卸载中断（轮询停止），供应商侧任务留在服务端任务上，重开画布可继续看状态。升级路径：宿主级派工注册表，把轮询提升到 workspace 层继续。
   dispatchController?.abort();
   // 卸载时补一次写盘：宿主没来得及调 flushSave 也不能丢掉已改的工程内容。
   clearTimeout(saveTimer);
+  clearTimeout(modelRetryTimer);
   if (dirty.value) void saveProject();
   // 参考缩略图的 blob URL 随编辑器卸载一起释放。
   releaseThumbnails();
@@ -1564,70 +2183,42 @@ defineExpose({
   resumeBatch,
   retryClip,
   rewritePrompt,
+  setDefaultVersion,
+  acquireNodeVideo,
+  clips,
+  indexCards,
+  referenceThumbnails,
+  acquireUrl,
+  report,
+  reportReadError,
 });
 </script>
 
 <style scoped>
-/* 整列一个滚动流（对齐 LSC）：轨道、派工、编辑主体一起滚，页头吸顶、底栏吸底。 */
+/* ACT: 多轨编辑器自己的语义 token，全部从 --el-* 派生，所以跟随设置里的主题与主色自动变化。
+   对齐 LSC native-h3-scene 的镜头创作工作台层次（surface / soft / line / muted 四层），
+   但不照抄它的硬编码深色色值——LSC 是独立深色应用，我们住在画布卡片里，必须跟宿主主题走。 */
 .mtrackEditor {
+  --mtSurface: var(--el-bg-color);
+  --mtSoft: var(--el-fill-color-light);
+  --mtSofter: var(--el-fill-color-lighter);
+  --mtLine: var(--el-border-color-lighter);
+  --mtLineStrong: var(--el-border-color);
+  --mtMuted: var(--el-text-color-secondary);
+  --mtAccent: var(--el-color-primary);
+  --mtAccentSoft: var(--el-color-primary-light-9);
+  --mtRadius: 12px;
+  --mtRadiusSmall: 8px;
+
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow-y: auto;
+  overflow: hidden;
   overscroll-behavior: contain;
-  /* 画布卡片态可以窄到 480px，用它做容器查询的锚点，窄时给两栏降级。 */
+  /* 画布卡片态可以窄到 480px，用它做容器查询的锚点，窄时给双栏降级。 */
   container-type: inline-size;
-}
-
-.editorHeader {
-  position: sticky;
-  top: 0;
-  z-index: 4;
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
-  background: var(--el-bg-color);
-}
-
-.headingMain {
-  flex: 1;
-  min-width: 0;
-}
-
-.editorTitle {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 650;
-  letter-spacing: 0.02em;
-}
-
-.editorSubtitle {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 10px;
-  margin: 5px 0 0;
-  font-size: 12px;
-}
-
-.metric {
   color: var(--el-text-color-primary);
-  font-weight: 600;
-}
-
-.meta {
-  color: var(--el-text-color-secondary);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-
-.headerActions {
-  display: flex;
-  flex: none;
-  flex-wrap: wrap;
-  gap: 8px;
+  background: var(--mtSurface);
 }
 
 .conflictBar {
@@ -1668,85 +2259,230 @@ defineExpose({
   font-size: 12px;
 }
 
-/* 对齐 LSC nh-workspace：左编辑区 + 右侧状态栏两栏 grid，右栏 230px 起。 */
-.editorWorkspace {
+/* 工作台主体：头部、快捷设置、01、02、高级设置随内容纵向滚动；footer 固定底部。 */
+.workbenchScroll {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 10px 14px 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.editorHeading {
+  display: flex;
+  flex: none;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.headingText {
+  min-width: 0;
+}
+
+.editorHeading h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+}
+
+.editorSubtitle {
+  margin: 3px 0 0;
+  overflow: hidden;
+  color: var(--mtMuted);
+  font-size: 11px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.editorMeta {
+  margin: 2px 0 0;
+  overflow: hidden;
+  color: var(--mtMuted);
+  font-size: 11px;
+  opacity: 0.8;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.quickSettings {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--mtLine);
+  border-radius: var(--mtRadiusSmall);
+  background: var(--mtSoft);
+}
+
+.quickField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 150px;
+}
+
+.quickModelText {
+  overflow: hidden;
+  color: var(--el-text-color-primary);
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.quickMeta {
+  margin-left: auto;
+  padding-bottom: 4px;
+  color: var(--mtMuted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.fieldLabel {
+  color: var(--mtMuted);
+  font-size: 11px;
+}
+
+.sectionHeading {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.stepIndex {
+  color: var(--mtAccent);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+}
+
+.shotManagement {
+  display: flex;
+  position: relative;
+  align-items: center;
+  gap: 6px;
+}
+
+.bulkDetails {
+  margin: 0;
+}
+
+.bulkSummary {
+  padding: 4px 10px;
+  border: 1px solid var(--mtLineStrong);
+  border-radius: 7px;
+  color: var(--el-text-color-primary);
+  background: var(--mtSurface);
+  font-size: 12px;
+  font-weight: 500;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+.bulkSummary::-webkit-details-marker {
+  display: none;
+}
+
+/* ACT: 面板从按钮向右展开，包含块是这一行操作区，所以 max-width: 100% 会跟着收窄，
+   窄容器下不会横向溢出（沿用原 clipEditor 批量区的取舍）。 */
+.bulkPanel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 6;
+  width: 480px;
+  max-width: 100%;
+  padding: 16px;
+  border: 1px solid var(--mtLineStrong);
+  border-radius: var(--mtRadius);
+  background: var(--mtSurface);
+  box-shadow: var(--el-box-shadow-light);
+}
+
+.bulkTitle {
+  margin: 0 0 12px;
+  font-size: 13px;
+}
+
+.bulkControls {
   display: grid;
-  grid-template-columns: 1.45fr 230px;
-  /* 1 0 auto：内容少时撑满剩余高度让底栏贴底，内容多时按内容撑开、由整列滚动。 */
-  flex: 1 0 auto;
-  min-width: 0;
+  grid-template-columns: minmax(120px, 1fr) auto minmax(120px, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+  margin: 0;
 }
 
-.editorMain {
+.bulkField {
   display: flex;
   flex-direction: column;
-  min-width: 0;
+  gap: 4px;
+  margin: 0;
+  color: var(--mtMuted);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
-.editorSide {
+.bulkHint {
+  margin: 12px 0 0;
+  color: var(--el-text-color-placeholder);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+/* 02 双栏：镜头编辑主区吸收宽度，参考素材 aside 固定比例（LSC nh-workspace）。 */
+.workspace {
   display: flex;
-  flex-direction: column;
-  min-width: 0;
+  flex: 1 1 auto;
+  align-items: stretch;
+  gap: 12px;
+  min-height: 0;
 }
 
-/* statusPanel 自带 width:320px：双栏后列宽由 grid 决定，这里让它的根节点铺满自己那一列。
-   多一层 .editorWorkspace 是为了压过 statusPanel 自身 scoped 样式的权重，不依赖样式注入顺序。 */
-.editorWorkspace .editorSide :deep(.statusPanel) {
-  width: auto;
-  flex: 1;
-}
-
-/* 视口窄时回单栏；容器查询兜住画布卡片被拖到 480px 但视口依旧很宽的情况。 */
-@media (max-width: 900px) {
-  .editorWorkspace {
-    grid-template-columns: 1fr;
-  }
-
-  .editorWorkspace .editorSide :deep(.statusPanel) {
-    border-left: 0;
-    border-top: 1px solid var(--el-border-color-lighter);
-  }
-}
-
-@container (max-width: 560px) {
-  .editorWorkspace {
-    grid-template-columns: 1fr;
-  }
-
-  .editorWorkspace .editorSide :deep(.statusPanel) {
-    border-left: 0;
-    border-top: 1px solid var(--el-border-color-lighter);
-  }
-}
-
-.editorHint {
-  flex: 1;
+.workspaceEmpty {
   margin: 0;
   padding: 24px 16px;
-  color: var(--el-text-color-secondary);
+  color: var(--mtMuted);
   font-size: 12px;
 }
 
-/* 编辑主体下方的两个整行折叠区，形态对齐 LSC：生成结果是卡片式，高级设置是分隔线式。 */
 .sectionResults {
-  margin: 2px 16px 12px;
-  padding: 14px 16px;
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 12px;
-  background: var(--el-fill-color-light);
+  flex: none;
+  padding: 6px 10px 10px;
+  border: 1px solid var(--mtLine);
+  border-radius: var(--mtRadiusSmall);
 }
 
 .sectionAdvanced {
-  margin: 0 16px 4px;
-  padding: 12px 0;
-  border-top: 1px solid var(--el-border-color-lighter);
+  flex: none;
+  padding: 6px 10px 10px;
+  border: 1px solid var(--mtLine);
+  border-radius: var(--mtRadiusSmall);
 }
 
 .sectionSummary {
-  padding: 0;
-  font-size: 13px;
-  font-weight: 600;
-  list-style: none;
+  color: var(--mtMuted);
+  font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
   user-select: none;
 }
@@ -1755,121 +2491,91 @@ defineExpose({
   display: none;
 }
 
-.sectionAdvanced .sectionSummary {
-  font-weight: 500;
-  color: var(--el-text-color-regular);
-}
-
-.resultList {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 12px 0 0;
-  padding: 0;
-  font-size: 12px;
-  list-style: none;
-}
-
-.resultItem {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 12px;
-}
-
-.resultClip {
-  flex: none;
-}
-
-.resultStatus {
-  flex: none;
-  color: var(--el-text-color-secondary);
-}
-
-.resultPath {
-  color: var(--el-text-color-placeholder);
-  overflow-wrap: anywhere;
-}
-
-.advancedGrid {
+.advancedBody {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin: 12px 0 0;
+  padding-top: 8px;
 }
 
-.advancedGrid .fieldColumn {
+.advancedSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.advancedTitle {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.nestedDetails {
+  padding: 6px 8px 8px;
+  border: 1px dashed var(--mtLine);
+  border-radius: var(--mtRadiusSmall);
+}
+
+.nestedSummary {
+  color: var(--mtMuted);
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.nestedSummary::-webkit-details-marker {
+  display: none;
+}
+
+.field {
   display: flex;
   flex-direction: column;
   gap: 4px;
   min-width: 0;
 }
 
-.advancedGrid .fieldLabel {
-  color: var(--el-text-color-secondary);
-  font-size: 12px;
-}
-
-.editorFooter {
-  position: sticky;
-  bottom: 0;
-  z-index: 4;
+.fieldColumn {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 6px 16px;
-  border-top: 1px solid var(--el-border-color-lighter);
-  background: var(--el-bg-color);
-  font-size: 12px;
+  gap: 4px;
+  min-width: 0;
 }
 
-.footerError {
-  margin: 0;
-  color: var(--el-color-danger);
-  font-size: 12px;
+.rangeGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(140px, 220px));
+  gap: 10px;
 }
 
-.footerBar {
+.rangeRow {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.saveState {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
-  color: var(--el-text-color-secondary);
-  font-size: 11px;
-}
-
-.saveText {
-  color: var(--el-text-color-regular);
-  font-size: 12px;
-}
-
-.saveDirty {
-  color: var(--el-color-warning);
-}
-
-.footerActions {
-  display: flex;
-  flex: none;
   gap: 8px;
 }
 
-.dirtyStar {
-  color: var(--el-color-warning);
-  font-weight: 700;
-}
-
-.snapshotNotice {
+.rangeText {
   margin: 0;
-  color: var(--el-text-color-placeholder);
+  color: var(--mtMuted);
   font-size: 11px;
+  line-height: 1.6;
+}
+
+/* 子组件自带边框的在这里收边（statusPanel 折叠区里去掉外框背景）。 */
+.sectionResults > :deep(.statusPanel) {
+  width: auto;
+  border-left: 0;
+  background: transparent;
+}
+
+/* 容器窄于 560px（画布卡片被拖窄）时 02 双栏改成上下两段。 */
+@container (max-width: 560px) {
+  .workspace {
+    flex-direction: column;
+  }
+
+  .referencePicker {
+    width: auto;
+  }
 }
 </style>

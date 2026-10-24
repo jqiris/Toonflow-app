@@ -28,7 +28,7 @@ metadata:
 | 续集或已有制作 | 读取指定的历史、当前节点和采用记录，确认本次范围，从实际进度继续 |
 | 指定一个片段、资产或修改 | 只处理该范围和确实受影响的依赖，不重跑整条链 |
 
-> **Seedance 提示词生成规则已直接嵌入本 workflow，不是外部 Skill，也不是 workflow 去调用另一个 Skill。** 当任务进入「已确认剧本 → Seedance 2.0/2.5 分段提示词」阶段时，必须直接执行本文件下方的 **「SEEDANCE EPISODE DIRECTOR · PART A」**。该内嵌规则是本 workflow 在 Seedance 提示词生成阶段的最高优先级执行规范：以用户提供的 `SKILL-seedance-episode-director.md` A0–A12 为基线，并合入用户之后明确追加的连续性、生成稳定性与穿帮校验规则；若本 workflow 其他段落、references/methods、storyboard 或旧说明与其冲突，以当前内嵌 PART A 为准。除用户后续明确修改外，不得用其他方法重写、弱化或替换其中的剧情保真锁、目标模型确认规则、分段/时长规则、Reference binding、A9 模板、A11 校验或 A12 单次优化。
+> **Seedance 提示词生成规则已直接嵌入本 workflow，不是外部 Skill，也不是 workflow 去调用另一个 Skill。** 当任务进入「已确认剧本 → Seedance 2.0/2.5 分段提示词」阶段时，必须直接执行本文件下方的 **「SEEDANCE EPISODE DIRECTOR · PART A」**。该内嵌规则是本 workflow 在**直连例外形态下**的 Seedance 提示词生成阶段的最高优先级执行规范：以用户提供的 `SKILL-seedance-episode-director.md` A0–A12 为基线，并合入用户之后明确追加的连续性、生成稳定性与穿帮校验规则；直连例外形态下若本 workflow 其他段落、references/methods、storyboard 或旧说明与其冲突，以当前内嵌 PART A 为准。**该最高优先级不适用于多轨形态**：多轨产物格式以 [assetCard 生成 SOP runbook](../assetCard/references/generationRunbook.md) §四 与 [多轨工程模板](../assetCard/references/multitrackTemplate.md) §四 为准，PART A 的 A9.1/A9.2 字段结构不得进入多轨产物。除用户后续明确修改外，不得用其他方法重写、弱化或替换其中的剧情保真锁、目标模型确认规则、分段/时长规则、Reference binding、A9 模板、A11 校验或 A12 单次优化。
 
 ### 多轨接入（默认制作路径）
 
@@ -41,6 +41,10 @@ metadata:
 三、**存在多轨工程时，一切视频生成走一（二选一），禁止直连绕过回写**；用户明确说明某条生成与工程无关时，先确认再按二执行。
 
 形态判定为多轨时，本文件内嵌 PART A 仍作提示词创作内核（节拍、站位、连续性规则可用），细则一律以 [assetCard 生成 SOP runbook](../assetCard/references/generationRunbook.md)（§十三、§十五·五）与其资产卡契约为准，本文件不复写 runbook 内容，防止两处漂移。
+
+形态判定为多轨后，Agent 侧阶段门与逐镜操作顺序见 `freevideoMultitrack` 技能；数据契约仍以本链路 runbook/模板为准。
+
+**多轨产物格式硬隔离（强制）**：命中多轨形态后，本段产物只能是 `clips[].prompt` 三字段里的 MiniMax H3 官方 ref2va 六段——`subject_definitions` / `summary` / `retention_analysis` / `detailed_description` 四段写进 `integratedMultimodalDescription`（段首标签自己写），`overallSoundscape` 与 `nonDiegeticMusic` 只写环境声与配乐的内容、不写段名。**PART A 的 Seedance 字段结构一律禁止进入多轨产物**：A9.1「资产标识 + 正式提示词」外壳，以及 A9.2 的 `Objective` / `Reference binding` / `Immutable locks` / `Target duration` / `Timeline` / `Visual direction` / `Audio direction` / `Preserve` / `Avoid` 字段，都不得出现在 `clips[].prompt` 里，也不得以「参考着写」「只借字段名」的方式降级混入。多轨形态下 PART A 只提供创作内核（节拍、站位、连续性规则），格式只认 [assetCard 生成 SOP runbook](../assetCard/references/generationRunbook.md) §四 与 [多轨工程模板](../assetCard/references/multitrackTemplate.md) §四。用户在多轨工程内点名要 Seedance 提示词写法时，PART A 仍作创作内核，但产物外壳仍是 ref2va 六段，不得据此改用 A9.1/A9.2 字段。
 
 ### Seedance 路由锁存（最高优先级入口规则）
 
@@ -80,7 +84,7 @@ metadata:
 
 ## Seedance 提示词生成的内嵌执行核心
 
-以下内容以用户提供的 `SKILL-seedance-episode-director.md` PART A 为执行基线，并已合入用户后续明确追加的连续性、生成稳定性与穿帮校验要求。**运行时直接执行本节，不再读取、不再调用任何独立 seedance-episode-director Skill。** 本节与 workflow 其他内容冲突时，本节优先。
+以下内容以用户提供的 `SKILL-seedance-episode-director.md` PART A 为执行基线，并已合入用户后续明确追加的连续性、生成稳定性与穿帮校验要求。**运行时直接执行本节，不再读取、不再调用任何独立 seedance-episode-director Skill。** **优先边界**：本节仅在**直连例外形态下优先**——直连例外时与 workflow 其他内容冲突以本节为准；命中多轨形态时本节不享受该优先级，其产物格式一律以 [assetCard 生成 SOP runbook](../assetCard/references/generationRunbook.md) §四 与 [多轨工程模板](../assetCard/references/multitrackTemplate.md) §四 的 ref2va 六段为准（见上方「多轨产物格式硬隔离（强制）」）。
 
 # PART A — 执行规则
 ═══════════════════════════════════════════
@@ -799,7 +803,7 @@ A9 只定义**最终交付外壳**，不改变 A2–A8 的任何执行逻辑。
 
 - Seedance 2.0 → 使用 A9.1
 - Seedance 2.5 → 使用 A9.2
-- freevideo / MiniMax-H3（默认） → 不使用 A9 外壳；直连例外按 [canvas 片段制作指南](../canvas/references/videoProduction.md) 的三段式写（素材定义 + 顺序镜头 + 风格约束），多轨工程按 [assetCard runbook](../assetCard/references/generationRunbook.md) §四 的 `clips[].prompt` 三字段写（正文英文，段首写字段名 `integrated_multimodal_description:` / `overall_soundscape:` / `non_diegetic_music:`，接参考图时按 §四 的 ref2va 六段**由写作者直接写进正文**（段首标签与 `<Picture N>` 都自己写；引擎只拼「全片风格 / 全片约束」前缀、正文原样透传，不再代写任何段，也不再追加参考顺序声明行））。PART A 的 A1–A8、A11–A12 执行规则仍适用。
+- freevideo / MiniMax-H3（默认） → 不使用 A9 外壳；直连例外按 [canvas 片段制作指南](../canvas/references/videoProduction.md) 的三段式写（素材定义 + 顺序镜头 + 风格约束），多轨工程按 [assetCard runbook](../assetCard/references/generationRunbook.md) §四 的 `clips[].prompt` 三字段写：正文英文；有参考时前四段整段写进正文、**第一行直接是 `subject_definitions:`**（不再套 `integrated_multimodal_description:`），两个声音段只写内容不写段名（`overall_soundscape:` / `non_diegetic_music:` 由引擎拼）；无参考时正文不套段首，引擎补 `integrated_multimodal_description:`。参考标记按 §四 的 `{{ref N}}` 口径。引擎只做三件事——拼「全片风格 / 全片约束」前缀、漏写官方段首时补字段名、把两个声音字段拼成同名两段尾——正文原样透传，不代写任何段，也不追加参考顺序声明行。PART A 的 A1–A8、A11–A12 执行规则仍适用。
 
 如果 A9 的表达方式与 A2–A8、A11–A12 的执行规则发生冲突，以执行规则为准。
 
@@ -1368,13 +1372,13 @@ A12 只允许：
 
 ## 在画布上推进
 
-实际制作默认在当前画布呈现，但**Seedance 路由优先于画布发现与配置**：若已有可执行剧本/时间轴且当前目标是视频制作、生成、继续或修订，必须先按本文件 PART A 完成对应 Seedance 提示词规划/定稿，再进入[画布执行](references/canvasExecution.md)按需读取画布概览、目标节点、局部连接、模型配置、端口和节点函数。不得因为需要 `getConfig`、选择分辨率/画幅/模式或宿主弹出配置询问而跳过 PART A。只有尚未进入视频制作阶段时，才按普通流程先发现画布。“先完成剧本和资产方案”只限制阶段，仍使用文本节点，不触发媒体生成；仅当用户明确要对话文字、咨询或不要操作画布时省略节点操作。工作区采用宿主当前项目；未打开画布时说明具体条件，继续可完成的文字部分。
+实际制作默认在当前画布呈现，但**直连例外形态下 Seedance 路由优先于画布发现与配置**：若已有可执行剧本/时间轴且当前目标是视频制作、生成、继续或修订，且已按「多轨接入（默认制作路径）」节判定为直连例外，必须先按本文件 PART A 完成对应 Seedance 提示词规划/定稿，再进入[画布执行](references/canvasExecution.md)按需读取画布概览、目标节点、局部连接、模型配置、端口和节点函数。不得因为需要 `getConfig`、选择分辨率/画幅/模式或宿主弹出配置询问而跳过 PART A。**命中多轨形态时不适用本条**：按「多轨接入（默认制作路径）」节走 assetCard 链路，产物格式以 runbook §四 的 ref2va 六段为准，PART A 只作创作内核。只有尚未进入视频制作阶段时，才按普通流程先发现画布。“先完成剧本和资产方案”只限制阶段，仍使用文本节点，不触发媒体生成；仅当用户明确要对话文字、咨询或不要操作画布时省略节点操作。工作区采用宿主当前项目；未打开画布时说明具体条件，继续可完成的文字部分。
 
 | 到达阶段 | 当前成果 | 需要读取 |
 |---|---|---|
 | 1. 内容与范围 | 原文或剧本文本节点；必要的制作简报 | [输入与剧本](references/sourceAndScript.md) |
 | 2. 资产 | 当前范围的角色、场景、道具清单及实际采用图片 | [资产制作](references/assets.md) |
-| 3. Seedance 提示词 | 覆盖本次剧情的全片规划、分段与正式提示词；**只执行本文件内嵌 PART A**（2.0 走 A9.1、2.5 走 A9.2），本阶段不读取 storyboard 或 methods | **仅本文件内嵌 PART A** |
+| 3. Seedance 提示词（直连例外形态） | 覆盖本次剧情的全片规划、分段与正式提示词；**只执行本文件内嵌 PART A**（2.0 走 A9.1、2.5 走 A9.2），本阶段不读取 storyboard 或 methods。多轨形态改按 runbook §四 写 `clips[].prompt` 的 ref2va 六段 | 直连例外：**仅本文件内嵌 PART A**；多轨：[assetCard 生成 SOP runbook](../assetCard/references/generationRunbook.md) §四 |
 | 4. 生成与采用 | 当前片段生成节点、真实输出、反馈与采用记录 | [画布执行](references/canvasExecution.md)、[状态与交付](references/stateAndDelivery.md) |
 | 5. 交付或继续 | 有效剧本、素材和片段索引，实际完成范围与下一步 | [状态与交付](references/stateAndDelivery.md) |
 

@@ -107,6 +107,12 @@ export interface MediaGenerationRequest {
   audios?: MediaReference[];
   firstFrame?: MediaReference;
   lastFrame?: MediaReference;
+  /**
+   * 续接上一镜：传供应商侧任务号（FreeVideo 形如 `j` + 12 位十六进制），
+   * 由引擎加载该任务的原生音视频上下文继续生成。
+   * 续接时只允许 references 类媒体，firstFrame/lastFrame 必须留空。
+   */
+  continueFrom?: string;
   ratio?: string;
   size?: string;
   resolution?: string;
@@ -127,6 +133,11 @@ export interface GeneratedMedia {
   path: string;
   mimeType: string;
   mediaType: "image" | "video" | "audio";
+  /**
+   * 供应商任务号（FreeVideo 形如 `j` + 12 hex）。多轨续接要用它作
+   * `continue_from.from_job` 精确接上一镜；不参与落盘，只随结果回传。
+   */
+  jobId?: string;
 }
 
 export interface MediaContext {

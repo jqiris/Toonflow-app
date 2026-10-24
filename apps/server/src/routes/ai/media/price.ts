@@ -11,7 +11,8 @@ export default Router().post("/", validateFields({
 }), async (req, res) => {
   u.mcpControl.assertAppRequest(req);
   const { directory, mediaType, ...request } = req.body;
-  const schema = (mediaType === "image" ? imageGenerationSchema : mediaType === "video" ? videoGenerationSchema : audioGenerationSchema).extend({ prompt: z.string().trim().max(100000) });
+  // ACT: videoGenerationSchema 带续接约束的顶层 refine，zod 4 下覆盖已有键必须用 safeExtend——extend 会抛「Cannot overwrite keys on object schemas containing refinements」。
+  const schema = (mediaType === "image" ? imageGenerationSchema : mediaType === "video" ? videoGenerationSchema : audioGenerationSchema).safeExtend({ prompt: z.string().trim().max(100000) });
   const parsed = schema.safeParse(request, validationOptions());
   if (!parsed.success) {
     res.status(400).json(error("参数错误", parsed.error.issues.map(issue => ({ ...issue, message: translateMessage(issue.message) })), 400));

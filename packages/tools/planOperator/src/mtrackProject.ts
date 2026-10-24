@@ -31,16 +31,23 @@ export interface MtrackClip {
   prompt: MtrackClipPrompt;
   referenceIds: string[];
   continuity: string;
+  /** 任务模式（可选，缺省由参考数量推断）：与 nodeShared 的 ClipMode 同值。 */
+  mode?: "ref" | "image" | "text";
   status: string;
   nodeId: string | null;
   assetPath: string | null;
   attempts: MtrackClipAttempt[];
   notes?: string;
+  /** 本镜系统提示词（可选）：非空时派工替换 global.systemPrompt；与 notes（纯备注）无关。 */
+  systemPromptOverride?: string;
 }
 
 export interface MtrackProject {
   version?: number;
+  /** 跨文件对账标识（非显示名，不参与生成）。 */
   projectId?: string;
+  /** 项目显示名（additive 可选字段，缺失即留空）。 */
+  name?: string;
   updatedAt: string;
   global: { ratio?: string; style?: string; systemPrompt?: string; model?: { providerId?: string; modelId?: string } };
   clips: MtrackClip[];
@@ -91,6 +98,8 @@ export function normalizeProject(value: unknown): MtrackProject {
   return {
     version: readNumber(source.version, 1),
     projectId: readString(source.projectId),
+    // ACT: name / systemPromptOverride 是 additive 可选字段，白名单透传；缺失不猜、不带键。
+    ...(typeof source.name === "string" ? { name: source.name } : {}),
     updatedAt: readString(source.updatedAt, new Date(0).toISOString()),
     global: {
       ...(typeof global.ratio === "string" ? { ratio: global.ratio } : {}),
@@ -118,12 +127,16 @@ export function normalizeProject(value: unknown): MtrackProject {
       generateAudio: typeof item.generateAudio === "boolean" ? item.generateAudio : false,
       prompt: readPrompt(item.prompt),
       referenceIds: Array.isArray(item.referenceIds) ? item.referenceIds.filter(ref => typeof ref === "string") : [],
-      continuity: readString(item.continuity, index === 0 ? "start" : "cut"),
+      continuity: index === 0 ? "shot" : (item.continuity === "context" || item.continuity === "continue" ? "context" : "shot"),
+      // ACT: mode 是编辑器写出的真实字段，镜像归一曾经漏透传，导致 mtrackRead 读回来没有 mode（审计 F3）；
+      // 非法值不猜，直接不带键，由参考数量推断。
+      ...(item.mode === "ref" || item.mode === "image" || item.mode === "text" ? { mode: item.mode } : {}),
       status: readString(item.status, "pending"),
       nodeId: typeof item.nodeId === "string" ? item.nodeId : null,
       assetPath: typeof item.assetPath === "string" ? item.assetPath : null,
       attempts: readAttempts(item.attempts),
       ...(typeof item.notes === "string" ? { notes: item.notes } : {}),
+      ...(typeof item.systemPromptOverride === "string" ? { systemPromptOverride: item.systemPromptOverride } : {}),
     })),
   };
 }
