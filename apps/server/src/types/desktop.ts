@@ -46,6 +46,7 @@ export interface DesktopRuntime {
   saveFile(token: string, content: Uint8Array): Promise<boolean>;
   ready(failed?: boolean): Promise<void>;
   openDevTools(): void;
+  activateWindow(): void;
   updater: {
     getLocalInfo(): Promise<{ version: string; channel: string; hash: string; baseUrl: string }>;
     updateInfo(): { version?: string; hash?: string; error?: string; installError?: string; updateAvailable?: boolean; updateReady?: boolean; updateProgress?: updateSnapshot["updateProgress"] } | undefined;
