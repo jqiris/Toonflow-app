@@ -18,6 +18,56 @@ export interface NodeToolDefinition<Schema extends z.ZodType = z.ZodType> {
 type RegisteredNodeTool = NodeToolInfo & Pick<NodeToolDefinition, "execute" | "timeoutMs">;
 type NodeToolsIndex = { nodes: Map<string, Map<string, RegisteredNodeTool>>; version: number };
 
+/*
+ * BUG-A 修复：nodeTools 的 args 经 z.record(z.string(), z.json()) 透传，LLM 受限于不透明的
+ * JSON Schema 可能把数组类参数（operations/sources/clipIds）发成数字键对象或 JSON 字符串，
+ * 导致节点函数的 z.array() 校验报「expected array, received object/string」。
+ * 这里在入参校验前做一次容错还原：把目标 schema 声明为数组的字段，若命中上述两种形态，
+ * 转回真正的 Array，保证与 planOperator 的 1 层类型化数组行为一致。
+ */
+function _unwrapSchema(schema: unknown): unknown {
+  let s: any = schema;
+  while (s && typeof s === "object" && typeof s.unwrap === "function") {
+    s = s.unwrap();
+  }
+  return s;
+}
+function _isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+function _isNumericKeyedObject(v: Record<string, unknown>): boolean {
+  const keys = Object.keys(v);
+  return keys.length > 0 && keys.every(k => /^\\d+$/.test(k));
+}
+function _isZodArray(schema: unknown): boolean {
+  if (schema instanceof z.ZodArray) return true;
+  if (schema && typeof schema === "object") {
+    const def = (schema as { _def?: { typeName?: string } })._def;
+    return Boolean(def && def.typeName === "ZodArray");
+  }
+  return false;
+}
+function coerceArrayFields(schema: unknown, args: Record<string, unknown>): Record<string, unknown> {
+  const unwrapped = _unwrapSchema(schema);
+  if (!unwrapped || typeof unwrapped !== "object" || !("shape" in unwrapped)) return args;
+  const shape: Record<string, unknown> = (unwrapped as { shape?: Record<string, unknown> }).shape ?? {};
+  if (!shape) return args;
+  const result = { ...args };
+  for (const key of Object.keys(shape)) {
+    const field = shape[key];
+    if (!_isZodArray(field)) continue;
+    const value = result[key];
+    if (value === undefined || value === null) continue;
+    if (typeof value === "string") {
+      try { const parsed = JSON.parse(value); if (Array.isArray(parsed)) result[key] = parsed; } catch {}
+    } else if (_isPlainObject(value) && _isNumericKeyedObject(value)) {
+      const keys = Object.keys(value).sort((a, b) => Number(a) - Number(b));
+      result[key] = keys.map(k => value[k]);
+    }
+  }
+  return result;
+}
+
 // 共享 Vue Flow 实例上的注册表供各 UMD 访问，不进入画布 JSON。
 const nodeToolsKey = Symbol.for("toonflow.nodeTools");
 const nodeToolsIndexKey = Symbol.for("toonflow.nodeToolsIndex");
@@ -101,7 +151,8 @@ export const nodeTools = {
       parameters,
       timeoutMs: definition.timeoutMs,
       async execute(args, context) {
-        const parsed = await definition.parameters.parseAsync(args);
+        const coerced = coerceArrayFields(definition.parameters as unknown, args as Record<string, unknown>);
+        const parsed = await definition.parameters.parseAsync(coerced);
         context.signal?.throwIfAborted();
         return definition.execute(parsed, context);
       },
