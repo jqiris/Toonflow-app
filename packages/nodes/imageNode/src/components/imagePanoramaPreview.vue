@@ -238,7 +238,21 @@ let imageVersion = 0;
 let renderFrame = 0;
 let disposed = false;
 
-defineExpose({ capturing });
+async function captureWith(opts?: { yaw?: number; pitch?: number; fov?: number; count?: 1 | 4 | 12; layout?: "combined" | "separate" }): Promise<PanoramaCapture> {
+  if (!ready.value) throw new Error("预览未就绪");
+  if (unavailable.value) throw new Error("当前设备不支持 WebGL 全景预览");
+  if (opts) {
+    if (opts.yaw !== undefined) yaw.value = ((opts.yaw % 360) + 360) % 360;
+    if (opts.pitch !== undefined) pitch.value = props.mode === "sphere" ? three.MathUtils.clamp(opts.pitch, -85, 85) : 0;
+    if (opts.fov !== undefined) fov.value = three.MathUtils.clamp(opts.fov, minFov.value, maxFov.value);
+    if (opts.count !== undefined) captureCount.value = opts.count;
+    if (opts.layout !== undefined) captureLayout.value = opts.layout;
+  }
+  await nextTick();
+  return capture();
+}
+
+defineExpose({ capturing, ready, unavailable, captureWith });
 
 function setCamera(viewYaw = yaw.value, viewPitch = pitch.value) {
   const horizontal = three.MathUtils.degToRad(viewYaw);
@@ -409,8 +423,8 @@ function adjustView(event: KeyboardEvent) {
   setView(yaw.value + (event.key === "ArrowRight" ? step : event.key === "ArrowLeft" ? -step : 0), pitch.value + (event.key === "ArrowUp" ? step : event.key === "ArrowDown" ? -step : 0));
 }
 
-async function capture() {
-  if (busy.value || !ready.value || !renderer || !texture) return;
+async function capture(): Promise<PanoramaCapture> {
+  if (busy.value || !ready.value || !renderer || !texture) throw new Error("预览未就绪，无法截图");
   capturing.value = true;
   captureError.value = "";
   finishDrag();
@@ -424,7 +438,7 @@ async function capture() {
   const outputs: { canvas: HTMLCanvasElement; label: string }[] = [];
   try {
     await nextTick();
-    if (disposed || version !== imageVersion || !renderer) return;
+    if (disposed || version !== imageVersion || !renderer) throw new Error("预览已关闭，无法截图");
     const captureRenderer = renderer;
     const size = captureRenderer.getSize(new three.Vector2());
     const pixelRatio = captureRenderer.getPixelRatio();
@@ -458,11 +472,13 @@ async function capture() {
       images.push({ blob, width: output.canvas.width, height: output.canvas.height, label: output.label });
       output.canvas.width = output.canvas.height = 1;
     }
-    if (disposed) return;
-    if (version !== imageVersion || mode !== props.mode) throw new Error("图片已更新，请重新截图");
-    emit("capture", { images, columns, count });
+    if (disposed || version !== imageVersion || mode !== props.mode) throw new Error("图片已更新，请重新截图");
+    const payload: PanoramaCapture = { images, columns, count };
+    emit("capture", payload);
+    return payload;
   } catch (error) {
     if (!disposed) captureError.value = error instanceof Error ? error.message : "截图失败，请重试";
+    throw error;
   } finally {
     for (const output of outputs) output.canvas.width = output.canvas.height = 1;
     capturing.value = false;

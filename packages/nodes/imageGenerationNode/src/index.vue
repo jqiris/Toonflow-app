@@ -110,7 +110,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onScopeDispose, ref, watch } from "vue";
+import { computed, inject, nextTick, onMounted, onScopeDispose, ref, watch } from "vue";
 import { ElButton, ElCard, ElSelect, ElOption, ElOptionGroup, ElLoading, ElImageViewer } from "element-plus";
 import { IconCheck, IconPhotoAi, IconSparkles, IconArrowUp, IconPlayerStop, IconTransfer, IconLayoutGrid, IconBrush, IconPencil, IconSun, IconCameraRotate, IconPanoramaHorizontal, IconChevronDown } from "@tabler/icons-vue";
 import { nodeSkeleton, nodeTools, useNode, z, type NodeMediaModel, type NodeImageRequest, type NodeHandle } from "@toonflow/nodes-scaffold/runtime";
@@ -128,6 +128,8 @@ import { buildInpaintRequest, useImageInpaint, type ImageInpaint } from "@toonfl
 import imageLighting from "@toonflow/node-image/imageLighting";
 import imagePanorama from "@toonflow/node-image/imagePanorama";
 import imageMultiAngle from "@toonflow/node-image/imageMultiAngle";
+import { registerImagePanoramaAgentTools } from "@toonflow/node-image/imageAgentTools";
+import { useVueFlow } from "@vue-flow/core";
 import generationSettings from "./components/generationSettings.vue";
 
 defineOptions({
@@ -142,6 +144,9 @@ const vLoading = ElLoading.directive;
 const { id, node, nodeProps, nodeEvent, outputs, files, ai, updateNodeInternals } = useNode({
   label: "图片生成",
 });
+const { nodeTypes: rawNodeTypes } = useVueFlow();
+const nodeTypes = computed(() => rawNodeTypes?.value ?? {});
+const reloadRemoteNode = inject<((type: string) => Promise<void>) | undefined>("reloadRemoteNode", undefined);
 type PromptModel = NonNullable<InstanceType<typeof promptInput>["$props"]["modelValue"]>;
 const data = computed(() => node.data as { prompt: string; promptModel: PromptModel; inpaintPrompt: string; inpaintPromptModel: PromptModel; model: string; size: string; ratio: string; inpaint?: ImageInpaint });
 data.value.prompt ??= "";
@@ -240,6 +245,7 @@ const previewUrl = files.useFileUrl(
   outputFile,
   (error) => showNodeError(error, "图片读取失败")
 );
+registerImagePanoramaAgentTools({ node, nodeTypes, reloadRemoteNode, panorama, previewUrl, files, ai, source: () => outputFile.value });
 
 onMounted(() => {
   window.addEventListener("toonflow:plugin-installed", refreshProviderModels);

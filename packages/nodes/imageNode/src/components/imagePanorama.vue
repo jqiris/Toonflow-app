@@ -33,6 +33,10 @@
       <imagePanoramaPreview v-if="visible" ref="previewStage" :src="src" :mode="mode" :disabled="disabled || saving" @capture="saveCapture" />
     </div>
   </el-dialog>
+  <div class="agentStage" v-if="agentVisible" aria-hidden="true">
+    <!-- ACT: disabled 只接保存阶段；接 agentSaving 会让预览 busy 恒真，capture() 直接报“未就绪”。 -->
+    <imagePanoramaPreview ref="agentStage" :src="src" :mode="agentMode" :disabled="saving" />
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -57,10 +61,37 @@ const mode = ref<PanoramaMode>("sphere");
 const creating = ref(false);
 const createVariation = useImageVariationNode();
 const previewStage = ref<InstanceType<typeof imagePanoramaPreview>>();
+const agentVisible = ref(false);
+const agentSaving = ref(false);
+const agentMode = ref<PanoramaMode>("sphere");
+const agentStage = ref<InstanceType<typeof imagePanoramaPreview>>();
 const { saving, saveCapture } = usePanoramaCapture(() => props.src);
-const busy = computed(() => creating.value || saving.value || !!previewStage.value?.capturing);
+const busy = computed(() => creating.value || saving.value || agentSaving.value || !!previewStage.value?.capturing);
 
-defineExpose({ open, busy, visible });
+async function agentCapture(mode: PanoramaMode, opts?: { yaw?: number; pitch?: number; fov?: number; count?: 1 | 4 | 12; layout?: "combined" | "separate" }): Promise<{ nodeIds: string[]; groupId?: string }> {
+  if (busy.value) throw new Error("全景处理中，请稍后重试");
+  if (!props.src) throw new Error("节点没有图片");
+  agentMode.value = mode;
+  agentVisible.value = true;
+  agentSaving.value = true;
+  try {
+    await nextTick();
+    const stage = agentStage.value;
+    if (!stage) throw new Error("截图舞台未就绪");
+    const limit = 300;
+    for (let i = 0; i < limit && !stage.ready; i++) await new Promise(resolve => setTimeout(resolve, 100));
+    if (!stage.ready) throw new Error("全景预览加载超时，请重试");
+    const payload = await stage.captureWith(opts);
+    const result = await saveCapture(payload);
+    if (!result) throw new Error("全景截图保存失败");
+    return result;
+  } finally {
+    agentVisible.value = false;
+    agentSaving.value = false;
+  }
+}
+
+defineExpose({ open, busy, visible, agentCapture });
 
 watch(() => props.src, () => { visible.value = false; }, { flush: "sync" });
 
@@ -109,4 +140,5 @@ function close(done: () => void) {
   span { margin-left: 4px; color: var(--el-text-color-secondary); font-size: 12px; }
 }
 .panoramaPanel { height: min(70vh, 760px); min-height: 0; }
+.agentStage { position: fixed; left: -20000px; width: 960px; height: 540px; pointer-events: none; }
 </style>

@@ -13,6 +13,7 @@
     "./useNodeGeneration": "./src/useNodeGeneration.ts",
     "./useAudioTranscription": "./src/useAudioTranscription.ts",
     "./groupNodeModels": "./src/groupNodeModels.ts",
+    "./enableRemoteNodePlugin": "./src/enableRemoteNodePlugin.ts",
     "./mtrack/multitrackEditor": "./src/mtrack/multitrackEditor.vue",
     "./mtrack/mtrackProject": "./src/mtrack/mtrackProject.ts",
     "./mtrack/mtrackEdit": "./src/mtrack/mtrackEdit.ts",

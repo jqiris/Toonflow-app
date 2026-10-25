@@ -70,7 +70,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref } from "vue";
+import { computed, inject, nextTick, ref } from "vue";
 import { IconPhoto, IconUpload, IconTransfer, IconLayoutGrid, IconBrush, IconPencil, IconSun, IconCameraRotate, IconPanoramaHorizontal, IconChevronDown } from "@tabler/icons-vue";
 import { ElButton, ElImageViewer, ElMessage } from "element-plus";
 import { nodeSkeleton, nodeTools, useNode, z, type NodeHandle } from "@toonflow/nodes-scaffold/runtime";
@@ -80,6 +80,8 @@ import imageInpaintPrompt from "./components/imageInpaintPrompt.vue";
 import imageLighting from "./components/imageLighting.vue";
 import imagePanorama from "./components/imagePanorama.vue";
 import imageMultiAngle from "./components/imageMultiAngle.vue";
+import { useVueFlow } from "@vue-flow/core";
+import { registerImagePanoramaAgentTools } from "./imageAgentTools";
 import type { InpaintDraftInput } from "./imageInpaint";
 
 defineOptions({
@@ -93,6 +95,9 @@ defineOptions({
 const { node, nodeProps, outputs, nodeEvent, files, updateNodeInternals } = useNode({
   label: "图片",
 });
+const { nodeTypes: rawNodeTypes } = useVueFlow();
+const nodeTypes = computed(() => rawNodeTypes?.value ?? {});
+const reloadRemoteNode = inject<((type: string) => Promise<void>) | undefined>("reloadRemoteNode", undefined);
 const fileInput = ref<HTMLInputElement>();
 const gridSplit = ref<InstanceType<typeof imageGridSplit>>();
 const editor = ref<InstanceType<typeof imageEditor>>();
@@ -115,6 +120,7 @@ const previewUrl = files.useFileUrl(
   outputFile,
   (error) => showError(error, "图片读取失败")
 );
+registerImagePanoramaAgentTools({ node, nodeTypes, reloadRemoteNode, panorama, previewUrl, files, source: () => outputFile.value });
 
 nodeEvent.on("save", () => {
   if (uploading.value || editor.value?.busy || inpaintPrompt.value?.creating || lighting.value?.generating || multiAngle.value?.generating || panorama.value?.busy) throw new Error("图片处理中，请完成后再切换或刷新节点");

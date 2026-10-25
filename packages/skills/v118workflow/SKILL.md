@@ -2,7 +2,7 @@
 name: v118workflow
 description: 融合 Toonflow v1.1.8 的编剧方法、12 类叙事技法、11 种美术风格及资产、分镜、图像和视频提示词知识，将小说或剧本逐阶段制作并确认。统一维护剧本画布、资产画布和每集制作画布；用于旧版流程复现、分集制作或续作，讨论或编辑技能本身时不启动制作。
 metadata:
-  version: "1.1.3"
+  version: "1.1.4"
   displayName: v1.1.8 分集制作流程
   author: Toonflow
   github: https://github.com/HBAI-Ltd/Toonflow-app
@@ -78,7 +78,7 @@ metadata:
 | 导演规划与分镜 | [镜头设计](references/knowledge/shotCraft.md) + 本项目叙事类型；涉及视觉表达时读取所选美术风格 | 本集画布：镜头意图、信息可见范围、站位视轴、节奏和连续性，落入导演规划及具体镜头 |
 | 分镜图提示词与验收 | [图像提示词](references/knowledge/imagePromptCraft.md) + 所选美术风格 | 本集画布：首帧状态、景别/朝向、实际参考映射、适配模型的提示词与检查结果 |
 | 视频提示词与验收 | [视频提示词](references/knowledge/videoPromptCraft.md) + 所选美术风格的视频表现方法 | 本集画布：按所选模式编写的时序/动作/声音、真实参考绑定、动态连续性与逐段验收 |
-| 同场景多角度与跨镜一致性 | [跨镜一致性](references/sceneConsistency.md)；复杂调度另读 [3D 预演](references/preVisualization.md) | 本集画布：场景派生链（全景→角度图）或导演台方案的引用与验收记录 |
+| 同场景多角度与跨镜一致性 | [跨镜一致性](references/sceneConsistency.md)；复杂调度另读 [3D 预演](references/preVisualization.md) | 本集画布：场景派生链（全景→角度图）或导演台方案的引用与验收记录；优先 createPanorama→generateImage→capturePanorama 链路 |
 
 叙事类型决定如何组织信息、情绪和镜头，美术风格决定形态、材质、色光和表现方式，两者独立选择，不把“悬疑”当画风或把“黏土”当剧情类型。用户已有明确选择就沿用；未选择时依据内容提出有理由的方案，确认后写入项目配置。
 

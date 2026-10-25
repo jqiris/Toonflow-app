@@ -10,7 +10,8 @@
     "./imageMultiAngle": "./src/components/imageMultiAngle.vue",
     "./imageEditor": "./src/components/imageEditor.vue",
     "./imageGridSplit": "./src/components/imageGridSplit.vue",
-    "./imageInpaintPrompt": "./src/components/imageInpaintPrompt.vue"
+    "./imageInpaintPrompt": "./src/components/imageInpaintPrompt.vue",
+    "./imageAgentTools": "./src/imageAgentTools.ts"
   },
   "scripts": {
     "build": "vite build",

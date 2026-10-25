@@ -21,7 +21,7 @@ export function usePanoramaCapture(source: () => string) {
   }], () => operation?.abort(), { flush: "sync" });
   onScopeDispose(() => { disposed = true; operation?.abort(); });
 
-  async function saveCapture(payload: PanoramaCapture) {
+  async function saveCapture(payload: PanoramaCapture): Promise<{ nodeIds: string[]; groupId?: string } | undefined> {
     if (saving.value || disposed) return;
     const controller = operation = new AbortController();
     const pendingIds: string[] = [];
@@ -94,6 +94,7 @@ export function usePanoramaCapture(source: () => string) {
         }
       });
       ElMessage.success(grouped ? `已创建 ${createdNodes.length} 张截图并成组连线` : "已创建截图并连接原节点");
+      return { nodeIds: createdNodes.map(item => item.id), groupId };
     } catch (error) {
       if (!controller.signal.aborted) showNodeError(error, "全景截图保存失败");
     } finally {
