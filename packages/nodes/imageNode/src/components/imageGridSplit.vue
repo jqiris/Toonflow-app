@@ -167,7 +167,8 @@ async function writeSplitProject(workspace: WorkspaceFiles, tiles: SplitTile[]):
     global: { ratio: splitRatio },
     clips,
   };
-  // 先写索引再写工程：工程里的 referenceIds 只有索引已落盘时才能被 connectReferences 解析。
+  // 先写索引再写工程：工程里的 referenceIds 只有索引已落盘时，派工与 node:readReferenceMap 共用的
+  // directDispatch.resolveReferenceSources 才能按卡反查画布来源。
   await writeExclusive(workspace, assetIndexPath, index);
   try {
     await writeExclusive(workspace, defaultProjectPath, project);

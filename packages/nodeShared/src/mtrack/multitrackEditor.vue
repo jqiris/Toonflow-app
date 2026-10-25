@@ -118,23 +118,9 @@
             />
             <p v-else class="workspaceEmpty">在上方页签条点选一个镜头开始编辑。</p>
           </div>
-          <!-- 生成结果与校验：LSC :1340 details('results') 的同位区块；版本切换与校验发现沿用 statusPanel，改版收进折叠区。 -->
-          <details class="sectionResults">
-            <summary class="sectionSummary">生成结果 · 校验{{ findingsCount ? ` ${findingsCount}` : "" }}</summary>
-            <statusPanel
-              :clip="selectedClip"
-              :report="report"
-              :readError="reportReadError"
-              :acquireUrl="acquireUrl"
-              :acquireNodeVideo="acquireNodeVideo"
-              :stale="selectedStale"
-              @setDefaultVersion="setDefaultVersion"
-              @deleteVersion="(version: string) => deleteVersionInClip(selectedId, version)"
-              @deleteAllVersions="deleteAllVersionsInClip(selectedId)"
-            />
-          </details>
+          <!-- 生成结果与校验发现都在「项目与成片」浮窗里看（编辑器里不再重复一块：LSC :1340 的 details 同位区块已收掉）。 -->
           <!-- ⑤ 高级设置：LSC :1342-1348（项目设置 + 公共约束与系统提示词 + 生成范围；采样/LoRA 不暴露——agent API 无此参数）。 -->
-          <details class="sectionAdvanced">
+          <details ref="advancedDetails" class="sectionAdvanced" @toggle="onAdvancedToggle">
             <summary class="sectionSummary">高级设置 · 项目、约束与生成范围</summary>
             <div class="advancedBody">
               <div class="advancedSection">
@@ -189,6 +175,10 @@
                   <el-button v-if="nodeId" size="small" text @click="focusResults">查看成片</el-button>
                 </div>
                 <p class="rangeText">{{ rangeText }}</p>
+                <!-- ACT: 折叠标记原先是隐藏的，面板底部没有任何收起入口；补一颗按钮，收起后回到 01/02 区。 -->
+                <div class="advancedActions">
+                  <el-button size="small" text @click="collapseAdvanced">收起</el-button>
+                </div>
               </div>
             </div>
           </details>
@@ -233,6 +223,7 @@
     <!-- 项目与成片浮窗：只在画布卡片宿主（传了 nodeId）挂载；组件内部 teleport 到画布世界层，
          文档面板宿主没有变换层，留在这里只会每秒探测告警，故整块不渲染。 -->
     <resultsOverlay
+      ref="resultsOverlayRef"
       v-if="nodeId"
       :clips="clips"
       :projectName="project?.name"
@@ -242,6 +233,8 @@
       :geometry="resultsGeometry"
       :resolveTarget="resolveResultsTarget"
       :states="states"
+      :report="report"
+      :readError="reportReadError"
       @geometry="onResultsGeometry"
       @focusEditor="focusEditorNode"
       @previewSelect="selectClipFromOverlay"
@@ -249,6 +242,7 @@
       @toggleAccept="toggleClipAccept"
       @deleteVersion="deleteVersionInClip"
       @deleteAllVersions="deleteAllVersionsInClip"
+      @locateFinding="locateFinding"
     />
   </div>
 </template>
@@ -270,6 +264,7 @@ import {
   localizeTime,
   totalSeconds,
   cloneClips,
+  mergeProjects,
   normalizeContinuityOrder,
   clipVersions,
   clipStates,
@@ -289,7 +284,6 @@ import shotEditorPane from "./components/shotEditorPane.vue";
 import referencePicker from "./components/referencePicker.vue";
 import type { ReferencePickerItem } from "./components/referencePicker.vue";
 import runFooter from "./components/runFooter.vue";
-import statusPanel from "./components/statusPanel.vue";
 import batchPanel from "./components/batchPanel.vue";
 import resultsOverlay from "./components/resultsOverlay.vue";
 
@@ -320,6 +314,20 @@ if (props.nodeId) {
 
 /** 编辑器根 DOM：teleport 目标解析的锚点（节点卡片子树内 closest 到画布变换层）。 */
 const editorRoot = ref<HTMLElement>();
+
+/** 高级设置折叠区：展开后把面板顶端对齐到工作台视口，收起入口留在面板底部。 */
+const advancedDetails = ref<HTMLDetailsElement>();
+
+function onAdvancedToggle(event: Event) {
+  const details = event.currentTarget as HTMLDetailsElement | null;
+  const container = details?.parentElement;
+  if (!details?.open || !container) return;
+  container.scrollTop += details.getBoundingClientRect().top - container.getBoundingClientRect().top - 8;
+}
+
+function collapseAdvanced() {
+  if (advancedDetails.value) advancedDetails.value.open = false;
+}
 
 /** 浮窗锚点：本节点（nodeId）的世界位置与宽度；取不到节点时回落到原点。 */
 function resolveResultsAnchor() {
@@ -464,6 +472,8 @@ async function reserveProjectPath(): Promise<string> {
   throw new Error("工作区里的多轨工程过多，请先清理 plan/ 目录");
 }
 const project = ref<MtrackProject | null>(null);
+/** 「项目与成片」浮窗句柄：只用到它 expose 的 expand()（查看成片时先把收起态摊开）。 */
+const resultsOverlayRef = ref<{ expand: () => void } | null>(null);
 const indexCards = ref<AssetIndexCard[]>([]);
 const report = ref<AssetReport | undefined>();
 const reportReadError = ref("");
@@ -494,9 +504,6 @@ const selectedIndex = computed(() => clips.value.findIndex(clip => clip.clipId =
 
 /** 每镜的设置签名状态（对齐 LSC signatures/context_ok）：工作台与浮窗共用这一份，避免各自遍历。 */
 const states = computed<Record<string, ClipState>>(() => (project.value ? clipStates(project.value) : {}));
-/** 选中镜是否已落后于当前设置：工作台版本区据此提示，浮窗据此在每格上标「待更新」。 */
-const selectedStale = computed(() => (selectedId.value ? states.value[selectedId.value]?.stale ?? false : false));
-
 /** 上一镜（按分镜顺序）与它可用于续接的任务号：给「承接上一镜」的引导文案用。 */
 const previousClip = computed(() => (selectedIndex.value > 0 ? clips.value[selectedIndex.value - 1] : undefined));
 const previousClipId = computed(() => previousClip.value?.clipId ?? "");
@@ -735,6 +742,9 @@ function cloneProject(source: MtrackProject): MtrackProject {
 
 async function reloadProject() {
   await readProject();
+  // ACT: 重载不只重读工程，资产索引与报告一起重读——用户在编辑器外改/删 plan/assetIndex.json 后点「重新加载」，
+  // 只 readProject 会让参考网格一直挂着旧卡（历史旧账）。
+  await loadReport();
 }
 
 /** 工作区文件不存在时服务端回 ENOENT：缺失和读取失败要分开，缺失不该被当成读取出错。 */
@@ -786,9 +796,15 @@ async function runLoadReport() {
   let nextCards: AssetIndexCard[] = [];
   try {
     nextCards = normalizeIndex(await props.getFiles().readJson<AssetIndex>(assetIndexPath));
-  } catch {
-    // 老工程没有 assetIndex.json 属正常；显式清空，避免切换工程后残留上一份的卡片。
+  } catch (reason) {
+    // 老工程没有 assetIndex.json 属正常：按空清单处理并显式清空，避免切换工程后残留上一份的卡片。
+    // ACT: 文件在但读/解析失败是损坏，不能静默当空清单——参考网格会摆出一副「没有资产」的样子，
+    // 用户看不出是没索引还是索引坏了。错误并入浮窗既有的 readError 通道（与报告读取失败同一条展示）。
     nextCards = [];
+    if (!isMissingFile(reason)) {
+      const message = reason instanceof Error ? reason.message : String(reason);
+      nextReportError = nextReportError ? `${nextReportError}；资产索引：${message}` : `资产索引读取失败：${message}`;
+    }
   }
   // 读取期间换了工程路径：这批结果属于上一个工程，不能覆盖当前工程的卡片与报告。
   if (projectPath.value !== pathAtStart) return;
@@ -877,7 +893,7 @@ watch(indexCards, () => {
 
 /**
  * in 端口连线来源（reactive）：与 node:getReferenceOrder（useNodeReferences.referenceOrderOf）
- * 和 directDispatch.readMultitrackSources 同一份数据源、同一排序口径——按节点 data.referenceOrder.in
+ * 同一份数据源、同一排序口径——按节点 data.referenceOrder.in
  * 的键序排，未显式排序时按入边顺序；复用这套而非再走桥查询，是为了网格随连线增删实时刷新。
  * ACT: referenceKey 编码与 useNodeReferences.referenceKeyOf 同形（JSON 键对 encodeURIComponent），
  * 该函数在对方模块私有，跨模块共享超出本任务范围，两处改动需同步。
@@ -921,32 +937,36 @@ const pickerItems = computed<ReferencePickerItem[]>(() => {
     const node = flow.findNode(source.nodeId);
     const label = typeof node?.data?.label === "string" ? node.data.label : "";
     const card = matchCardForNode(source.nodeId, label);
-    if (card && !usedCards.has(card.id)) {
+    if (card) {
+      // 同一张卡被两条入边连进来时只列一次：重复入边不该拿占位条目充数（会显示成「非资产卡」）。
+      if (usedCards.has(card.id)) continue;
       usedCards.add(card.id);
       items.push({ key: card.id, cardId: card.id, name: card.name || card.id, textOnly: card.textOnly === true });
-    } else {
-      // 对不上卡、或同卡第二条入边（去重后不重复列出）：占位展示来源节点本身。
-      items.push({ key: source.nodeId, cardId: "", name: label || source.nodeId });
+      continue;
     }
+    // 对不上卡：索引缺失或节点名不是卡号，占位展示来源节点本身（不可勾选）。
+    items.push({ key: source.nodeId, cardId: "", name: label || source.nodeId });
   }
-  // 断线旧引用：本镜 referenceIds 里有、连线却没有了的卡，仍列在网格尾部（置灰、不能再勾、可取消勾选清掉旧值）。
-  for (const clipId of selectedClip.value?.referenceIds ?? []) {
-    if (usedCards.has(clipId)) continue;
-    const card = indexCards.value.find(item => item.id === clipId);
-    items.push({ key: clipId, cardId: clipId, name: card?.name || clipId, textOnly: card?.textOnly === true, selectable: false });
-  }
+  // 断线旧引用（referenceIds 里有、连线却没有了）不进网格：参考图只从连线上打勾，
+  // 先摆出用户没连过的卡是错的。这些 id 由 detachedReferenceIds 交给 picker 的提示条点名 + 一键清除。
   return items;
 });
 
-/** 断线旧引用清单：连线上的可勾卡之外、本镜 referenceIds 里剩的卡，供 picker 的清除指引提示条。 */
+/**
+ * 断线旧引用清单：连线上的可勾选卡之外、本镜 referenceIds 里剩的卡，供 picker 的清除指引提示条。
+ * ACT: 只要有任一连线来源对不上资产卡（索引缺失、节点名不是卡号），缺口就可能是「连线还在、卡没认出来」，
+ * 此时一律返回空、不给清除入口——宁可少提示，也不能把仍有连线的引用当断线删掉（清除不进撤销栈）。
+ */
 const detachedReferenceIds = computed(() => {
   if (!flow || !props.nodeId) return [];
-  const connected = new Set(connectedSources.value.flatMap(source => {
-    const node = flow?.findNode(source.nodeId);
+  const connected = new Set<string>();
+  for (const source of connectedSources.value) {
+    const node = flow.findNode(source.nodeId);
     const label = typeof node?.data?.label === "string" ? node.data.label : "";
     const card = matchCardForNode(source.nodeId, label);
-    return card ? [card.id] : [];
-  }));
+    if (!card) return [];
+    connected.add(card.id);
+  }
   return (selectedClip.value?.referenceIds ?? []).filter(id => !connected.has(id));
 });
 
@@ -990,6 +1010,17 @@ async function setDefaultVersion(version: string) {
   }
   if (!path) return ElMessage.error("该版本没有视频产物");
   if (selectedClip.value?.clipId !== clip.clipId) return ElMessage.warning("选中的镜头已变化，请重新切换默认版本");
+  // ACT: 当前默认如果只是一枚指针、没进 attempts（旧版路径或对账补写的成片会这样），切走之后它就从
+  // 版本列表里消失了。切换前先补一条成功尝试，历史版本只增不减。旧版路径的成片只有节点编号、没有
+  // 产物路径，也要补：clipVersions 会按 nodeId 兜底补出当前版本，漏记的话同一枚版本只会换一副面孔。
+  const currentKey = clip.assetPath || clip.nodeId || "";
+  if (currentKey && !clip.attempts.some(attempt => attempt.status === "succeeded" && (attempt.assetPath || attempt.nodeId || "") === currentKey)) {
+    writeClipRun(clip.clipId, { assetPath: clip.assetPath }, {
+      nodeId: clip.nodeId ?? "",
+      status: "succeeded",
+      jobId: clip.attempts.findLast(attempt => attempt.status === "succeeded" && attempt.jobId)?.jobId ?? "",
+    });
+  }
   onPatch({ nodeId, assetPath: path });
   ElMessage.success(`已切换默认版本：${path.split("/").pop() || version}`);
 }
@@ -1004,9 +1035,18 @@ async function runSave(): Promise<boolean> {
     const diskUpdatedAt = current?.updatedAt ?? "";
     const memoryUpdatedAt = lastSaved.value?.updatedAt ?? "";
     if (diskUpdatedAt !== memoryUpdatedAt) {
-      conflictError.value = "文件已被其他操作修改，请重新加载";
-      failed = true;
-      return false;
+      // ACT: 对方（会话 agent 的 planOperator 回写，或同一工程上的另一个多轨节点）改过盘时不再整轮拒写：
+      // 先三方合并再落盘，否则生成结果只活在内存里，一切换默认版本/重新加载就丢。
+      const disk = current ? normalizeProject(current) : null;
+      if (!disk) {
+        conflictError.value = "文件已被其他操作修改，请重新加载";
+        failed = true;
+        return false;
+      }
+      project.value = mergeProjects(lastSaved.value, disk, project.value);
+      lastSaved.value = cloneProject(project.value);
+      conflictError.value = "";
+      ElMessage.warning("工程已被其他操作修改，已合并保存：生成结果与历史版本保留，镜头内容以磁盘改动为准");
     }
     project.value.updatedAt = new Date().toISOString();
     // 先克隆快照再写盘：写盘 await 期间落进 project 的新改动不会进文件，靠收尾的 dirty 复查补排一轮保存。
@@ -1056,9 +1096,23 @@ async function postComposite(execute: boolean): Promise<CompositeResult> {
   return payload.data;
 }
 
+/** 二次确认文案：段数与输出位置，再点名本次不会进成片的镜头，让「尾部未验收就静默少段」变得可核实。 */
+function compositeConfirmText(preview: CompositeResult) {
+  const included = new Set(preview.segments.map(segment => segment.clipId));
+  const excluded = clips.value.filter(clip => !included.has(clip.clipId)).map(clip => clip.clipId);
+  const parts = [`将合成 ${preview.segments.length} 段，输出到 ${preview.output}`];
+  if (excluded.length > 0) {
+    // ACT: 只列前 8 个 id，几十镜未验收时确认框不至于被塞满。
+    const shown = excluded.slice(0, 8).join("、");
+    const rest = excluded.length > 8 ? ` 等 ${excluded.length} 镜` : "";
+    parts.push(`工程共 ${clips.value.length} 镜，未验收/未生成的 ${shown}${rest} 不会出现在成片里（成片只含已验收镜头，顺序按工程）`);
+  }
+  return parts.join("；");
+}
+
 /**
- * 合成成片：先 execute=false 拿段数出清单做二次确认，再 execute=true 真拼。
- * 失败文案一律用服务端原文（含 ffmpeg、规格不一致、V14 顺序断点等定位信息），只在「输出已存在」上补一句处置建议。
+ * 合成成片：先把内存工程落盘，再 execute=false 拿段数出清单做二次确认，最后 execute=true 真拼。
+ * 失败文案一律用服务端原文（含 ffmpeg、规格不一致、V14 顺序断点等定位信息），只在「输出已存在」「assetPath 为空」上补处置建议。
  * 「完成后自动合并」勾选后，批次成功收尾时走的也是这同一条两步流程（契约 §3.2，不另造合并状态）。
  */
 async function handleComposite() {
@@ -1066,8 +1120,11 @@ async function handleComposite() {
   if (!props.directory) return ElMessage.warning("当前没有工作目录，无法合成");
   compositeBusy.value = true;
   try {
+    // ACT: 合成读的是磁盘上的 story.mtrack，而验收/改镜走 800ms 防抖写盘（见 dirtyVersion 监听）：
+    // 不先 flush，「刚点验收就合成」会按旧盘报「没有 accepted 片段」或按旧段数弹确认。没有未存改动就不写盘。
+    if (dirty.value && !(await saveProject())) return ElMessage.error("工程未保存成功，合成已取消");
     const preview = await postComposite(false);
-    await ElMessageBox.confirm(`将合成 ${preview.segments.length} 段，输出到 ${preview.output}`, "合成成片", {
+    await ElMessageBox.confirm(compositeConfirmText(preview), "合成成片", {
       confirmButtonText: "开始合成",
       cancelButtonText: "取消",
       type: "warning",
@@ -1080,6 +1137,7 @@ async function handleComposite() {
     if (reason === "cancel" || reason === "close") return;
     const message = reason instanceof Error ? reason.message : String(reason);
     if (message.includes("已存在")) ElMessage.warning(`${message}——请先删除成片或改用其他输出路径`);
+    else if (message.includes("assetPath 为空")) ElMessage.error(`${message}——已验收镜头没有产物路径时，用「项目与成片」浮窗里该镜头的「设为默认」把画布节点上的产物回填后重试`);
     else ElMessage.error(message);
   } finally {
     compositeBusy.value = false;
@@ -1385,11 +1443,18 @@ function focusEditorNode() {
   void flow.setCenter(node.computedPosition.x + width / 2, node.computedPosition.y + height / 2, { zoom: 0.9, duration: 240 });
 }
 
-/** 高级设置「查看成片」：视口移到浮窗中心（几何来自最新 resultsGeometry，含宿主回写值）。 */
+/** 高级设置「查看成片」：视口移到浮窗中心（几何来自最新 resultsGeometry，含宿主回写值）。
+ *  浮窗收起时只剩 70px 标题条，先让它展开再居中，否则用户跳过去看到的是一条边。 */
 function focusResults() {
   if (!flow) return;
+  resultsOverlayRef.value?.expand();
   const ui = resultsGeometry.value;
   void flow.setCenter(ui.x + ui.width / 2, ui.y + ui.height / 2, { zoom: 0.6, duration: 240 });
+}
+
+/** 浮窗「校验发现」的「定位」：选中该 finding.ref 命中的镜头，工作台与浮窗大预览一起跟过去。 */
+function locateFinding(clipId: string) {
+  if (clips.value.some(clip => clip.clipId === clipId)) selectedId.value = clipId;
 }
 
 function undoRemove() {
@@ -1545,7 +1610,7 @@ function effectiveGlobal(clip: MtrackClip): MtrackProject["global"] | undefined 
  * 参数、参考素材与提示词在这一步一次性提交，画布只提供参考素材路径。
  * batchId 传入时沿用该批次（暂停后继续）：attempts 标记与面板行都靠它对齐。
  */
-async function launchDispatch(clipIds?: string[], options?: { includeFinished?: boolean; batchId?: string }): Promise<{ batchId: string; skipped: number }> {
+async function launchDispatch(clipIds?: string[], options?: { includeFinished?: boolean; batchId?: string; origin?: "ui" | "agent"; kind?: "clip" | "batch" }): Promise<{ batchId: string; skipped: number }> {
   if (dispatching.value || batchHandle.value) throw new Error("已有派工操作正在进行，请等待结束");
   const picked = pickDispatchTargets(clipIds, options?.includeFinished);
   if (picked.issue) throw new Error(picked.issue);
@@ -1644,6 +1709,29 @@ async function launchDispatch(clipIds?: string[], options?: { includeFinished?: 
         return Boolean(live && (live.status === "generated" || live.status === "accepted"));
       });
       if (!pausedByGate && !controller.signal.aborted && allDone && autoMerge.value && hasAccepted.value) void handleComposite();
+      // ACT: 批次结束主动通知会话 agent——派工跑在页面里，结束时服务端不产生任何事件，agent 只能盲轮询 node:getStatus。
+      // 通知只能由 Web 端发起：服务端自起轮次拿不到客户端注入的 canvas.tools，发不出 node:* / planOperator 工具。
+      // 上限：仅在 agent 面板已打开会话时送达（面板未初始化时不打扰，用户可在下次对话里读到工程内的 attempts 记录）；
+      // 取消或暂停结束的批次不通知，避免把「用户叫停」说成「生成完成」。
+      // ACT: kind 区分「整批派工」与「单镜重试/重新生成本镜」——后者也生成新 batchId 并各自通知，
+      // 消费方要按 kind 决定文案，不能只看 total（整批只有一镜时 total 同样是 1）。
+      if (!controller.signal.aborted && !pausedByGate) {
+        const settled = batchClips.reduce((acc, clip) => {
+          const live = clips.value.find(item => item.clipId === clip.clipId);
+          const status = live?.status ?? "pending";
+          if (status === "generated" || status === "accepted") acc.done += 1;
+          else if (status === "failed") acc.failed += 1;
+          else acc.pending += 1;
+          return acc;
+        }, { done: 0, failed: 0, pending: 0 });
+        // ACT: 消费端文案优先用节点 label（同工作区多个多轨节点时 projectPath 相同、nodeId 不可读，
+        // 只有 label 能把「哪个节点跑完了」说清）；独立编辑器宿主没有 flow/nodeId，取不到就不带该键，
+        // 消费端回落 projectPath/nodeId。kind 恒为 batch|clip（launchDispatch 入参决定，单镜重试/重新生成本镜发 clip）。
+        const nodeLabel = props.nodeId ? (flow?.findNode(props.nodeId)?.data as { label?: string } | undefined)?.label ?? "" : "";
+        window.dispatchEvent(new CustomEvent("toonflow:mtrack-batch-done", {
+          detail: { nodeId: props.nodeId ?? "", ...(nodeLabel ? { nodeLabel } : {}), projectPath: props.projectPath ?? "", batchId, origin: options?.origin ?? "ui", kind: options?.kind ?? "batch", total: batchClips.length, ...settled },
+        }));
+      }
     });
     return { batchId, skipped: picked.skipped };
   } catch (reason) {
@@ -1759,8 +1847,10 @@ function pauseBatch() {
  * 「继续 / 重试」：沿用同一批次号续跑剩余镜头，attempts 标记与面板行都不变。
  * ACT: 被拒一律抛错（而不是只弹提示后返回 status 快照）——node:resumeBatch 代理本函数，
  * 抛错才能让 agent 区分「已受理 / 被拒 / 失败」并拿到原因；界面侧的提示由 panelResume 兜。
+ * ACT: origin 由调用方声明——除面板外只有 node 工具调本函数，故默认 "agent"；panelResume 显式传 "ui"，
+ * 否则 agent/index.vue 会把用户在界面上点的「继续生成」写成「由你发起的派工」。
  */
-async function resumeBatch(payload: { clips: string[]; includeFinished: boolean }): Promise<{ batchId: string }> {
+async function resumeBatch(payload: { clips: string[]; includeFinished: boolean }, origin: "ui" | "agent" = "agent"): Promise<{ batchId: string }> {
   if (dispatching.value || batchHandle.value) throw new Error("已有派工操作正在进行，请等待结束");
   if (!payload.clips.length) {
     batchPaused.value = false;
@@ -1768,7 +1858,7 @@ async function resumeBatch(payload: { clips: string[]; includeFinished: boolean 
   }
   // 先开闸再发起：等 launchDispatch 返回后才清，会把「刚点继续就点暂停」的请求一起抹掉。
   batchPaused.value = false;
-  const { batchId } = await launchDispatch(payload.clips, { batchId: activeBatchId.value, includeFinished: payload.includeFinished });
+  const { batchId } = await launchDispatch(payload.clips, { batchId: activeBatchId.value, includeFinished: payload.includeFinished, origin });
   return { batchId };
 }
 
@@ -1781,16 +1871,17 @@ function footerResume() {
   void panelResume({ clips: pending, includeFinished: includeFinished.value });
 }
 
-/** 「单镜重试/重新生成本镜」：只派这一镜，强制 includeFinished；已生成的镜生成新版本追加（旧视频保留），failed 的镜照常重跑。被拒同样抛错。 */
-async function retryClip(payload: { clipId: string }): Promise<{ batchId: string }> {
+/** 「单镜重试/重新生成本镜」：只派这一镜，强制 includeFinished；已生成的镜生成新版本追加（旧视频保留），failed 的镜照常重跑。被拒同样抛错。
+ *  ACT: origin 语义同 resumeBatch；kind 固定 "clip"，通知消费方据此区分「单镜生成」与「整批派工」。 */
+async function retryClip(payload: { clipId: string }, origin: "ui" | "agent" = "agent"): Promise<{ batchId: string }> {
   if (dispatching.value || batchHandle.value) throw new Error("生成进行中，请先暂停或取消后重试单镜");
-  return await launchDispatch([payload.clipId], { includeFinished: true });
+  return await launchDispatch([payload.clipId], { includeFinished: true, origin, kind: "clip" });
 }
 
 /** 「继续生成」的界面入口：把 resumeBatch 的抛错翻成提示，行为与抛错前一致。 */
 async function panelResume(payload: { clips: string[]; includeFinished: boolean }) {
   try {
-    const { batchId } = await resumeBatch(payload);
+    const { batchId } = await resumeBatch(payload, "ui");
     ElMessage.success(`批次 ${batchId.slice(0, 8)} 已继续生成`);
   } catch (reason) {
     if ((reason as { silent?: boolean })?.silent) return;
@@ -1804,7 +1895,7 @@ async function panelResume(payload: { clips: string[]; includeFinished: boolean 
 /** 「单镜重试」的界面入口：同上。 */
 async function panelRetry(payload: { clipId: string }) {
   try {
-    const { batchId } = await retryClip(payload);
+    const { batchId } = await retryClip(payload, "ui");
     ElMessage.success(`已重试 ${payload.clipId}，批次 ${batchId.slice(0, 8)}`);
   } catch (reason) {
     if ((reason as { silent?: boolean })?.silent) return;
@@ -1823,7 +1914,7 @@ async function regenerateClip() {
   const picked = pickDispatchTargets([clip.clipId], true);
   if (picked.issue) return ElMessage.warning(picked.issue);
   try {
-    const { batchId } = await launchDispatch([clip.clipId], { includeFinished: true });
+    const { batchId } = await launchDispatch([clip.clipId], { includeFinished: true, kind: "clip" });
     ElMessage.success(`批次 ${batchId.slice(0, 8)} 已开始重新生成，新版本完成后自动成为默认视频`);
   } catch (reason) {
     // 与发起生成完全一致：aborted（卸载/取消竞态）静默，其余弹错并进 footer 错误行。
@@ -2465,13 +2556,6 @@ defineExpose({
   font-size: 12px;
 }
 
-.sectionResults {
-  flex: none;
-  padding: 6px 10px 10px;
-  border: 1px solid var(--mtLine);
-  border-radius: var(--mtRadiusSmall);
-}
-
 .sectionAdvanced {
   flex: none;
   padding: 6px 10px 10px;
@@ -2485,6 +2569,20 @@ defineExpose({
   font-weight: 500;
   cursor: pointer;
   user-select: none;
+}
+
+/* ACT: 折叠标记被隐藏后没有任何替代物，展开态看不出能收起；这里补一个会转的三角提示。 */
+.sectionSummary::before,
+.nestedSummary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 4px;
+  transition: transform 0.15s;
+}
+
+details[open] > .sectionSummary::before,
+details[open] > .nestedSummary::before {
+  transform: rotate(90deg);
 }
 
 .sectionSummary::-webkit-details-marker {
@@ -2561,11 +2659,9 @@ defineExpose({
   line-height: 1.6;
 }
 
-/* 子组件自带边框的在这里收边（statusPanel 折叠区里去掉外框背景）。 */
-.sectionResults > :deep(.statusPanel) {
-  width: auto;
-  border-left: 0;
-  background: transparent;
+.advancedActions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 /* 容器窄于 560px（画布卡片被拖窄）时 02 双栏改成上下两段。 */

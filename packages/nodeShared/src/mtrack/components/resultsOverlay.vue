@@ -36,6 +36,16 @@
           勾选「用于合并」的镜头按工程顺序进入合成清单。
         </p>
 
+        <!-- 校验发现：多轨编辑器里不再重复一块，改到这里（点编辑器工具栏「校验」重新读取）。 -->
+        <details class="findingsSection" :open="findingsOpen" @toggle="onFindingsToggle">
+          <summary class="findingsSummary">校验发现{{ findingsCount ? ` ${findingsCount}` : "" }}</summary>
+          <findingsPanel
+            :report="report"
+            :readError="readError"
+            :resolveClipId="resolveFindingClipId"
+            @locate="emit('locateFinding', $event)" />
+        </details>
+
         <template v-if="previewClip">
           <video
             v-if="previewUrl"
@@ -115,12 +125,13 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
-import type { MtrackClip, ClipState } from "../mtrackProject";
+import type { MtrackClip, ClipState, AssetFinding, AssetReport } from "../mtrackProject";
 import { clipStatusLabels, clipVersions } from "../mtrackProject";
 import type { ResultsUiGeometry } from "../mtrackProject";
 import { defaultResultsUi, normalizeResultsUi, resultsUiShownHeight, resultsUiMinWidth, resultsUiMaxWidth, resultsUiMinHeight, resultsUiMaxHeight } from "../mtrackProject";
 import versionMenu from "./versionMenu.vue";
 import type { VersionMenuItem } from "./versionMenu.vue";
+import findingsPanel from "./findingsPanel.vue";
 
 const props = defineProps<{
   clips: MtrackClip[];
@@ -137,6 +148,10 @@ const props = defineProps<{
   resolveTarget?: () => Element | null;
   /** 每镜状态（clipId → ClipState），含 stale 标记；由编辑器传入。 */
   states?: Record<string, ClipState>;
+  /** 校验报告（plan/assetReport.json）：原在多轨编辑器里单开一块，现收进本浮窗。 */
+  report?: AssetReport;
+  /** 校验报告读取失败的原因，原样展示。 */
+  readError?: string;
 }>();
 
 const emit = defineEmits<{
@@ -148,11 +163,39 @@ const emit = defineEmits<{
   (event: "previewSelect", clipId: string): void;
   (event: "deleteVersion", clipId: string, version: string): void;
   (event: "deleteAllVersions", clipId: string): void;
+  /** 校验发现的「定位」：把工作台选中镜切到该 finding 对应的镜头（浮窗→工作台方向）。 */
+  (event: "locateFinding", clipId: string): void;
 }>();
 
 const targetEl = shallowRef<Element>();
 const frameRef = ref<HTMLElement>();
 let targetWarned = false;
+
+const findingsCount = computed(() => props.report?.findings?.length ?? 0);
+
+/** 校验发现 details 的展开状态：宿主点「查看成片」时若有发现项会自动摊开（见 expand）。 */
+const findingsOpen = ref(false);
+
+/** finding.ref 可能是片段 clipId，也可能是资产卡 id（V1/V2/V4/V9 那类卡级问题）；只有命中镜头才能定位。 */
+function resolveFindingClipId(finding: AssetFinding): string {
+  const ref = finding.ref ?? "";
+  return props.clips.some(clip => clip.clipId === ref) ? ref : "";
+}
+
+function onFindingsToggle(event: Event) {
+  findingsOpen.value = (event.target as HTMLDetailsElement).open;
+}
+
+/**
+ * 宿主「查看成片」在收起态下调用：先展开浮窗（收起态只剩 70px 标题条，setCenter 之后看不到内容），
+ * 有发现项时把「校验发现」一并摊开，否则用户还得自己找。
+ */
+function expand() {
+  if (geo.value.collapsed) toggleCollapsed();
+  if (findingsCount.value) findingsOpen.value = true;
+}
+
+defineExpose({ expand });
 
 /** ACT: 独立编辑器形态下画布可能晚于本组件挂载；每秒重试一次，找到即停，不常驻定时器。 */
 let locateTimer: ReturnType<typeof setInterval> | undefined;
@@ -754,5 +797,31 @@ function onPreviewError(event: Event) {
 .resizeHandle:hover,
 .resizeHandle:focus-visible {
   color: var(--el-color-primary, #409eff);
+}
+
+/* 校验发现：折叠区，收在结果策略说明下面。 */
+.findingsSection {
+  margin-top: 8px;
+  padding: 6px 10px 8px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+}
+.findingsSummary {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+.findingsSummary::-webkit-details-marker {
+  display: none;
+}
+.findingsSummary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 4px;
+  transition: transform 0.15s;
+}
+.findingsSection[open] > .findingsSummary::before {
+  transform: rotate(90deg);
 }
 </style>

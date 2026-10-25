@@ -1,4 +1,5 @@
-import { copyFile, mkdir, readFile, rename, rm } from "@toonflow/file";
+import { copyFile, mkdir, readFile, rename, rm, writeAtomic } from "@toonflow/file";
+import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig, loadConfigFromFile } from "vite";
@@ -27,6 +28,33 @@ const tiptapGlobals = {
 };
 
 export type ExtMetadata = Omit<ExtDefinition, "load">;
+
+/**
+ * 记录构建器写进 data/ext 的那份产物哈希，供服务端启动同步（initializeExt.ts:43-44）判定
+ * 「这份是同版本内置包、可以覆盖」——不记这一步时，构建器直写的文件在 bundled.json 里没有条目，
+ * 服务端会把它当成「市场安装或本地修改」而永远跳过同版本更新。
+ * ACT: 多个扩展并行构建时这里是读-改-写，最坏情况漏记一个条目——那个扩展退化成今天的行为
+ * （同版本不再被服务端同步覆盖），不会写入错误数据；要彻底消除请改成单一构建后处理步骤。
+ * ACT: 这里用 node:crypto 的 sha256 而不是 Bun.hash——vite 加载本配置的上下文里没有 Bun 全局；
+ * 服务端 initializeExt 两种哈希都认（见那里 :44 附近的注释）。
+ */
+async function recordBundledState(dataDir: string, fileName: string) {
+  const name = fileName.slice(0, -7);
+  const statePath = resolve(dataDir, "bundled.json");
+  const source = await readFile(resolve(dataDir, fileName), "utf8").catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") return "";
+    throw error;
+  });
+  if (!source) return;
+  const saved = await readFile(statePath, "utf8").catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") return "{}";
+    throw error;
+  });
+  let state: Record<string, { hash: string; revision?: string }> = {};
+  try { state = JSON.parse(saved) as typeof state; } catch { state = {}; }
+  state[name] = { hash: createHash("sha256").update(source).digest("hex"), revision: "dev" };
+  await writeAtomic(statePath, JSON.stringify(state), { mode: 0o600 });
+}
 
 export function createExtConfig(config: ExtMetadata, configUrl: string) {
   defineExt({ ...config, load: async () => ({ default: {} }) });
@@ -90,6 +118,7 @@ export function createExtConfig(config: ExtMetadata, configUrl: string) {
           } finally {
             await rm(tempPath, { force: true });
           }
+          await recordBundledState(dataDir, fileName);
         },
       },
     ],

@@ -158,7 +158,7 @@ const rangeText = computed(() => {
   if (!total) return "工程里还没有镜头。";
   if (!rangeClips.value.length) return "当前范围没有镜头，请调整起始分镜。";
   const last = props.clips.findIndex(clip => clip.clipId === rangeClips.value[rangeClips.value.length - 1]) + 1;
-  // 只校验范围内提示词：无提示词的镜头会被生成内核拒绝（directDispatch 抛「该镜没有提示词」），提前提示避免跑到一半才发现。
+  // 只校验范围内提示词：无提示词的镜头会被生成内核拒绝（mediaDispatch.composeClipRequest 抛「没有提示词」），提前提示避免跑到一半才发现。
   const noPrompt = rangeClips.value.map(clipId => props.clips.find(clip => clip.clipId === clipId)).filter(clip => clip && !hasPrompt(clip));
   const base = shotCount.value < 0
     ? `本批 ${rangeClips.value.length} 镜：第 ${startIndex.value} 镜 → 最后一镜（第 ${last} 镜）`

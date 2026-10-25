@@ -1,5 +1,5 @@
 /**
- * M4 合成导出：从 `plan/story.mtrack` 生成合成清单（`plan/composite.json`），
+ * M4 合成导出：从 `plan/story.mtrack` 生成合成清单结构（写入 `plan/composite.json` 由调用方在 execute 成功后做），
  * 执行段在同目录 compositeRun.ts，经宿主 ffmpeg 完成 concat。
  *
  * 纪律：
@@ -161,11 +161,11 @@ function toSegment(clip: MtrackClip): CompositeSegment {
 
 /**
  * 读工程 → 取 accepted 段 → V14 复核 → assetPath 可读复核。
- * 所有不满足均 throw new Error，不吞错、不降级。
+ * 所有不满足均 throw，不吞错、不降级；工程不存在属用户可预期的路径问题，带 status 404 让宿主回 404 而非 500。
  */
 export async function planComposite(store: PlanStore, projectPath: string, output: string): Promise<CompositePlan> {
   if (!(await store.exists(projectPath))) {
-    throw new Error(`多轨工程不存在：${projectPath}（先用 mtrackRead 确认路径）`);
+    throw Object.assign(new Error(`多轨工程不存在：${projectPath}（先用 mtrackRead 确认路径）`), { status: 404 });
   }
   const raw = await store.readText(projectPath);
   let project: { clips?: unknown };

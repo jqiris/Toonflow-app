@@ -3,6 +3,9 @@
   "version": "2.0.0",
   "private": true,
   "type": "module",
+  "scripts": {
+    "typecheck": "tsc"
+  },
   "dependencies": {
     "@toonflow/ffmpeg": "workspace:*"
   },

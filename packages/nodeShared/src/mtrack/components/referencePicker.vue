@@ -8,14 +8,14 @@
       </el-select>
     </label>
     <details class="refsDetails" open>
-      <summary class="refsSummary">选择参考图 · {{ referenceIds.length }}/4</summary>
+      <summary class="refsSummary">选择参考图 · {{ pickedCount }}/4</summary>
       <div v-if="items.length" class="refsGrid">
         <label
           v-for="item in items"
           :key="item.key"
           class="refCard"
-          :class="{ picked: item.cardId && pickedSet.has(item.cardId), textOnly: item.textOnly === true, unbound: !item.cardId, stale: item.selectable === false }"
-          :title="item.cardId ? (item.selectable === false ? '该素材没有连到本节点：不能新增勾选，取消勾选可清掉旧引用' : undefined) : '连线节点没有对应的资产卡，不能作为参考勾选'"
+          :class="{ picked: item.cardId && pickedSet.has(item.cardId), textOnly: item.textOnly === true, unbound: !item.cardId }"
+          :title="item.cardId ? undefined : '连线节点没有对应的资产卡，不能作为参考勾选'"
         >
           <img v-if="thumbnails[item.key]" class="refThumb" :src="thumbnails[item.key]" loading="lazy" alt="" />
           <span v-else class="refThumb refThumbEmpty">无预览</span>
@@ -24,7 +24,6 @@
             type="checkbox"
             class="refCheck"
             :checked="pickedSet.has(item.cardId)"
-            :disabled="item.selectable === false && !pickedSet.has(item.cardId)"
             @change="toggle(item.cardId, ($event.target as HTMLInputElement).checked)"
           />
           <span v-else class="refBadge">非资产卡</span>
@@ -34,8 +33,12 @@
       <!-- 画布卡片宿主：网格只列 in 端口连进来的来源，一条没连时给出明确的接法指引。 -->
       <p v-else-if="connectionBound" class="pickerHint">把素材卡连到本节点的参考输入端口后，这里会列出可勾选的参考。</p>
       <p v-else class="pickerHint">资产索引还没有卡片：先用九宫格拆图或 planOperator 生成 assetIndex。</p>
+      <!-- 连线上有来源、但一张都没对上资产卡：这是索引缺失/过期，不是「没有素材」，必须说清下一步。 -->
+      <p v-if="cardlessSources" class="pickerHint">上面的连线节点还没有对应的资产卡（plan/assetIndex.json 里没有能匹配的 id）：先用「导入资产与分镜」节点或宫格切分写出资产索引；索引已存在时点工具栏「校验」重新读一次。</p>
+      <!-- 断线旧引用不进网格（网格只列连线上的素材，参考图只在连线上打勾），只在这里点名并给一次清除。 -->
       <p v-if="detached.length" class="pickerHint detachedHint" role="alert">
-        本镜参考清单里的 {{ detached.join("、") }} 已不在连线上：勾选状态下派工会按清单自动接线；只有该资产没有产出时才会报「参考图未就绪」，取消勾选即可清掉旧引用。
+        本镜参考清单里的 {{ detached.join("、") }} 已不在连线上，所以不在上面的网格里：派工仍会按清单自动接线，只有该资产没有产出时才会报「参考图未就绪」。
+        <el-button class="detachedClear" size="small" text type="primary" @click="clearDetached">清掉旧引用</el-button>
       </p>
     </details>
     <p class="pickerHint">{{ modeHint }}</p>
@@ -47,21 +50,20 @@
  * 网格条目：cardId 为可勾选的资产卡 id（勾选后写进 clip.referenceIds）；
  * cardId 为空串表示这只是一个连到 in 端口、但没对上资产卡的画布节点——展示占位，不可勾选。
  * key 用 cardId（有卡时）或来源节点 id（无卡时），供缩略图 map 与 v-for 使用。
- * selectable=false（画布宿主）：该卡当前没连在本节点上，只为清旧引用而留在网格里——
- * 不能新增勾选，已勾选的仍可取消（否则断线后的 referenceIds 旧值在界面上清不掉）。
+ * 网格只列连线上的素材：本镜 referenceIds 里已断线的旧值不进网格，只在 detachedHint 里点名，
+ * 由「清掉旧引用」一次写回——否则界面会先摆出用户没连过的参考。
  */
 export interface ReferencePickerItem {
   key: string;
   cardId: string;
   name: string;
   textOnly?: boolean;
-  selectable?: boolean;
 }
 </script>
 
 <script setup lang="ts">
 import { computed } from "vue";
-import { ElOption, ElSelect } from "element-plus";
+import { ElMessageBox, ElOption, ElSelect } from "element-plus";
 import { clipModeLabels, resolveClipMode, type ClipMode } from "../mtrackProject";
 
 const props = defineProps<{
@@ -69,7 +71,7 @@ const props = defineProps<{
   referenceIds: string[];
   /**
    * 网格条目，由宿主按形态解析好再传入（位次语义不变，勾选仍写 cardId）：
-   * - 画布卡片宿主：只列本节点 in 端口连线的来源（见 multitrackEditor 的 resolveConnectedItems，两套数据源的理由也写在那边）；
+   * - 画布卡片宿主：只列本节点 in 端口连线的来源（见 multitrackEditor 的 pickerItems，两套数据源的理由也写在那边）；
    * - 文档面板宿主：assetIndex.json 的全部资产卡。
    */
   items: ReferencePickerItem[];
@@ -91,6 +93,11 @@ const emit = defineEmits<{
 const thumbnails = computed(() => props.thumbnails ?? {});
 const pickedSet = computed(() => new Set(props.referenceIds));
 const detached = computed(() => props.detachedIds ?? []);
+/** 计数按「网格里能勾到的」算：断线旧引用不在网格里，算进去会出现 5/4 这种越界读数。 */
+const pickedCount = computed(() => props.referenceIds.filter(id => !detached.value.includes(id)).length);
+
+/** 网格里有条目、但没有一条带 cardId：连线节点全都对不上资产卡（索引缺失或过期），提示条要给下一步。 */
+const cardlessSources = computed(() => props.items.length > 0 && !props.items.some(item => item.cardId));
 
 function orderOf(cardId: string): number {
   return props.referenceIds.indexOf(cardId);
@@ -112,9 +119,23 @@ function toggle(cardId: string, checked: boolean) {
     emit("update:referenceIds", props.referenceIds.filter(id => id !== cardId));
     return;
   }
-  if (item.selectable === false) return;
   if (pickedSet.value.has(cardId) || props.referenceIds.length >= 4) return;
   emit("update:referenceIds", [...props.referenceIds, cardId]);
+}
+
+/**
+ * 断线旧引用不在网格里（网格只列连线上的素材），只能从提示条清：写回前二次确认——
+ * 清掉会直接改 clip.referenceIds，而参考清单的写入不进撤销栈（撤销只覆盖删镜）。
+ */
+async function clearDetached() {
+  const drop = new Set(props.detachedIds ?? []);
+  if (!drop.size) return;
+  try {
+    await ElMessageBox.confirm(`将从本镜参考清单移除：${[...drop].join("、")}。它们已不在连线上，派工不会再引用这些卡。`, "清掉旧引用", { type: "warning", confirmButtonText: "清掉", cancelButtonText: "取消" });
+  } catch {
+    return;
+  }
+  emit("update:referenceIds", props.referenceIds.filter(id => !drop.has(id)));
 }
 
 const modeHint = computed(() => {
@@ -221,12 +242,6 @@ const modeHint = computed(() => {
   border-color: var(--el-border-color);
 }
 
-/* 断线旧引用：置灰 + 虚线边，与连线上的可勾卡一眼分开。 */
-.stale {
-  border-style: dashed;
-  opacity: 0.6;
-}
-
 .refCheck {
   position: absolute;
   top: 6px;
@@ -288,5 +303,9 @@ const modeHint = computed(() => {
   border-radius: 6px;
   color: var(--el-color-warning);
   background: var(--el-color-warning-light-9);
+}
+
+.detachedClear {
+  margin-left: 4px;
 }
 </style>

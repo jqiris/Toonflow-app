@@ -13,6 +13,9 @@ const sharedFields = {
   providerId: z.string().regex(/^[a-z][a-zA-Z0-9]{0,95}$/),
   modelId: z.string().trim().min(1).max(256),
   prompt: z.string().trim().min(1).max(100000),
+  // ACT: label 只是引擎侧任务名，长名字不该让整次生成失败（节点显示名与抽取模型给的名字都没有长度约束），
+  // 这里截到 80 字；供应商侧还会按「类型-代号-时间戳」重拼并保留时间戳。
+  label: z.string().trim().min(1).transform(value => value.slice(0, 80)).optional(),
   outputDirectory: relativePath.optional(),
   images: z.array(imageReference).max(64).optional(),
   ratio: z.string().regex(/^[1-9]\d{0,3}:[1-9]\d{0,3}$/).optional(),

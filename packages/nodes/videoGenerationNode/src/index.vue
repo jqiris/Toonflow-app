@@ -255,6 +255,8 @@ const generationInput = computed<Omit<NodeVideoRequest, "directory"> | undefined
     providerId: choice.providerId,
     modelId: choice.modelId,
     prompt: generationPrompt.value,
+    // ACT: 引擎任务名用节点名（镜头编号 S001）拼「类型-代号-时间戳」。
+    label: nodeProps.value.label || undefined,
     mode: selectedMode.value,
     duration: data.value.duration,
     resolution: data.value.resolution || undefined,

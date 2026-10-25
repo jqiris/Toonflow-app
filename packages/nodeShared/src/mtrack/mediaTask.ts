@@ -55,6 +55,8 @@ export async function submitClipTask(directory: string, clip: ClipGenerationRequ
       providerId: clip.providerId,
       modelId: clip.modelId,
       prompt: clip.prompt,
+      // ACT: 引擎任务名用镜头编号拼「分镜-S001-时间戳」，不占用参考图通道。
+      label: clip.clipId,
       images: clip.images,
       audios: clip.audios,
       videos: clip.videos,

@@ -10,10 +10,12 @@ export interface NodeToolDefinition<Schema extends z.ZodType = z.ZodType> {
   name: string;
   description: string;
   parameters: Schema;
+  /** 单次调用的超时上限（毫秒），默认 120000；抽取+批量出图、批量生成这类长任务节点可放宽。 */
+  timeoutMs?: number;
   execute(args: z.output<Schema>, context: { signal?: AbortSignal }): unknown | Promise<unknown>;
 }
 
-type RegisteredNodeTool = NodeToolInfo & Pick<NodeToolDefinition, "execute">;
+type RegisteredNodeTool = NodeToolInfo & Pick<NodeToolDefinition, "execute" | "timeoutMs">;
 type NodeToolsIndex = { nodes: Map<string, Map<string, RegisteredNodeTool>>; version: number };
 
 // 共享 Vue Flow 实例上的注册表供各 UMD 访问，不进入画布 JSON。
@@ -82,6 +84,11 @@ export const nodeTools = {
     const nodeId = useNodeId();
     if (!nodeId) throw new Error("当前组件不属于画布节点");
     if (!/^[a-z][a-zA-Z0-9]{0,63}$/.test(definition.name)) throw new Error("节点函数名必须使用小驼峰，最多 64 个字符");
+    // ACT: timeoutMs 直接进 AbortSignal.timeout——负数/NaN/Infinity 在执行期裸抛 TypeError，离错处太远。
+    // 注册期校验并给出带函数名的错误，插件作者在 setup 一眼定位；要长超时请传有限正数，不受理 Infinity。
+    if (definition.timeoutMs !== undefined && (!Number.isFinite(definition.timeoutMs) || definition.timeoutMs <= 0)) {
+      throw new Error(`节点函数 ${definition.name} 的 timeoutMs 必须是有限正数（毫秒），当前为 ${definition.timeoutMs}`);
+    }
     const parameters = z.toJSONSchema(definition.parameters, { io: "input", target: "draft-07" });
     if (!definition.description.trim() || parameters.type !== "object" || typeof definition.execute !== "function") {
       throw new Error("节点函数需要描述、Zod 对象参数和 execute 方法");
@@ -92,6 +99,7 @@ export const nodeTools = {
     const entry: RegisteredNodeTool = {
       nodeId, name, description: definition.description.trim(),
       parameters,
+      timeoutMs: definition.timeoutMs,
       async execute(args, context) {
         const parsed = await definition.parameters.parseAsync(args);
         context.signal?.throwIfAborted();
@@ -116,7 +124,7 @@ export function useNodeToolsContext() {
       if (!node) continue;
       for (const entry of index.nodes.get(nodeId)?.values() ?? []) {
         if (nameSet && !nameSet.has(entry.name)) continue;
-        const { execute: _execute, ...info } = entry;
+        const { execute: _execute, timeoutMs: _timeoutMs, ...info } = entry;
         yield { ...info, nodeLabel: String(node.data.label ?? node.label ?? nodeId) };
       }
     }
@@ -126,12 +134,15 @@ export function useNodeToolsContext() {
     get version() { return index.version; },
     list,
     async call({ nodeId, name, args }, signal) {
-      const timeout = AbortSignal.timeout(120000);
-      const callSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
-      callSignal.throwIfAborted();
+      // ACT: 调用方信号优先于注册表检查：先中止的先报 AbortError，不被「节点未注册函数」覆盖（保持 timeoutMs 之前的错误优先级）。
+      signal?.throwIfAborted();
       const key = `${nodeId}:${name}`;
       const entry = registry.get(key);
       if (!entry) throw new Error(`节点未注册函数 ${name}，请先通过 getNodeTools 查询可用节点函数`);
+      // ACT: 默认 120 秒；长任务节点用 timeoutMs 放宽，否则一次调用会被截断在半途（导入节点抽取 + 逐张出图就是这种情况）。
+      const timeout = AbortSignal.timeout(entry.timeoutMs ?? 120000);
+      const callSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
+      callSignal.throwIfAborted();
       if (!flow.findNode(nodeId)) throw new Error("节点函数已卸载或不属于本轮画布");
       let cancel: () => void = () => {};
       try {

@@ -2,6 +2,10 @@
 
 在画布上直接打开多轨制作工程，查看分镜摘要并进入镜头创作工作台（预览与项目管理在独立的「项目与成片」浮窗）。
 
+## 在流程里的位置
+
+本节点是制作流程的**最后一步**，不要一开始就建它：先在画布上用「导入资产与分镜」节点把剧本抽成资产卡与分镜（写出 `plan/assetIndex.json` 与 `plan/story.mtrack`），资产图节点出图后连到本节点的参考输入端口，再回到本节点绑定该工程、在「参考素材」里**从连线上的资产卡中打勾**（勾选位次就是 `{{ref N}}`），最后逐镜派工、验收、合成。参考网格不会预先摆出还没连过线的素材。
+
 ## 功能
 
 - 卡片内直接展开镜头创作工作台：镜头页签条、镜头内容（提示词大框 + 衔接校验）、参考素材勾选网格、生成范围与「03 生成视频」footer（保存 / 生成视频 / 本镜结束后暂停 / 继续·重试 / 结束本批），与文件面板中的多轨编辑器同源。
@@ -20,7 +24,7 @@
 - 参考标记统一写 `{{ref N}}`，`N` 是本镜 `referenceIds` 的位次（从 1 起），图片、音频、视频按同一份列表连续编号——`referenceIds: ["C01", "A01", "C03"]` 对应 `{{ref 1}}` / `{{ref 2}}` / `{{ref 3}}`，不跳号。
 - 节点在下发前按每个参考的 `dataType` 把它换算成模型侧标记（图片、视频、音频各自编号），写作者不必自己按类型数。
 - 需要复用身份、场景、道具时在 `subject_definitions` 里用 `<Subject N>` 定义，并写明它来自哪张参考（`{{ref N}}`）。
-- `node:setPrompt`（画布视频节点的提示词函数，逐镜直连与派工下发都经过它）收到什么正文就发什么正文：`buildPrompt`（`packages/nodeShared/src/mtrack/directDispatch.ts`）只做三件事——拼「全片风格 / 全片约束」前缀、正文漏写官方段首时补字段名、把两个声音字段拼成 `overall_soundscape:` / `non_diegetic_music:` 两段尾；它不改写参考标记，`{{ref N}}` 到 wire 层（`packages/nodes/videoGenerationNode/src/index.vue` 的 `referenceTags`）才按 `dataType` 换算成模型侧标记。
+- `node:setPrompt`（画布视频节点的提示词函数，派工下发都经过它）收到什么正文就发什么正文：`buildPromptText`（`packages/nodeShared/src/mtrack/mediaDispatch.ts`，directDispatch 的 `buildPrompt` 旧画布链路已删）只做三件事——拼「全片风格 / 全片约束」前缀、正文漏写官方段首时补字段名、把两个声音字段拼成 `overall_soundscape:` / `non_diegetic_music:` 两段尾；它不改写参考标记，`{{ref N}}` 到 wire 层（`packages/nodes/videoGenerationNode/src/index.vue` 的 `referenceTags`）才按 `dataType` 换算成模型侧标记。
 - 引擎不代写资产定义段、镜头摘要段、参考保持分析段与「本段参考顺序」声明行。
 
 ## 使用方法

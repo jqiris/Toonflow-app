@@ -45,6 +45,8 @@ interface ProviderContext<TConfig = Record<string, unknown>> {
 
 interface MediaRequest {
   model: string;
+  /** 引擎侧任务名的可读标签（FreeVideo 显示在生成列表里）：调用方带资产/镜头代号，如 `C01`、`S001`。 */
+  label?: string;
   /** 仅放供应商专属参数；公共字段的映射与支持范围由供应商校验。 */
   other?: Record<string, unknown>;
 }

@@ -311,20 +311,20 @@ export function totalSeconds(clips: MtrackClip[]): number {
   return clips.reduce((sum, clip) => sum + (Number.isFinite(clip.seconds) ? clip.seconds : 0), 0);
 }
 
-/** 该镜是否已有可用提示词。与 directDispatch.buildPrompt 同口径：三个提示词字段取第一个非空。 */
+/** 该镜是否已有可用提示词。与派工组装 mediaDispatch.buildPromptText 同口径：三个提示词字段取第一个非空即有内容可下发。 */
 export function hasPrompt(clip: MtrackClip): boolean {
   const prompt = clip.prompt;
   return Boolean((prompt?.integratedMultimodalDescription || prompt?.overallSoundscape || prompt?.nonDiegeticMusic || "").trim());
 }
 
-/** 声音两段在正文里的段名（由 buildPrompt 在 wire 层拼接，这里只用于编辑框的合成/拆分）。 */
+/** 声音两段在正文里的段名（由 mediaDispatch.buildPromptText 在 wire 层拼接，这里只用于编辑框的合成/拆分）。 */
 const soundscapeHeading = "overall_soundscape:";
 const musicHeading = "non_diegetic_music:";
 
 /**
  * 三段提示词合成编辑器里的单个文本框内容：正文 + 两个声音段（带段名）。
  * ACT: 编辑器只给一个框，框内按官方六段写全文——声音段的段名由这里补，
- * 与 buildPrompt 下发时拼的段名严格同形，避免编辑器写一套、下发拼另一套。
+ * 与 mediaDispatch.buildPromptText 下发时拼的段名严格同形，避免编辑器写一套、下发拼另一套。
  * 上限：段名必须各占一段（行首），正文中间出现同名行会被视为段边界。
  */
 export function promptToText(prompt: ClipPrompt): string {
@@ -373,6 +373,88 @@ export function textToPrompt(text: string): ClipPrompt {
 /** 删除后的撤销栈只保留一份快照，遵循最小实现。 */
 export function cloneClips(clips: MtrackClip[]): MtrackClip[] {
   return clips.map(clip => ({ ...clip, prompt: { ...clip.prompt }, referenceIds: [...clip.referenceIds], attempts: [...clip.attempts] }));
+}
+
+/** 真源字段：写作者/用户在编辑器里定的镜头内容，合并时以「相对基线谁改过」为准，两边都改则信磁盘。 */
+const clipSourceKeys = ["title", "seconds", "ratio", "resolution", "generateAudio", "prompt", "referenceIds", "continuity", "mode", "notes", "systemPromptOverride", "sourceRange"] as const;
+/** 生成侧字段：派工与对账写出来的运行结果，合并时优先内存（用户正看着的那份）。 */
+const clipRunKeys = ["status", "nodeId", "assetPath"] as const;
+
+/** 内容比较：undefined 与 null 视为同一档（旧工程的记录本来就可能缺字段）。 */
+function sameJson(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+}
+
+/**
+ * attempts 合并与 clips/global 同口径——按「谁相对基线改过」判方向，不做无条件并集：
+ * 磁盘相对基线没变 = 内存是真源（用户在界面里清掉旧记录的场景）；内存相对基线没变 = 磁盘是真源——
+ * planOperator 的 `mtrackUpdate` 是整数组替换（agent 清空 attempts 后不能被内存里的旧记录复活）。
+ * 双方都改过才追加合并：磁盘顺序在前，内存新增的接在后面。
+ */
+function mergeAttempts(base: ClipAttempt[] | undefined, disk: ClipAttempt[] | undefined, memory: ClipAttempt[] | undefined): ClipAttempt[] {
+  const diskList = disk ?? [];
+  const memoryList = memory ?? [];
+  if (sameJson(diskList, base ?? [])) return memoryList;
+  if (sameJson(memoryList, base ?? [])) return diskList;
+  const seen = new Set(diskList.map(attempt => JSON.stringify(attempt)));
+  return [...diskList, ...memoryList.filter(attempt => !seen.has(JSON.stringify(attempt)))];
+}
+
+/** 单镜合并：真源字段磁盘改过就用磁盘的，否则用内存的；生成侧字段内存改过就用内存的，否则用磁盘的。 */
+function mergeClip(base: MtrackClip | undefined, disk: MtrackClip, memory: MtrackClip): MtrackClip {
+  const merged = { ...memory } as unknown as Record<string, unknown>;
+  for (const key of clipSourceKeys) merged[key] = JSON.stringify(disk[key]) === JSON.stringify(base?.[key]) ? memory[key] : disk[key];
+  for (const key of clipRunKeys) merged[key] = JSON.stringify(memory[key]) === JSON.stringify(base?.[key]) ? disk[key] : memory[key];
+  return { ...(merged as unknown as MtrackClip), attempts: mergeAttempts(base?.attempts, disk.attempts, memory.attempts) };
+}
+
+/**
+ * 三方合并工程：base = 上次成功保存的快照，disk = 磁盘现状，memory = 当前内存。
+ *
+ * ACT: 直连派工的回写是整份覆盖保存，而会话 agent 的 `planOperator mtrackUpdate`、同一个工程上的
+ * 其他多轨节点都会改这份文件。检测到 updatedAt 变过时，整份覆盖会抹掉对方的改动，整轮拒写又会让
+ * 刚生成的成片只活在内存里（关掉编辑器就没了）。所以按「谁相对基线改过谁赢」合并：镜头内容以磁盘
+ * 为准（agent 刚写的那份），生成结果与历史版本以内存为准；attempts 与 global 同口径按基线判方向。
+ * 上限：按 clipId 对齐，不做同一条镜头的字段级细粒度并发；时间线顺序以磁盘为准，内存新增的镜头附在
+ * 末尾，内存里的删除/移动可能被磁盘覆盖。要更强的合并语义应改成服务端单一写者。
+ */
+export function mergeProjects(base: MtrackProject | null, disk: MtrackProject, memory: MtrackProject): MtrackProject {
+  const baseClips = new Map((base?.clips ?? []).map(clip => [clip.clipId, clip]));
+  const memoryClips = new Map(memory.clips.map(clip => [clip.clipId, clip]));
+  const clips = disk.clips.map(clip => {
+    const own = memoryClips.get(clip.clipId);
+    if (!own) return clip;
+    memoryClips.delete(clip.clipId);
+    return mergeClip(baseClips.get(clip.clipId), clip, own);
+  });
+  for (const clip of memory.clips) if (memoryClips.has(clip.clipId)) clips.push(clip);
+  const global = mergeGlobal(base?.global, disk.global, memory.global);
+  // 以磁盘为底：磁盘有、内存没有的顶层字段（agent 或更新的契约写入的字段）不丢；其余顶层字段按「内存相对
+  // 基线改过就用内存」——项目显示名这类字段用户可能刚改过，不能因为磁盘改的只是别的字段就被回滚。
+  const merged = { ...disk, clips, global, updatedAt: memory.updatedAt ?? disk.updatedAt } as unknown as Record<string, unknown>;
+  const topKeys = new Set([...Object.keys(disk), ...Object.keys(memory)]) as Set<keyof MtrackProject>;
+  for (const key of topKeys) {
+    if (key === "clips" || key === "global" || key === "updatedAt") continue;
+    if (sameJson(memory[key], base?.[key])) continue;
+    if (memory[key] === undefined) delete merged[key];
+    else merged[key] = memory[key];
+  }
+  return merged as unknown as MtrackProject;
+}
+
+/** global 按 key 合并：磁盘只改了 style、内存只改了 ratio 时两份都要留（整块二选一会静默丢一份）。 */
+function mergeGlobal(
+  base: MtrackProject["global"] | undefined,
+  disk: MtrackProject["global"],
+  memory: MtrackProject["global"],
+): MtrackProject["global"] {
+  const merged: Record<string, unknown> = {};
+  const keys = new Set([...Object.keys(disk), ...Object.keys(memory)]) as Set<keyof MtrackProject["global"]>;
+  for (const key of keys) {
+    const value = sameJson(memory[key], base?.[key]) ? disk[key] : memory[key];
+    if (value !== undefined) merged[key] = value;
+  }
+  return merged as MtrackProject["global"];
 }
 
 /**
@@ -503,11 +585,23 @@ function clipSignature(globalSig: string, clip: MtrackClip, previous: string): s
  * 落盘名带随机后缀，路径天然唯一；attempts 序旧→新，当前默认（clip.assetPath）排在最后。
  * 旧工程的 attempt 只有 nodeId 时回退用它作键，预览走画布桥反查节点产物。
  */
+/**
+ * 一条尝试的版本身份：有产物路径就用它，否则旧的画布节点版本退回 nodeId；两者都没有时返回空串
+ * = 不是一条可列出的版本。「列出」（succeededVersionEntries）与「删除」（deleteClipVersion）共用
+ * 这一个谓词，否则会出现「文件删了条目还在」或删完默认回落到刚删文件的不一致。
+ */
+function versionKeyOf(attempt: ClipAttempt): string {
+  if (attempt.assetPath) return attempt.assetPath;
+  return attempt.status === "succeeded" ? attempt.nodeId || "" : "";
+}
+
 function succeededVersionEntries(clip: MtrackClip): ClipVersion[] {
   const versions: ClipVersion[] = [];
   for (const attempt of clip.attempts) {
-    if (attempt.status !== "succeeded") continue;
-    const key = attempt.assetPath || attempt.nodeId || "";
+    // ACT: 只要有产物路径就是一条可回溯的成片版本——状态不是 succeeded 也照样列出（关闭界面期间生成
+    // 完成、取消但文件已落盘、agent 回写等）。只按状态过滤会让「当前默认」变成本镜唯一一行，切换默认后
+    // 新版本就从列表里消失。
+    const key = versionKeyOf(attempt);
     if (!key || versions.some(item => item.key === key)) continue;
     versions.push({ key, nodeId: attempt.nodeId, assetPath: attempt.assetPath || null });
   }
@@ -583,26 +677,41 @@ export interface VersionDeletion {
 /**
  * 删除一个成片版本：从 attempts 移除该条成功记录，产物路径交调用方删文件。
  * 删的是当前默认版本时，默认回落到时间线上更新的版本；没有剩余版本则清空默认指针。
- * 不动 clip.status——生成状态与版本簿记是两回事，对齐 LSC「只改结果簿记」。
+ * ACT: 只动「结果簿记」——status 仅在删光最后一个成功版本时回落（accepted→generated→pending，
+ * 人工验收判定优先保留、能留多高留多高）：accepted/generated 且 assetPath=null 的组合会被
+ * planValidator V13 判 error 卡死「生成前 validate error 清零」，删版本后不回落就是死锁。
+ * failed/generating 不回落：失败状态与本次删的是哪条版本无关；generating 由调用侧挡着删。
  */
 export function deleteClipVersion(clip: MtrackClip, key: string): VersionDeletion {
   const target = clipVersions(clip).find(item => item.key === key);
   if (!target) return { clip, paths: [] };
-  const attempts = clip.attempts.filter(
-    attempt => !(attempt.status === "succeeded" && (attempt.assetPath || attempt.nodeId || "") === key),
-  );
+  // 与列表同一谓词（versionKeyOf）：列得出来的版本才删得掉，删掉的条目与要删的文件一一对应，
+  // 否则删掉的是「succeeded 的旧记录」、留下的却是「有 assetPath 的同键条目」，文件删了条目还在。
+  const attempts = clip.attempts.filter(attempt => versionKeyOf(attempt) !== key);
   const paths = target.assetPath ? [target.assetPath] : [];
-  if (key !== (clip.assetPath || clip.nodeId || "")) return { clip: { ...clip, attempts }, paths };
+  if (key !== (clip.assetPath || clip.nodeId || "")) return { clip: settleDeletedStatus({ ...clip, attempts }), paths };
   const next = succeededVersionEntries({ ...clip, attempts }).at(-1);
   return {
-    clip: { ...clip, attempts, assetPath: next?.assetPath ?? null, nodeId: next?.nodeId ?? null },
+    clip: settleDeletedStatus({ ...clip, attempts, assetPath: next?.assetPath ?? null, nodeId: next?.nodeId ?? null }),
     paths,
   };
 }
 
-/** 删除整镜的全部成片版本：清空成功记录与默认指针，产物路径交调用方删文件。 */
+/** 整镜全部版本删除后的同款状态回落（见 deleteClipVersion 的 ACT 注释）。 */
 export function deleteAllClipVersions(clip: MtrackClip): VersionDeletion {
   const paths = clipVersions(clip).map(item => item.assetPath).filter((item): item is string => Boolean(item));
-  const attempts = clip.attempts.filter(attempt => attempt.status !== "succeeded");
-  return { clip: { ...clip, attempts, assetPath: null, nodeId: null }, paths };
+  // 与列表同一谓词：凡是被列成版本的条目（有产物路径、或是 succeeded 且有 nodeId）一律清掉，
+  // 只留纯诊断记录（没有产物的失败尝试），否则删完文件列表里还挂着一行空壳。
+  const attempts = clip.attempts.filter(attempt => !versionKeyOf(attempt));
+  return { clip: settleDeletedStatus({ ...clip, attempts, assetPath: null, nodeId: null }), paths };
+}
+
+/** 删掉该镜最后一个成功版本后的状态回落：判据是「既没有产物指针、也没有任何可列出版本」——
+ *  V13 对 generated/accepted 要求 assetPath，这个组合删光后必然卡死「生成前 validate error 清零」，
+ *  所以一律落到 pending（没有成片就谈不上验收，accepted/generated 同档回落，最小语义）。
+ *  仍有剩余版本（含旧画布版次只有 nodeId 的条目）或指针非空时 status 不动。 */
+function settleDeletedStatus(clip: MtrackClip): MtrackClip {
+  if (clip.assetPath || clip.nodeId || succeededVersionEntries(clip).length) return clip;
+  if (clip.status === "accepted" || clip.status === "generated") return { ...clip, status: "pending" };
+  return clip;
 }

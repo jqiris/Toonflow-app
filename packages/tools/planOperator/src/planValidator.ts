@@ -1,14 +1,14 @@
 /**
- * 确定性校验器 V1–V15。纯函数，不读磁盘、不调画布。
+ * 确定性校验器 V1–V16（V3/V5/V6/V10 为历史断档编号，不再产生新 finding；V5 的恒假占位块已删除）。纯函数，不读磁盘、不调画布。
  * 校验输入来源：
  *  - parsed：assetCardParser 的解析结果（V1–V9 资产侧）
  *  - resolved：referenceResolver 的结算结果（V1–V9 接线侧）
- *  - mtrack：多轨工程 JSON（V10–V15 片段侧）
+ *  - mtrack：多轨工程 JSON（V11–V16 片段侧）
  *  - snapshot：画布快照（来自 getCanvasNodes/getCanvasEdges，由调用方传入）
  *
  * 规则权威依据：
  *  - V1–V9：docs/assetCardWorkflowPlan.md §2 K3 + docs/assetCardWorkflowPlanReview.md A3/A4
- *  - V10–V15：docs/multitrackProductionPlan.md §5
+ *  - V11–V16：docs/multitrackProductionPlan.md §5
  */
 
 export interface Finding {
@@ -134,10 +134,7 @@ export function validatePlan(input: ValidateInput): Finding[] {
     }
   }
 
-  // ---- V5：textOnly 卡不得被引用为图片参考 / 不得有 nodeId ----
-  for (const r of resolved) {
-    if (r.textOnly && r.refs.length === 0 && r.refs.length) { /* noop，占位 */ }
-  }
+  // ---- V9：textOnly 卡仍声明参考（warning）----
   for (const r of resolved) {
     if (cardById.get(r.id)?.textOnly && r.refs.length > 0) {
       findings.push({ rule: "V9", level: "warning", message: `文本类卡 ${r.id} 仍声明了参考`, ref: r.id });
@@ -194,7 +191,9 @@ export function validatePlan(input: ValidateInput): Finding[] {
     }
   }
 
-  // ---- V13：referenceIds 全部存在 + 已出图；generated/accepted 必须有 nodeId + assetPath ----
+  // ---- V13：referenceIds 的存在性与 textOnly；generated/accepted 必须有 nodeId + assetPath ----
+  // ACT: 本条只查 referenceIds 指向的卡存在、且没把文本类资产当图片参考；「参考卡已出图」不在这里校验
+  // （要读产物快照，牵动磁盘），由派工期 nodeShared/directDispatch.resolveReferenceSources 在实际接线时拦截。
   for (const clip of mtrack.clips) {
     for (const ref of clip.referenceIds) {
       const card = cardById.get(ref);

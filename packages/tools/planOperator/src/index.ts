@@ -95,11 +95,18 @@ const snapshotSchema = z.object({
  * continuity / title / notes 等真源字段一律不在 schema 内，传了即校验失败。
  * status 另限四态：accepted 属用户验收判定，写入路径不收（读盘仍保留磁盘上的 accepted）。
  */
-const updateAttemptSchema = z.object({
+// ACT: 用 looseObject 而非 object，与读侧 clipAttemptSchema / ClipAttempt 同口径。
+// 编辑器与服务端媒体任务写进 attempts 的字段不止这四个：jobId（续接下一镜的唯一来源，
+// continuationJobId 只认 status==="succeeded" && attempt.jobId）、assetPath（clipVersions 的版本身份）、
+// signature / index（clipStates 的设置与时间线回显）、parentJobId（承接来源）。z.object 会静默剥掉
+// 未声明键，Agent 用 mtrackRead 结果整数组回写时就会丢这些字段，导致下一镜 continuity="context" 取不到任务号。
+// 上限：looseObject 不再拒绝 attempts 内的未知键，marker 仍可被手改（见 planValidator V13 的已知上限）。
+const updateAttemptSchema = z.looseObject({
   at: z.string().describe("ISO 8601 时间戳"),
   nodeId: z.string().nullable(),
   status: z.string().describe("ClipStatus 取值或 \"cancelled\""),
   error: z.string().optional(),
+  jobId: z.string().trim().max(128).optional().describe("成功尝试的供应商任务号（FreeVideo 形如 j+12hex）；整数组回写时必须原样带上，否则该镜不能被下一镜承接"),
 });
 
 const clipUpdateSchema = z.object({
@@ -110,7 +117,7 @@ const clipUpdateSchema = z.object({
   status: z.enum(["pending", "generating", "generated", "failed"]).optional(),
   nodeId: z.string().nullable().optional(),
   assetPath: z.string().nullable().optional(),
-  attempts: z.array(updateAttemptSchema).optional().describe("整数组替换，不是追加合并"),
+  attempts: z.array(updateAttemptSchema).optional().describe("整数组替换，不是追加合并；每项须保留 jobId 与 error 里的 batch:<uuid>/task:<id> 标记"),
 }).strict();
 
 const clipIdSchema = z.string().regex(/^S\d{3}$/).describe("分镜号，形如 S001（含端点）");
@@ -142,7 +149,7 @@ export const requestSchema = z.object({
   to: clipIdSchema.optional().describe("结束分镜号（含端点）；mtrackRead 缺省为最后一个 clip，仅给 from 时等于 from"),
   expectedUpdatedAt: z.string().optional().describe("mtrackUpdate 的乐观并发基线：mtrackRead 返回的 updatedAt；缺省不做冲突检查（仍原子写）"),
   updates: z.array(clipUpdateSchema).min(1).max(500).optional().describe("mtrackUpdate 的补丁；只允许 status/nodeId/assetPath/attempts 四项，真源字段禁写"),
-  execute: z.boolean().optional().describe("composite 是否真正执行 concat（默认 false 只产出合成清单并写 plan/composite.json）；true 时才调用宿主 ffmpeg，需要插件市场已配置 ffmpeg"),
+  execute: z.boolean().optional().describe("composite 是否真正执行 concat（默认 false 只产出合成清单、不落盘）；true 时才调用宿主 ffmpeg，成功后写 plan/composite.json，需要插件市场已配置 ffmpeg"),
   compositeOutputPath: z.string().optional().describe("composite 输出视频路径，默认 plan/composite.mp4；文件已存在时报错，不自动重命名、不覆盖"),
   indexPath: z.string().default("plan/assetIndex.json").describe("referenceResolver 结算结果：dispatch/assemble 用于参考集合与 nodeId"),
 }).strict();
@@ -192,8 +199,8 @@ export const plugin: ToolPlugin = {
     const store = createStore(context.files);
 
     const description = allowBuild
-      ? "解析资产卡、结算参考接线，并对资产索引、多轨工程与画布快照执行 V1–V15 确定性校验；validate error 清零后可写入派生文件 assetIndex.json、assetReport.json。另可读写多轨工程（mtrackRead/mtrackUpdate）、按起止分镜号出派工清单（dispatch）与画布装配计划（assemble）。composite 按 accepted 片段合成顺序写 plan/composite.json，execute=true 时经宿主 ffmpeg 拼接成片（不覆盖已有输出）。"
-      : "解析资产卡、结算参考接线，并对资产索引、多轨工程与画布快照执行 V1–V15 确定性校验（只读，不写入派生文件）。另可读取多轨工程（mtrackRead）、出派工清单（dispatch）与画布装配计划（assemble）；mtrackUpdate 受 allowBuild 限制，关闭时不可用。composite 同样需要 allowBuild。";
+      ? "解析资产卡、结算参考接线，并对资产索引、多轨工程与画布快照执行 V1–V16 确定性校验（含 V16：承接上一镜的片段最多 3 张参考图、时长至少 10 秒）；validate error 清零后可写入派生文件 assetIndex.json、assetReport.json。另可读写多轨工程（mtrackRead/mtrackUpdate）、按起止分镜号出派工清单（dispatch）与画布装配计划（assemble）。composite 按 accepted 片段出合成清单（execute=true 成功后才写 plan/composite.json），并在此条件下经宿主 ffmpeg 拼接成片（不覆盖已有输出）。"
+      : "解析资产卡、结算参考接线，并对资产索引、多轨工程与画布快照执行 V1–V16 确定性校验（含 V16：承接上一镜的片段最多 3 张参考图、时长至少 10 秒；只读，不写入派生文件）。另可读取多轨工程（mtrackRead）、出派工清单（dispatch）与画布装配计划（assemble）；mtrackUpdate 受 allowBuild 限制，关闭时不可用。composite 同样需要 allowBuild。";
 
     return [{
       name: "planOperator",
@@ -204,8 +211,8 @@ export const plugin: ToolPlugin = {
         "快照必须完整：getCanvasNodes 有分页与截断，total/truncated 不完整时工具直接报错，不拿半份快照出结论。",
         "状态查询纪律：node:getGenerationStatus 的 idle 只表示本次打开节点后未发起生成，idle 不表示没有历史输出；跨轮或换会话前必须先用 getCanvasNodes({ fields: [\"outputs\"] }) 读该节点已产出的媒体，不能用 idle 推断未生成。",
         "本工具只做解析、结算、校验、多轨回写与计划产出：dispatch 只返回逐镜派工清单、assemble 只返回画布装配计划，生成与画布落盘由 agent 走画布工具（addNodes/connectNodes）与 nodeTools 执行；工具自身不执行生成、不连接画布节点、不调用供应商。用户也可能在多轨界面/节点直接派工，此时生成由编辑器自己执行，不要重复生成。",
-        "mtrackUpdate 只回写 status/nodeId/assetPath/attempts 四个生成侧字段，seconds/prompt/referenceIds/continuity 等真源字段归多轨编辑器与对话所有，禁写；status 只接受 pending/generating/generated/failed，accepted 是用户在多轨界面点「验收」的人工判定，Agent 不得代写（磁盘上已有的 accepted 读盘时原样保留）；回写前先用 mtrackRead 的 updatedAt 作为 expectedUpdatedAt 做乐观并发。",
-        "composite 只拼接 status 为 accepted 的片段，按工程文件内顺序（即合成顺序）；没有 accepted 片段、V14 顺序不连续、assetPath 缺失或不可读、实测规格与首段不一致都会直接报错。默认只写 plan/composite.json（executed:false），execute=true 才真正调用宿主 ffmpeg 执行 concat，并在成功后把清单改写为 executed:true；执行前先逐段 ffprobe 实测尺寸/帧率/像素格式/音轨参数，与首段不一致就挡在编码之前，声明 seconds 与实测时长差超过 1s 只记规格提示。输出文件已存在时报错，不自动重命名、不覆盖；输出目录必须已存在，本工具不创建目录。",
+        "mtrackUpdate 只回写 status/nodeId/assetPath/attempts 四个生成侧字段，seconds/prompt/referenceIds/continuity 等真源字段归多轨编辑器与对话所有，禁写；status 只接受 pending/generating/generated/failed，accepted 是用户在多轨界面点「验收」的人工判定，Agent 不得代写（磁盘上已有的 accepted 读盘时原样保留）；回写前先用 mtrackRead 的 updatedAt 作为 expectedUpdatedAt 做乐观并发。attempts 是整数组替换（多轨编辑器那边是追加）：传 attempts 时必须把每项原有的 jobId 一并带上，jobId 只由成功的那次尝试产生，丢了它该镜就无法被下一镜 continuity=\"context\" 承接（续接链会断在 mediaDispatch 的「上一镜没有可用的生成任务号」）；error 里以 batch:<uuid>/task:<id> 开头的标记同样要原样保留，V13 靠它识别服务端媒体通道的产物。",
+        "composite 只拼接 status 为 accepted 的片段，按工程文件内顺序（即合成顺序）；没有 accepted 片段、V14 顺序不连续、assetPath 缺失或不可读、实测规格与首段不一致都会直接报错。默认只出清单、不落盘（预检不改动已有 plan/composite.json），execute=true 才真正调用宿主 ffmpeg 执行 concat，并在成功后写清单 executed:true；执行前先逐段 ffprobe 实测尺寸/帧率/像素格式/音轨参数，与首段不一致就挡在编码之前，声明 seconds 与实测时长差超过 1s 只记规格提示。输出文件已存在时报错，不自动重命名、不覆盖；输出目录必须已存在，本工具不创建目录。",
       ],
       parameters: z.toJSONSchema(requestSchema, { io: "input", target: "draft-07" }),
       executionMode: "sequential",
@@ -243,7 +250,7 @@ export const plugin: ToolPlugin = {
           };
         }
 
-        // ---- validate：只读，零写入，返回 V1–V15 findings ----
+        // ---- validate：只读，零写入，返回 V1–V16 findings ----
         if (action === "validate") {
           const resolved = await loadResolvedFromMarkdown(params, store, signal);
           const loadedMtrack = await loadMultitrack(params, store, signal);
@@ -478,9 +485,12 @@ export const plugin: ToolPlugin = {
           const assetNodes = resolved.cards.map(card => {
             const parsed = cardById.get(card.id);
             const layer = layerOf(card.id);
+            // ACT: label 用「<卡号> <名称>」——派工解析参考按 label 前缀匹配卡号（directDispatch.labelMatchesCard），
+            // 引擎任务名也靠它取到「角色-C01-时间戳」；只写名称会让参考解析与任务名一起丢掉代号。
+            const label = `${card.id} ${card.name}`.trim();
             const data = card.textOnly
-              ? { label: card.name, text: parsed?.prompt ?? "" }
-              : { label: card.name, prompt: parsed?.prompt ?? "", ratio: card.ratio };
+              ? { label, text: parsed?.prompt ?? "" }
+              : { label, prompt: parsed?.prompt ?? "", ratio: card.ratio };
             return {
               cardId: card.id,
               kind: card.kind,
@@ -568,9 +578,9 @@ export const plugin: ToolPlugin = {
           const path = params.path ?? defaultProjectPath;
           const output = params.compositeOutputPath ?? defaultCompositeOutputPath;
           const plan = await planComposite(store, path, output);
-          // 清单只写一次：execute 成功后才写 executed:true，失败时不留一份「谎报已执行」的清单。
+          // 清单只写一次：execute 成功后才写 executed:true。预检（execute=false）不落盘——写 executed:false
+          // 会把上一次成功合成的事实抹掉（画布成片卡按 executed 决定是否挂输出），失败时也不留「谎报已执行」的清单。
           if (params.execute !== true) {
-            await store.writeAtomic(compositeManifestPath, JSON.stringify({ ...plan.manifest, executed: false }, null, 2));
             const summary = {
               manifestPath: compositeManifestPath,
               source: plan.manifest.source,
@@ -583,11 +593,14 @@ export const plugin: ToolPlugin = {
             return { content: [{ type: "text", text: withSpecWarnings(summary, plan.specWarnings) }], details: summary };
           }
           let executed: Awaited<ReturnType<typeof concatComposite>>;
+          // 本次之前输出不存在，才可能留下本次的半成品；已存在时 concatComposite 直接报「已存在」，
+          // 那不是本次产物，清理绝不能删用户已有成片。
+          const hadOutput = await store.exists(output);
           try {
             executed = await concatComposite(store, plan, output, { cwd: context.cwd, ffmpeg: signal => context.ffmpeg(signal) }, signal);
           } catch (error) {
             // ACT: ffmpeg 中途失败/被杀会留半成品，下次合成又被「输出已存在」挡住；这里删掉本次产物再报错（审计 P2-5）。
-            await context.files.remove(output).catch(() => {
+            if (!hadOutput) await context.files.remove(output).catch(() => {
               // 半成品可能根本不存在，删除失败不影响原始错误。
             });
             throw error;
@@ -659,7 +672,11 @@ export const plugin: ToolPlugin = {
      * 错误文案按 action 前缀区分，便于 agent 判断是「文件坏」还是「参数错」。
      */
     async function readProject(path: string, store: PlanStore, signal: AbortSignal | undefined, action: string): Promise<{ raw: Record<string, unknown>; project: MtrackProject }> {
-      if (!(await store.exists(path))) throw new Error(`${action} 失败：多轨工程不存在（${path}）`);
+      if (!(await store.exists(path))) {
+        // ACT: 多轨工程路径是会话工作目录下的相对路径；最常见的坑是会话跑在另一个目录（例如临时工作区），
+        // 报错里把解析基准一起给出来，省掉「路径看起来对、但读的不是同一个工程」这一轮排查。
+        throw new Error(`${action} 失败：多轨工程不存在（${path}）；当前会话工作目录：${context.cwd}。请确认打开/绑定的项目目录，或把该工程放到这个目录下。`);
+      }
       const text = await store.readText(path);
       signal?.throwIfAborted();
       const raw = parseProjectJson(text, path, action);

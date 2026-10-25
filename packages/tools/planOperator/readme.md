@@ -8,15 +8,15 @@
 |---|---|---|
 | `parse` | 资产卡 Markdown → 卡数组 + warnings | 无 |
 | `resolve` | Markdown → assetIndex 结构（含三级参考结算与四道守卫） | 无 |
-| `validate` | V1–V15 里已实现的 V1/V2/V4/V7/V8/V9/V11–V15 校验（V3/V5/V6/V10 未实现，见下），输入 assets / mtrack / canvas 快照 | 无（只读） |
+| `validate` | V1–V16 里已实现的 V1/V2/V4/V7/V8/V9/V11–V16 校验（V3/V5/V6/V10 未实现，见下），输入 assets / mtrack / canvas 快照 | 无（只读） |
 | `build` | validate 的 error 清零后，写入 `plan/assetIndex.json` 与 `plan/assetReport.json` | 是 |
 | `mtrackRead` | 按 `from`/`to` 范围读多轨工程（含端点），返回 `clips` 全量字段与 `missing` | 无 |
 | `mtrackUpdate` | 回写片段生成侧四字段（`status`/`nodeId`/`assetPath`/`attempts`），`updatedAt` 乐观并发 | 是 |
 | `dispatch` | 按起止分镜号出逐镜派工清单（提示词、参考计划、生成参数、当前状态） | 无 |
-| `assemble` | 出画布装配计划（资产节点分层 + 参考连线 + 片段节点），由 agent 执行 | 无 |
-| `composite` | 取 `accepted` 片段出合成清单（复跑 V14 + assetPath 可读校验），写 `plan/composite.json`；`execute=true` 时先逐段 ffprobe 实测规格，再经宿主 ffmpeg 执行 concat | 是 |
+| `assemble` | 出画布装配计划（资产节点分层 + 参考连线 + 片段节点），由 agent 执行；资产节点 `label` 为 `<卡号> <名称>`（如 `C01 林晓`），派工按 label 前缀匹配卡号解析参考 | 无 |
+| `composite` | 取 `accepted` 片段出合成清单（复跑 V14 + assetPath 可读校验）；`execute=true` 时先逐段 ffprobe 实测规格，再经宿主 ffmpeg 执行 concat，成功后写 `plan/composite.json`（`executed:true`）；预检不落盘 | 是 |
 
-`build`、`mtrackUpdate` 与 `composite` 写盘受 `allowBuild` 开关控制；关闭后 `mtrackRead`、`dispatch`、`assemble` 与三个原有只读动作仍可用。`story.mtrack` 由多轨编辑器与 `mtrackUpdate` 共同写入：编辑器持有全部字段，工具只回写生成侧四个字段并原子替换整份文件，真源字段（`seconds`/`prompt`/`referenceIds`/`continuity`）禁写。
+`build`、`mtrackUpdate` 与 `composite` 写盘受 `allowBuild` 开关控制；关闭后 `mtrackRead`、`dispatch`、`assemble` 与三个原有只读动作仍可用。`story.mtrack` 由多轨编辑器与 `mtrackUpdate` 共同写入：编辑器持有全部字段，工具只回写生成侧四个字段并原子替换整份文件；真源字段（`seconds`/`prompt`/`referenceIds`/`continuity`/`title`/`notes` 等）不在补丁 schema 内、传了即校验失败；`status` 写入路径只收 `pending`/`generating`/`generated`/`failed` 四态——`accepted` 是用户在多轨界面点「验收」的人工判定，Agent 不得代写（磁盘上已有的 accepted 读盘时原样保留）。
 
 ## 参数
 
@@ -34,7 +34,7 @@
 | `expectedUpdatedAt` | mtrackUpdate | 省略则不查冲突（仍原子写） |
 | `updates` | mtrackUpdate | —（1–500 条） |
 | `indexPath` | dispatch / assemble | `plan/assetIndex.json` |
-| `execute` | composite | `false`（只产出合成清单并写 `plan/composite.json`；`true` 才调用宿主 ffmpeg 执行 concat） |
+| `execute` | composite | `false`（只返回合成清单、不写盘；`true` 才调用宿主 ffmpeg 执行 concat，成功后写 `plan/composite.json`） |
 | `compositeOutputPath` | composite | `plan/composite.mp4`（已存在即报错，不自动重命名、不覆盖） |
 
 `from`/`to` 为含端点的分镜号（`S001` 格式）；只传 `from` 时 `to` 等于 `from`。`updates` 每项只接受 `clipId` + 可写的四个字段，其他字段传了直接校验失败。
@@ -48,7 +48,7 @@
 - 没有 accepted 片段 → 报错「没有 accepted 片段可合成」；
 - 复跑 `validatePlan` 筛出 `rule === "V14"` 的 error（只含 accepted、按 `clipId` 排序后连续无空洞）→ 不连续时报错并列断点；
 - 逐段校验 `assetPath` 非空且文件真实可读 → 不可读时报错并列 `clipId`；
-- 通过后写 `plan/composite.json`，并返回清单摘要与规格提示。清单模式写 `executed:false`；`execute=true` 成功后才改写为 `executed:true`，执行失败不会留下一份谎报已执行的清单。
+- 预检（`execute=false`）**只返回清单摘要与规格提示、不写盘**——写 `executed:false` 会把上一次成功合成的事实抹掉（画布成片卡按 `executed` 决定是否挂输出），失败时也不留「谎报已执行」的清单；`execute=true` 合成成功后才写 `plan/composite.json`（`executed:true`）。工程不存在时报错带 404（用户可预期的路径问题，不是服务端故障）。
 
 各段 `ratio`/`resolution` 声明不一致时给 warning 级提示、不阻断；执行段另有实测核对（见下）。
 
@@ -56,9 +56,9 @@
 
 随后按合成顺序逐段 `input`，最后 `concat` 到输出文件（默认 `plan/composite.mp4`）。执行段需要宿主 ffmpeg 已就绪——未就绪时报错提示在插件市场下载安装或配置可用版本后重试。输出目录必须已存在（本工具不创建目录），输出文件已存在时报错要求换路径或确认后手动删除，**不自动重命名、不覆盖**。
 
-## 校验规则（V1–V15）
+## 校验规则（V1–V16）
 
-> 实际实现的是 **V1、V2、V4、V7、V8、V9、V11、V12、V13、V14、V15**（`planValidator.ts` 里能产出 `rule:` 的集合）。**V3、V5、V6、V10 未实现**，下表逐条注明现状。
+> 实际实现的是 **V1、V2、V4、V7、V8、V9、V11–V16**（`planValidator.ts` 里能产出 `rule:` 的集合）。**V3、V5、V6、V10 未实现**（V5 原恒假占位代码块已删除，编号断档保留），下表逐条注明现状。
 
 ### 资产侧（V1–V9）
 
@@ -69,24 +69,25 @@
 | V2 | error | 参考目标 kind 必须与本卡一致 |
 | V3 | — | **未实现为 finding**。前向引用由 `packages/tools/planOperator/src/referenceResolver.ts` 以 `backwardsOnly` 告警拦截（该文件内三处 `target.order >= card.order`），`validate` 的 findings 里不会有 V3 |
 | V4 | error | 构图卡 `KF*` 必须至少一个母版参考，不得无参考出图 |
-| V5 | — | **未实现**（该块只产出 V9 warning） |
+| V5 | — | **未实现**；原恒假的占位代码块已删除，该处只产出 V9 warning |
 | V6 | — | **未实现**（画布入边数与参考数的一致性并入 V15，且 V15 需传 `snapshot`） |
-| V7 | error / warning | 提示词三字段（`integratedMultimodalDescription`/`overallSoundscape`/`nonDiegeticMusic`）里的**官方标记** `<Picture N>`/`<Video N>`/`<Audio N>` 只查越界：N 必须落在该类型参考的数量上限内（画面 = 非 sound 卡数、音频 = sound 卡数、视频或参考卡缺 `kind` 时 = 参考总数），越界即 error；**不查重号**、也**不要求**每个编号出现。旧工程遗留的 `{{ref N}}` 只报迁移 warning「旧格式，建议迁移为 MiniMax H3 官方标记」。官方标记匹配大小写与内部空白不敏感（`/<\s*(picture|video|audio)\s*(\d+)\s*>/gi`） |
-| V8 | error | 片段图片参考 ≤4；声音参考 ≤1；视频参考 ≤1 |
+| V7 | error | 参考标记统一写 `{{ref N}}`，N 为参考顺序里的序号（本镜范围 `1..referenceIds.length`）。提示词三字段（`integratedMultimodalDescription`/`overallSoundscape`/`nonDiegeticMusic`）里出现行内媒体标签 `<Picture N>`/`<Video N>`/`<Audio N>` **一律 error**（尖括号标记会被生成侧当普通文本透传，不是本项目的参考写法）；`{{ref N}}` 越界（N < 1 或 N > 参考数）也是 **error**。两条分支都没有 warning 路径。同一编号反复出现是正常写法：不查重号、也不要求每个编号都出现。匹配大小写与内部空白不敏感（`{{\s*ref\s*(\d+)\s*}}` / `<\s*(picture|video|audio)\s*(\d+)\s*>`） |
+| V8 | error | 片段图片参考 ≤9、音频参考 ≤1（视频参考与图片同桶计数，过滤器只排除 `kind === "sound"` 的卡）。**图片上限 9 是校验器口径**（MiniMax H3 独立镜头引擎上限）；freevideo 供应商层另有更严的拦截：单请求参考图 ≤4（`packages/providers/src/media/freevideo.ts` 的 `maxImageReferences`），`continuity="context"` 续接镜头合计 ≤3（由 V16 拦）。三处口径各管各层，校验器放行 ≠ 供应商放行 |
 | V9 | warning | 文本类卡仍声明了参考 |
 
 A3 修订：模式判定按节点实际 `matchingModes`，不写死「4 图就是多参考」。A4 修订：编号宽口径解析（`C1`、`c01-b` 均接受），索引侧规范化：补零不截断、后缀大写、`SC` 先于 `C` 匹配。
 
-### 片段侧（V10–V15）
+### 片段侧（V10–V16）
 
 | 规则 | 级别 | 说明 |
 |---|---|---|
 | V10 | — | **未实现**。`node.data.mode` 是否仍在模型 `matchingModes` 内没有判定：`snapshotNodeSchema` 只接受 `id`/`type`/`status`/`outputs`，快照里根本没有 `data`，要在校验器里核对须先扩 schema。当前只能在读配置那一步用 `node:getConfig` 的 `matchingModes` 人工核对 |
 | V11 | error | 片段 `clipId` 唯一、`S\d{3}` 格式、必填字段、`status` 枚举、`continuity` 枚举 |
 | V12 | error | `seconds` 为 2–60 整数；`resolution ∈ {768P, 2K}`；`ratio` 合法 |
-| V13 | error | `referenceIds` 全部存在于资产索引；文本类资产不得当图片参考；`generated`/`accepted` 必须有 `nodeId` + `assetPath`；`accepted` 时画布节点必须有可读视频产出 |
-| V14 | error | 合成清单只含 `accepted` 片段；顺序连续无空洞 |
+| V13 | error | `referenceIds` 指向的资产必须存在，且文本类资产不得当图片参考；`generated`/`accepted` 必须有 `nodeId`（媒体任务通道按 attempts 的 `batch:<uuid>`/`task:<id>` 标记豁免）+ `assetPath`；传 `snapshot` 时 `accepted` 还要求画布节点有可读视频产出。**注意**：校验器不查「参考卡已出图」（要读产物快照，牵动磁盘）；该判定由派工期 `packages/nodeShared/src/mtrack/directDispatch.ts` 的 `resolveReferenceSources` 在实际接线时拦截（参考没有可用产出即报「参考图未就绪」） |
+| V14 | error | 合成清单只含 `accepted` 片段；顺序连续无空洞（另有 warning：accepted 在工程里的顺序与镜号升序不一致时提示合成按工程顺序出片） |
 | V15 | error | `referenceIds` 顺序与画布节点实际 `referenceOrder` + 入边顺序一致 |
+| V16 | error | `continuity` 为 `context`/`continue`（承接上一镜）的片段：参考图最多 3 张、时长至少 10 秒（引擎 continue_from 限制） |
 
 ## 状态查询纪律
 

@@ -107,7 +107,7 @@ export function referenceTags(entries: readonly { dataType: string; source: stri
   return tags;
 }
 
-/** 与 directDispatch.buildPrompt 同口径：风格前缀、漏写段首补字段名、声音两段拼段名。 */
+/** 派工下发的唯一拼装点：风格前缀、漏写段首补字段名、声音两段拼段名（与编辑器 promptToText 合成的段名同形）。 */
 export function buildPromptText(clip: MtrackClip, global?: { style?: string; systemPrompt?: string }) {
   const body = clip.prompt.integratedMultimodalDescription.trim();
   const style = global?.style?.trim() ?? "";
@@ -181,12 +181,28 @@ export async function composeClipRequest(options: {
    * 与 referencePicker 的 modeHint「text 模式不会发送参考图」矛盾（审计 P2）。{{ref N}} 也一并抹掉。
    */
   const referenceEntries = resolvedMode === "text" ? [] : firstFrameEntry ? entries.filter(item => item !== firstFrameEntry) : entries;
-  const tags = referenceTags(referenceEntries.map(item => ({ dataType: item.dataType, source: item.nodeId })));
+  /*
+   * ACT: 编号基准必须是 `clip.referenceIds` 的**位次**（就是 entries 的下标），不能是 referenceEntries 的下标：
+   * mode=image 且恰一张图时那张图已被摘去作首帧，按摘除后的下标编号会让 `{{ref 1}}` 找不到映射、被原样下发，
+   * 而校验器 V7（planValidator.ts:228/:235/:250）的基准是 referenceIds，还判它通过。
+   * 与 videoGenerationNode:241/:355 的「按 refList 逐项换算」同口径：首帧也占它自己的位次。
+   */
+  const tags = referenceTags(entries.map(item => ({ dataType: item.dataType, source: item.nodeId })));
   const imageList = referenceEntries.filter(item => item.dataType === "IMAGE");
   const audioList = referenceEntries.filter(item => item.dataType === "AUDIO");
   const videoList = referenceEntries.filter(item => item.dataType === "VIDEO");
   const body = buildPromptText(clip, global)
-    .replace(/\{\{\s*ref\s*(\d+)\s*\}\}/gi, (mention, n: string) => tags.get(Number(n)) ?? (resolvedMode === "text" ? "" : mention));
+    .replace(/\{\{\s*ref\s*(\d+)\s*\}\}/gi, (mention, n: string) => (resolvedMode === "text" ? "" : (tags.get(Number(n)) ?? mention)));
+  /*
+   * ACT: 换算不到就报错，绝不把 `{{ref N}}` 字面量透传给引擎（与 videoGenerationNode:355-358 同口径）。
+   * 命中得的标记已在上一行替换掉，所以这里还能搜到的就是越界位次（N<1 或 N>referenceIds.length）。
+   * text 模式本就不下发参考，上面已把标记抹掉，不参与本检查。
+   */
+  if (resolvedMode !== "text") {
+    for (const matched of body.matchAll(/\{\{\s*ref\s*(\d+)\s*\}\}/gi)) {
+      throw new Error(`${clip.clipId} 的提示词含 {{ref ${Number(matched[1])}}} 超出范围：本镜参考顺序共 ${clip.referenceIds.length} 项（referenceIds 的位次即 {{ref N}} 的 N），请改正参考标记或补齐参考`);
+    }
+  }
   // ACT: 提示词为空时服务端 zod 只回 400「参数错误」，编辑器无从解释；在派工前就拦下并说清是哪个字段。
   if (!body.trim()) throw new Error(`${clip.clipId} 的提示词为空（画面正文/环境声/配乐都没填），请先补提示词再生成`);
 
@@ -254,14 +270,14 @@ export async function composeClipRequest(options: {
      * 或 referenceMode 数组（形如 `imageReference:4`）。早期这里把 "text" / "startFrameOptional"
      * 也包成数组，被 zod 直接 400（"纯文本/首帧"两类镜一点生成就失败），故拆成裸串。
      */
-    // ACT: 顺序不能换——首帧图在 :186 已从 referenceEntries 摘掉，先判长度会让首帧镜落到 "text"（审计 P0-1）。
+    // ACT: 顺序不能换——首帧图在上面已从 referenceEntries 摘掉，先判长度会让首帧镜落到 "text"（审计 P0-1）。
     // ACT: 续接镜一个参考都没有时槽位数组为空，而 zod 的数组分支要求 .min(1)，退回裸串 "text"。
     mode: continueFrom ? (continueSlots.length ? continueSlots : "text")
       : firstFrameEntry ? "startFrameOptional"
         : resolvedMode === "text" || !referenceEntries.length ? "text"
           : referenceModeSlots,
     outputDirectory: `assets/${clip.clipId}`,
-    referenceMap: referenceEntries.map((item, index) => ({
+    referenceMap: entries.map((item, index) => ({
       index: index + 1,
       ref: tags.get(index + 1) ?? "",
       cardId: item.cardId,

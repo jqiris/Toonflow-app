@@ -20,6 +20,8 @@ const rules = [
 
 const version = "1.1.1";
 const agentSuffix = "/freevideo/agent/v1";
+/** 参考图张数上限（Toonflow 产品口径）：与模型 mode 声明和下发前拦截共用一个数。 */
+const maxImageReferences = 4;
 
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("FreeVideo 响应格式错误");
@@ -55,7 +57,8 @@ function wait(signal: AbortSignal, ms: number) {
 
 function clampSeconds(value: number | undefined) {
   const seconds = Number.isFinite(value as number) ? (value as number) : 5;
-  return Math.min(60, Math.max(2, seconds));
+  // ACT: 引擎要求 seconds 为整数（宿主 duration 可能是小数档位），取整后再夹取。
+  return Math.round(Math.min(60, Math.max(2, seconds)));
 }
 
 /** 宿主分辨率档位映射到 FreeVideo 的 megapixels。 */
@@ -79,11 +82,39 @@ function imageDimensions(ratio?: string, size?: string) {
   };
 }
 
-/** 任务名（max 80 字）：命令类别-主题，如「参考生图-空灵超现实唐代庭院」。 */
-function jobLabel(request: { prompt?: string; images?: MediaInput[]; videos?: MediaInput[]; audios?: MediaInput[]; firstFrame?: MediaInput; lastFrame?: MediaInput }, mediaType: "video" | "image") {
+/** 代号前缀→资产/镜头类型：任务名以它开头，如「角色-C01-20261024-2355」。 */
+// ACT: 已知冲突——assetCard 契约里 S = 声音卡，这里 S 映射为分镜（镜头编号 S011）。
+// 声音卡是 textOnly 资产，不出图不进本供应商，现状不会触发歧义；若以后让声音卡走图像生成，必须先重命名其中一个口径。
+const jobKinds: Record<string, string> = { C: "角色", SC: "场景", P: "道具", KF: "关键帧", S: "分镜" };
+
+/** 本地时间戳（YYYYMMDD-HHmm）：同一资产的多次生成靠它区分。 */
+function jobStamp(now = new Date()) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+}
+
+/** 从标签里取规范代号（C01 / SC01 / P02 / KF1 / S001），取不到返回空串。 */
+function jobCode(label: string) {
+  const matched = /(?:^|[^A-Za-z0-9])(KF|SC|C|P|S)(\d{1,3})(?![0-9])/i.exec(label);
+  return matched ? `${matched[1].toUpperCase()}${matched[2]}` : "";
+}
+
+/**
+ * 任务名（max 80 字）：前缀-代号-时间戳。资产图是「角色-C01-20261024-2355」，
+ * 视频是「参考视频-S011-20261025-0156」（视频没有资产类型，用生成方式当前缀）。
+ * ACT: 代号由调用方放在 request.label 里（资产节点名、镜头编号）；取不到代号就退回旧的
+ * 「生成方式-提示词主题」口径（主题取提示词首段，取不到主题才用请求 label），两者都带时间戳。
+ * 截断只截主体、时间戳必须留下——上游节点名与抽取模型给的名字都没有长度约束。
+ */
+function jobLabel(request: { label?: string; prompt?: string; images?: MediaInput[]; videos?: MediaInput[]; audios?: MediaInput[]; firstFrame?: MediaInput; lastFrame?: MediaInput }, mediaType: "video" | "image") {
   const action = mediaType === "video"
     ? (request.firstFrame && request.lastFrame ? "首尾帧视频" : request.firstFrame ? "首帧视频" : request.lastFrame ? "尾帧视频" : request.images?.length || request.videos?.length || request.audios?.length ? "参考视频" : "文生视频")
     : request.images?.length ? "参考生图" : "文生图";
+  const label = (request.label ?? "").trim();
+  const code = jobCode(label);
+  // 前缀口径：视频用生成方式（参考视频-S011-时间戳），资产图用资产类型（角色-C01-时间戳）；
+  // 两种都保留时间戳，同一资产的多次生成在引擎列表里不会同名。
+  if (code) return jobName(`${mediaType === "video" ? action : jobKinds[code.replace(/\d+$/, "")] ?? action}-${code}`);
   // 主题：英文按词边界截断（不切词中间），纯中文无空格时按字符截 12 字
   const raw = (request.prompt ?? "").trim().replace(/\s+/g, " ");
   let subject: string;
@@ -99,8 +130,15 @@ function jobLabel(request: { prompt?: string; images?: MediaInput[]; videos?: Me
   } else {
     subject = raw.slice(0, 12);
   }
-  subject = subject || "未命名";
-  return `${action}-${subject}`.slice(0, 80);
+  // ACT: 原 :128 先把 subject 兜成「未命名」，:129 的 `subject || label` 恒取 subject，label 回退分支是死代码。
+  // 按注释意图修正口径：提示词主题取不到才用请求 label，两者都没有才写「未命名」。
+  return jobName(`${action}-${subject || label || "未命名"}`);
+}
+
+/** 拼「主体-时间戳」并按 80 字上限截断主体：时间戳始终保留，否则长名字会把区分度最高的那段切掉。 */
+function jobName(head: string) {
+  const stamp = jobStamp();
+  return `${head.slice(0, Math.max(0, 79 - stamp.length))}-${stamp}`;
 }
 
 /** 推导上传文件名扩展名：优先 mimeType 子类型，其次素材名后缀，兜底 bin。 */
@@ -220,8 +258,8 @@ export default {
       id: "MiniMax-H3",
       label: "MiniMax-H3（本地 FreeVideo）",
       type: "video",
-      // ACT: imageReference:4 是 Toonflow 产品界面口径（不是 V8——V8 的 MAX_IMAGE_REFERENCES 是 9）；引擎单块默认支持到 9 张参考，≥30s 自动分块时实限 3（422），供应商不预拦（维持裁决）。
-      mode: ["text", "startFrameOptional", ["imageReference:4", "videoReference:1", "audioReference:1"]],
+      // ACT: imageReference 上限与 maxImageReferences 常量同源；引擎单块默认支持到 9 张参考，≥30s 自动分块时实限 3（422），供应商不预拦（维持裁决）。
+      mode: ["text", "startFrameOptional", [`imageReference:${maxImageReferences}`, "videoReference:1", "audioReference:1"]],
       audio: "optional",
       durationResolutionMap: [{ duration: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60], resolution: ["768P", "2K"] }],
     },
@@ -245,9 +283,11 @@ export default {
     // ACT: 单次图像生成最多等待 10 分钟。
     const signal = AbortSignal.any([AbortSignal.timeout(10 * 60_000), ...(this.signal ? [this.signal] : [])]);
 
+    // ACT: 原先把参考图全上传再拦 >4——拦截报错误后已上传的文件成了引擎侧孤儿；改为上传前按提交数拦截。
+    const submittedImages = request.images ?? [];
+    if (submittedImages.length > maxImageReferences) throw new Error(`这类模型最多支持${maxImageReferences}张参考图，当前提交了${submittedImages.length}张`);
     const images: string[] = [];
-    for (const image of request.images ?? []) images.push(await upload(this, token, agent, image, signal));
-    if (images.length > 4) throw new Error(`这类模型最多支持4张参考图，当前提交了${images.length}张`);
+    for (const image of submittedImages) images.push(await upload(this, token, agent, image, signal));
 
     const { width, height } = imageDimensions(request.ratio, request.size);
     const { job } = await runJob(this, token, agent, {

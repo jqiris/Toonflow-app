@@ -1,0 +1,65 @@
+# 导入资产与分镜节点
+
+把剧本/小说/分镜文本（粘贴正文或选工作区文件）抽成资产卡与分镜，可选出资产图，落盘 `plan/assetIndex.json` 与 `plan/story.mtrack`，交给画布上的多轨编辑器接着创作。
+
+## 功能
+
+- 面板入口在卡片内的「导入资产与分镜」按钮上（`el-popover`，根元素 `nodrag nopan nowheel`，拖节点/改选区/平移画布自动收起）。
+- 文本来源二选一：工作区根目录的文件列表（`list()`，只列文件），或直接粘贴正文；两者都填时以粘贴正文为准。正文不进节点 `data`，只留在工作区文件里。
+- 抽取走设置里已配置的文本模型（`ai.getModels()` + `ai.generate()`），提示词按 `packages/skills/assetCard/references/assetCardTemplate.md` 的编号与字段口径内置在 `src/assetImport.ts`（节点不 import skills 包）。
+- 抽取结果先预览再确认：资产卡逐张可勾选（`C` 人物 / `SC` 场景空镜 / `P` 道具 / `S` 仅文字资产），分镜按原文顺序整批导入。
+- 「同时生成资产图」勾选后，逐张走媒体通道出图（`ai.generateImage()` → `/api/ai/media/generate`，与图片生成节点同一条路），产物落 `assets/<本节点 id>/`，并在本节点右侧新建图片节点（`remote-imageNode`，label 为 `<资产编号> <名称>`），把画布节点 id 写回资产索引的 `nodeId`。资产卡的画幅按类别取标准档位（人物四视图整版/场景空镜 `16:9`、道具 `1:1`）：模型没给、给成非法形状（空串/中文），或给了非标准档位（`2:3`/`9:16`/`4:5`）都归一到标准档，被改写的卡记进 `warnings`，不套工程画幅。
+- 落盘写 `plan/assetIndex.json`（`{ version: "assetIndex-v1", cards }`）与 `plan/story.mtrack`（`normalizeProject` + `createClip` 组装）。两个文件任一已存在就直接拒绝，绝不覆盖；先写索引再写工程，工程写失败会删掉刚建的索引。不写 `global.model`——该字段是多轨派工用的视频模型，写进抽取用的文本模型会让派工报「所选模型不存在」。
+- 分镜的参考清单只留本次真的出了图的图片资产：出图失败的卡会从 `clips[].referenceIds` 里剔掉（校验器 V13 只看卡在不在索引里、不看 `nodeId`，失败卡留着会让多轨派工报「参考图未就绪」）；被剔掉、超过引擎上限（单镜图片参考 ≤9、承接镜 ≤3）、承接镜不足 10 秒都记进 `warnings`，不中断导入。
+- 原文里已经写好视频提示词的镜头，抽取时整段原样保留（六个官方段名与段序照抄，不改写成一句话）；落盘时按行首段名拆分进三段字段——正文进 `integratedMultimodalDescription`，`overall_soundscape:` / `non_diegetic_music:` 两段各进同名字段（段名不进字段，与多轨编辑器写入口径一致，免得工程每镜带两条「缺声音段」的 V11 warning）。段落要补写或改写时用 `clips` 按 `clipId` 覆盖。
+- 分镜的 `continuity` 默认按引擎口径「能承接就承接」：上一镜存在 + 本镜 ≥10 秒 + 参考 ≤3 才算承接（`context`），否则独立起拍（`shot`）；模型或 `clips` 显式给了值就照用。
+- 无文本模型时面板首屏显式报错并禁用抽取；无图片模型时同样显式提示，取消勾选出图仍可只导入资产卡与分镜，不静默降级。
+
+## 对话 Agent 的节点函数
+
+节点注册两个函数：`node:importScript`（跑一次导入）与 `node:importStatus`（看进度与上次结果）。
+
+`node:importScript`（节点自身注册）：
+
+| 参数 | 说明 |
+| --- | --- |
+| `path` | 工作区内的**剧本文本**路径，与 `text` 二选一；不要指向 `assets/assetCards.md`，那会把已定稿的卡片当正文再抽一遍 |
+| `text` | 直接给出的正文，与 `path` 二选一 |
+| `model` | 抽取用文本模型，`JSON.stringify([providerId, modelId])`（数组字符串）；不传用面板当前选择 |
+| `ratio` | 工程画幅与分镜画幅，取值 `9:16` / `16:9` / `1:1` / `4:3` / `3:4`；非法值回落到 `9:16`（资产卡的画幅另按类别标准档位归一） |
+| `style` / `systemPrompt` | 写入工程 `global.style` / `global.systemPrompt` |
+| `generateImages` | 是否为资产卡出图并放进画布（需要图片模型） |
+| `clips` | 按 `clipId` 覆盖抽取出来的分镜：`{ clipId, prompt, seconds?, referenceIds?, continuity? }[]`。原文已写好视频提示词、或要改写某一镜时用它；`clipId` 从 `S001` 起按正文顺序编号，`continuity` 可写 `true`/`false`（承接上一层/独立起拍）或 `shot`/`context`。引用了不存在的资产、仅文字资产，或 `clipId` 不在本次分镜里，都会**在出图前**直接报错（不会先烧完资产图、建好图片节点再报）；`seconds` 清洗成 2–15 的整数秒，被改写会记进 `warnings` |
+
+返回 `{ cards, shots, images, failed, warnings, indexPath, projectPath }`：`failed: [{ id, reason }]` 是出图失败的卡（单张失败不中断整条导入，失败卡在索引里 `nodeId` 为 `null`，补一张即可，并自动从参考清单里移除）；`warnings` 是不中断导入、但已经不满足引擎口径的提醒（参考超上限被截断、参考未出图被移除、`clips` 覆盖的参考被滤空、承接镜不足 10 秒、画幅被归一、秒数被改写、首镜写了承接被归一）。与面板按钮共用同一条链路（`src/assetImport.ts` 的 `importAssets`），只是不依赖面板打开与按钮状态；面板预览过的结果会带着走，不会二次调用模型。
+
+> **取工具的前提**：不依赖「面板打开」指的是弹层收着也能跑，但这两个函数属于节点工具——**目标画布的节点必须先存在**（用户放上画布，或 agent 先 `addNode`），且**工作区画布页已加载**（`apps/web` 的 `getCanvasContext()` 在画布未初始化时返回空，服务端就注入不了 `tools`）。纯聊天、没有画布上下文的会话里取不到任何 `node:` 工具，这时先请用户打开目标项目的画布。
+
+两个函数都受 `nodeTools` 的超时约束（`packages/nodeScaffold/src/nodeTools.ts:136` 默认 120 秒）：`node:importScript` 显式设了 `timeoutMs: 30 * 60 * 1000`，抽取加逐张出图一次调用等到跑完；面板按钮直调 `runImport`，不受这个超时限制。
+
+`node:importStatus`（无参数）：
+
+| 返回字段 | 说明 |
+| --- | --- |
+| `running` / `extracting` | 是否正在出图 / 正在抽取（两者互斥，都是 false 表示空闲） |
+| `phase` / `done` / `total` | 阶段（`extract` / `images` / `write`）与出图进度张数 |
+| `summary` / `error` | 本次结果的摘要文本与错误信息 |
+| `failed` | 本次出图失败的卡 `[{ id, reason }]` |
+| `aborted` | 本次是否被取消/超时打断（`running=false` + `aborted=true` 表示这一轮是中断结束） |
+| `warnings` | 本次没有中断导入、但已被截断或不合引擎口径的提醒 `string[]` |
+| `placedNodeIds` | 本次运行已建的资产图节点 id；取消/失败时这些节点与 `assets/<nodeId>/` 会留在画布上，需要手工删除（画布没有删节点的 API） |
+| `savedSummary` | 节点 `data.summary`（随画布 JSON 落盘，重开工程也看得到上一次跑出了什么） |
+
+## 已知边界
+
+- 正文单次上限 20 万字符，超出要求分段导入（避免悄悄截断原文）。
+- 媒体通道没有负面提示词字段，资产卡的 `negativePrompt` 并进正向提示（`避免出现：…`）。
+- 资产图按 3 列网格排在本节点右侧，不做重叠检测。
+- 生成/导入进行中再点一次会被拒绝（同一节点串行），占用标记在第一个 `await` 之前同步置位，同一轮并行发两个 `node:importScript` 也拦得住；画布拖节点不会中断在跑的导入。
+- 取消/超时：写盘前会再复查一次中止状态，不会把已取消的工程落成磁盘状态；但已经建好的资产图节点与 `assets/<nodeId>/` 不回收，靠 `node:importStatus` 的 `placedNodeIds` 手工清理。
+- 分镜参考在落盘前按引擎上限收口：单镜图片参考 ≤9（超出截断并记 warning）、出图失败的卡一律剔掉；承接镜（`context`）的图片参考 ≤3（显式写了 `context` 也截，截断记 warning，与 ≤9 同一口径）；承接镜「≥10 秒」是引擎硬限制但导入只告警、不擅自改模型给的时长。
+- 秒数只收 2–15 的整数秒（引擎校验 V12 实际允许 2–60）：抽取结果与 `clips` 的 `seconds` 都清洗，取整或收进档位都会改落盘值并记一条 `warnings`，需要更长请导入后在多轨工程里改。
+- 首镜的 `continuity` 由 `normalizeProject` 强制回落成 `shot`（`@toonflow/node-shared/mtrack/mtrackProject.ts:268`）：给首镜写 `context` 不生效，导入会在 `warnings` 里说明；导入路径不会调用多轨编辑器的首镜提示（`firstClipContinuityFindings`）。
+- 资产卡的画幅按类别标准化（人物/场景 `16:9`、道具 `1:1`）：模型给了非标准档位会被归一，卡片编号与名称照原样落盘。
+- 大量资产在一次导入里逐张串行出图，没有批次与断点续跑；但**单张失败不再中断整条导入**——已出的图与已建节点保留，失败卡的 `nodeId` 留 `null`，失败清单经 `node:importStatus` 的 `failed[]` 与返回摘要带出，人工补一张即可，不必整批重来。
+- 重跑会被独占写挡下：`importAssets` 入口先探测 `plan/story.mtrack` 与 `plan/assetIndex.json`，任一已存在立刻报「已存在，未覆盖」，不会先烧文本模型与图片模型；想重来只能手动改名/清理，或在原工程上 `node:bindProject(mode:"open")` 继续。

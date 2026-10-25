@@ -101,6 +101,8 @@ export interface MediaGenerationRequest {
   providerId: string;
   modelId: string;
   prompt: string;
+  /** 引擎侧任务名的可读标签（资产/镜头代号，如 `C01`、`S001`）；只用内容、不需要任务名的供应商可忽略。 */
+  label?: string;
   outputDirectory?: string;
   images?: MediaReference[];
   videos?: MediaReference[];

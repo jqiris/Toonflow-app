@@ -210,6 +210,8 @@ const generationInput = computed<Omit<NodeImageRequest, "directory"> | undefined
     providerId: choice.providerId,
     modelId: choice.modelId,
     prompt: generationPrompt.value,
+    // ACT: 引擎任务名用节点名（资产代号 C01/SC01/P02）拼「类型-代号-时间戳」。
+    label: nodeProps.value.label || undefined,
     size: data.value.size,
     ratio: data.value.ratio,
     outputDirectory: `assets/${id}`,

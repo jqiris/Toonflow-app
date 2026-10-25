@@ -22,6 +22,7 @@ export type NodeImageRequest = {
   providerId: string;
   modelId: string;
   prompt: string;
+  label?: string;
   outputDirectory: string;
   images?: { path: string; mimeType: string }[];
   ratio?: string;

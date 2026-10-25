@@ -266,8 +266,8 @@ function readBridge(): ReturnType<typeof resolveCanvasBridge> {
 
 /**
  * 可用节点类型里解析视频节点 type：画布注册名可能带来源前缀（remote-videoNode）。
- * ACT: 与 directDispatch 的 resolveNodeType（nodeShared/src/mtrack/directDispatch.ts:78，未导出）同构；
- * 只查这一种类型且本包不能改 nodeShared，故就地写这份 5 行等价。
+ * ACT: 与 packages/tools/canvas/src/assembly.ts 的 resolveNodeType（未导出）同构（directDispatch 的同名旧实现已随死代码删除）；
+ * 只查这一种类型且本包不能改 tools 包，故就地写这份 5 行等价。
  */
 function resolveVideoNodeType(available: readonly { type: string }[]) {
   if (available.some(item => item.type === "videoNode")) return "videoNode";
@@ -347,7 +347,7 @@ function requireEditor() {
 /** 分镜号定位键：与 planOperator 一致，形如 S001。 */
 const clipIdSchema = z.string().regex(/^S\d{3}$/);
 
-/** patch 载荷形状：对齐 mtrackEdit 的 Partial<MtrackClip>；业务取值约束（seconds 2–60、ratio/resolution 枚举、referenceIds≤4、continuity）由编辑内核 validateClip 整批拦截并回 issues。 */
+/** patch 载荷形状：对齐 mtrackEdit 的 Partial<MtrackClip>；业务取值约束（seconds 2–60、ratio/resolution 枚举、referenceIds≤9 且 context 镜 ≤3、continuity）由编辑内核 validateClip 整批拦截并回 issues。 */
 const clipPatchSchema = z.strictObject({
   clipId: clipIdSchema.optional(),
   title: z.string().optional(),
@@ -369,7 +369,11 @@ const clipPatchSchema = z.strictObject({
   status: z.enum(["pending", "generating", "generated", "failed"]).optional(),
   nodeId: z.string().nullable().optional(),
   assetPath: z.string().nullable().optional(),
-  attempts: z.array(z.strictObject({ at: z.string(), nodeId: z.string().nullable(), status: z.string(), error: z.string().optional() })).optional(),
+  // ACT: 与 planOperator 的 updateAttemptSchema（packages/tools/planOperator/src/index.ts:98-110）同口径用 looseObject：
+  // attempts 实际携带 jobId / assetPath / signature / index / parentJobId（mtrackProject.ts 的 ClipAttempt 扩展字段），
+  // strictObject 会把它们整批拒收、z.object 会静默剥掉——agent 从 readClips 原样回写时两种都断，
+  // 剥掉 jobId 尤其致命：续接链会断在「上一镜没有可用的生成任务号」。上限：未知键不拒，marker 仍可被手改（同 V13 已知上限）。
+  attempts: z.array(z.looseObject({ at: z.string(), nodeId: z.string().nullable(), status: z.string(), error: z.string().optional() })).optional(),
   notes: z.string().optional(),
 });
 
@@ -509,13 +513,18 @@ nodeTools.register({
   },
 });
 
-/** 资产卡索引：与编辑器同一份 plan/assetIndex.json；缺文件按空索引处理（老工程没有索引是正常态）。 */
+/** 资产卡索引：与编辑器同一份 plan/assetIndex.json。
+ *  ACT: 缺文件按空索引处理（老工程没有索引是正常态）；但文件在而读取/解析失败是损坏，
+ *  静默吞成空清单会让 node:readReferenceMap 把「索引坏了」报成「画布上没有这张卡」（满屏假 missingCardIds）。
+ *  损坏时原样抛错——工具调用报错就是 agent 侧的可发现状态提示，与编辑器把错误并入 readError 展示同口径。 */
 async function readIndexCards(): Promise<AssetIndexCard[]> {
   try {
     const index = await files.getWorkspaceFiles().readJson<AssetIndex>(assetIndexPath);
     return Array.isArray(index?.cards) ? index.cards : [];
-  } catch {
-    return [];
+  } catch (reason) {
+    const code = (reason as { response?: { data?: { data?: { code?: string } } } })?.response?.data?.data?.code;
+    if (code === "ENOENT") return [];
+    throw reason;
   }
 }
 
@@ -533,7 +542,13 @@ async function readIncomingSources(call: CanvasCall, nodeId: string, signal?: Ab
   }
 }
 
-/** 视频节点上生效的参考顺序（{{ref N}} 的真源）；节点没有引用函数（已删除/非视频节点）时返回 undefined。 */
+/**
+ * 视频节点上生效的参考顺序（{{ref N}} 的真源）；节点没有引用函数（已删除/非视频节点）时返回 undefined。
+ * ACT: 与 planValidator V15 的对账口径差别说清：V15 收的 snapshot.referenceOrder 载荷约定为
+ * `assets/<卡号>/...` 路径形态（normalizeSourceId 靠正则从路径里提卡号），本函数返回的
+ * { nodeId, sourceHandle } 画布节点 id 形态不适用该正则，直接喂给 V15 会逐条误报不一致。
+ * 组 snapshot 时用来源节点的产出路径（outputs.image.value.url），不要拿这里的 nodeId 充当。
+ */
 async function readActualOrder(call: CanvasCall, nodeId: string, signal?: AbortSignal) {
   try {
     const result = await call({ name: "nodeTools", args: { nodeId, name: "node:getReferenceOrder", args: { handleId: "in" } } }, signal) as {
@@ -610,13 +625,13 @@ nodeTools.register({
     const editor = requireEditor();
     const clipIds = args.clipIds ?? (await editor.readRange(args.from, args.to)).clips.map(clip => clip.clipId);
     signal?.throwIfAborted();
-    return editor.launchDispatch(clipIds, { includeFinished: args.includeFinished });
+    return editor.launchDispatch(clipIds, { includeFinished: args.includeFinished, origin: "agent" });
   },
 });
 
 nodeTools.register({
   name: "cancelBatch",
-  description: "请求取消批次（UI「取消批次」等价物）：batchId 缺省取当前 activeBatchId。abort 本地轮询后对批次内在跑镜头逐个 node:cancelGeneration，并把状态回写 pending、attempts 追加 cancelled，立即返回 { cancellationRequested: true, batchId } 不等待；取消成功不等于供应商退费或撤销任务",
+  description: "请求取消批次（UI「取消批次」等价物）：batchId 缺省取当前 activeBatchId。abort 本地轮询并对批次内活动任务发一次 POST /api/ai/media/tasks/cancel 批量取消，成功后把在跑镜头回写 pending、attempts 追加 cancelled；取消失败保留 generating 与任务号并报错误（写 pending 会让用户以为已停），可稍后再次取消。立即返回 { cancellationRequested: true, batchId } 不等待；取消成功不等于供应商退费或撤销任务",
   parameters: z.strictObject({ batchId: z.string().min(1).optional() }),
   async execute(args, { signal }) {
     // ACT: 取消同受 nodeTools.call 单次 120 秒超时契约约束，故与派工一样只发起不待流；cancellationRequested 仅表示停止请求已发出。
@@ -794,6 +809,7 @@ onMounted(refreshOutput);
   flex-direction: column;
   gap: 12px;
   padding: 16px;
+  overflow: hidden;
   background: var(--el-bg-color);
 
   .overlayHeader {
@@ -811,9 +827,12 @@ onMounted(refreshOutput);
     color: var(--el-text-color-primary);
   }
 
+  /* ACT: 宿主默认 min-height:auto，内容超过一屏时不肯收缩，编辑器会整块溢出遮罩层且内容滚不到。
+     补 min-height:0 后高度由可用空间决定，滚动交回编辑器内部的 .workbenchScroll。 */
   .fullscreenHost {
     flex: 1;
     height: auto;
+    min-height: 0;
   }
 }
 </style>
