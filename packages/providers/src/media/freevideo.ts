@@ -258,8 +258,9 @@ export default {
       id: "MiniMax-H3",
       label: "MiniMax-H3（本地 FreeVideo）",
       type: "video",
-      // ACT: imageReference 上限与 maxImageReferences 常量同源；引擎单块默认支持到 9 张参考，≥30s 自动分块时实限 3（422），供应商不预拦（维持裁决）。
-      mode: ["text", "startFrameOptional", [`imageReference:${maxImageReferences}`, "videoReference:1", "audioReference:1"]],
+      // ACT: 供应商文件 models 段被 provider.ts 字面量校验器限制，只能写死数字；上限改动须同步 maxImageReferences 常量（运行时拦截 generateImage 用它）。
+      // ACT: 引擎单块默认支持到 9 张参考，≥30s 自动分块时实限 3（422），供应商不预拦（维持裁决）。
+      mode: ["text", "startFrameOptional", ["imageReference:4", "videoReference:1", "audioReference:1"]],
       audio: "optional",
       durationResolutionMap: [{ duration: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60], resolution: ["768P", "2K"] }],
     },
