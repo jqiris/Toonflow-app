@@ -16,7 +16,8 @@
       </div>
 
       <el-alert v-if="modelError" :title="modelError" type="error" :closable="false" showIcon />
-      <el-alert v-else-if="imageError" :title="imageError" type="warning" :closable="false" showIcon />
+      <el-alert v-if="imageError" :title="imageError" type="warning" :closable="false" showIcon />
+      <el-alert v-if="!modelError && !model && models.length" title="未选择抽取模型：只在需要从正文抽取时才要选；资产卡与分镜已定稿（会话里直接导入）不需要模型" type="info" :closable="false" showIcon />
 
       <div class="fieldRow">
         <span class="fieldLabel">文本来源</span>
@@ -57,6 +58,21 @@
           :loading="loadingModels"
           :disabled="busy || !models.length">
           <el-option v-for="item in models" :key="`${item.providerId}/${item.modelId}`" :label="item.label" :value="JSON.stringify([item.providerId, item.modelId])" />
+        </el-select>
+      </div>
+
+      <div class="fieldRow">
+        <span class="fieldLabel">资产图模型</span>
+        <el-select
+          v-model="imageModel"
+          class="fieldControl"
+          clearable
+          noDataText="请先在设置中添加图片模型"
+          placeholder="选择出资产图用的图片模型"
+          aria-label="资产图模型"
+          :loading="loadingModels"
+          :disabled="busy || !imageModels.length">
+          <el-option v-for="item in imageModels" :key="`${item.providerId}/${item.modelId}`" :label="item.label" :value="JSON.stringify([item.providerId, item.modelId])" />
         </el-select>
       </div>
 
@@ -109,7 +125,7 @@ import { ElAlert, ElButton, ElCheckbox, ElInput, ElMessage, ElOption, ElPopover,
 import { IconRefresh } from "@tabler/icons-vue";
 import { useNodeAi, useNodeFiles, type NodeAiModel, type NodeMediaModel } from "@toonflow/nodes-scaffold/runtime";
 import { ratioOptions } from "@toonflow/node-shared/mtrack/mtrackProject";
-import { extractAssets, importAssets, kindLabels, pickRatio, type AssetExtraction, type AssetImportClipOverride, type AssetImportModel, type AssetImportProgress, type AssetImportSummary } from "../assetImport";
+import { extractAssets, importAssets, kindLabels, normalizeExtraction, pickRatio, type AssetExtraction, type AssetImportClipOverride, type AssetImportModel, type AssetImportProgress, type AssetImportSummary } from "../assetImport";
 
 type ImportRequest = {
   path?: string;
@@ -122,6 +138,8 @@ type ImportRequest = {
   /** 按 clipId 覆盖抽取出来的分镜（原文已写好视频提示词时用它原样落进工程）。 */
   clips?: AssetImportClipOverride[];
   model?: string;
+  /** 出资产图用的图片模型；勾选了出图又没传就要显式选，不再默认拿列表第一个。 */
+  imageModel?: string;
   signal?: AbortSignal;
 };
 
@@ -142,6 +160,7 @@ const models = ref<NodeAiModel[]>([]);
 const mediaModels = ref<NodeMediaModel[]>([]);
 const imageModels = computed(() => mediaModels.value.filter(item => item.type === "image"));
 const model = ref("");
+const imageModel = ref("");
 const ratio = ref<string>(ratioOptions[0]);
 const style = ref("");
 const systemPrompt = ref("");
@@ -188,6 +207,28 @@ function nextSignal(extra?: AbortSignal) {
   return owned.signal;
 }
 
+function modelKey(item: { providerId: string; modelId: string }): string {
+  return JSON.stringify([item.providerId, item.modelId]);
+}
+
+/**
+ * 显式选择 + 可用列表校验：没选、或选了一个不在列表里的（设置里删过、密钥没配）都直接抛错并报出可用清单。
+ * ACT: 这里刻意不做任何回落。原来 loadModels 会盲取第一个文本模型当默认，碰上排在前面但不可用的供应商，
+ * 请求会挂在 SSE 上等外层画布桥 120 秒掐断，表现成「导入节点持续超时」；宁可当场报错也不静默等死。
+ */
+function pickModel(list: { providerId: string; modelId: string }[], value: string | undefined, purpose: string): AssetImportModel {
+  // 清单为空多半是拉取失败或压根没配，不能报成「你没选」——那会把人往错的方向查。
+  if (!list.length) throw new Error(`${purpose}清单为空：设置里没有可用模型，或模型列表拉取失败，重试或去设置里添加`);
+  const choices = list.map(modelKey).join(" / ");
+  const target = parseModel(value ?? "");
+  // ACT: 文案同时给面板人工和会话调用看——人工在下拉里选，会话传 JSON 编号；两边都不接受「没选就用第一个」。
+  if (!target) throw new Error(`未选择${purpose}：在面板下拉里选一个（会话里调用请传 JSON.stringify([providerId, modelId])），可用清单 ${choices}`);
+  if (!list.some(item => modelKey(item) === modelKey(target))) {
+    throw new Error(`${purpose} ${target.providerId}/${target.modelId} 不在当前可用列表里（设置里可能已删除或未配好密钥）；可用清单 ${choices}`);
+  }
+  return target;
+}
+
 function parseModel(value: string): AssetImportModel | undefined {
   if (!value) return undefined;
   try {
@@ -199,22 +240,33 @@ function parseModel(value: string): AssetImportModel | undefined {
   }
 }
 
-async function loadModels() {
-  if (loadingModels.value) return;
-  loadingModels.value = true;
-  try {
-    const [textModels, mediaModelList] = await Promise.all([ai.getModels(), ai.getMediaModels()]);
-    models.value = textModels;
-    mediaModels.value = mediaModelList;
-    if (!model.value) {
-      const first = textModels[0];
-      model.value = first ? JSON.stringify([first.providerId, first.modelId]) : "";
+let pendingModels: Promise<void> | undefined;
+
+function loadModels(): Promise<void> {
+  // ACT: 并发合流。原来 loadingModels 为真时第二个调用直接 return，runImport 会拿着还没填好的空清单去校验编号，
+  // 把本来可用的模型误报成「不在当前可用列表里」；现在所有调用等同一批请求，失败后下次重试。
+  pendingModels ??= (async () => {
+    loadingModels.value = true;
+    try {
+      const [textModels, mediaModelList] = await Promise.all([ai.getModels(), ai.getMediaModels()]);
+      models.value = textModels;
+      mediaModels.value = mediaModelList;
+      // ACT: 不做默认选择——列表第一个未必可用，静默选中它等于把失败推迟到超时（画布桥 120 秒会掐掉）。
+      // 唯一例外是列表只有一个候选：没有「猜错」的可能，预选掉省一次点击。多候选一律要求显式选。
+      // 其余只把已经不在可用列表里的旧选择清掉，避免面板继续拿着一个设置里已删除的编号。
+      const imageList = mediaModelList.filter(item => item.type === "image");
+      if (!model.value && textModels.length === 1) model.value = modelKey(textModels[0]);
+      if (model.value && !textModels.some(item => modelKey(item) === model.value)) model.value = "";
+      if (!imageModel.value && imageList.length === 1) imageModel.value = modelKey(imageList[0]);
+      if (imageModel.value && !imageList.some(item => modelKey(item) === imageModel.value)) imageModel.value = "";
+    } catch (cause) {
+      if (!(cause instanceof Error && cause.name === "AbortError")) error.value = messageOf(cause);
+    } finally {
+      loadingModels.value = false;
+      pendingModels = undefined;
     }
-  } catch (cause) {
-    if (!(cause instanceof Error && cause.name === "AbortError")) error.value = messageOf(cause);
-  } finally {
-    loadingModels.value = false;
-  }
+  })();
+  return pendingModels;
 }
 
 async function loadEntries() {
@@ -321,11 +373,24 @@ async function runImport(input: ImportRequest): Promise<AssetImportSummary> {
   lastFailed.value = [];
   lastWarnings.value = [];
   try {
-    if (!models.value.length) await loadModels();
-    const target = parseModel(input.model ?? model.value);
-    if (!target) throw new Error("请选择抽取用的文本模型，或在参数里传 model");
+    // 契约优先：带了定稿的资产卡与分镜就一条模型都不调，也就没有「先选对文本模型」这个前置条件。
+    const given = input.extraction ? normalizeExtraction(input.extraction) : undefined;
+    let target: AssetImportModel | undefined;
+    let imageTarget: AssetImportModel | undefined;
+    const wantImages = input.generateImages ?? generateImages.value;
+    // ACT: 每次都重新拉一遍模型清单——用户在设置里改过供应商后拿旧清单校验编号，会把可用模型误判成不可用。
+    if (!given || wantImages) await loadModels();
+    if (!given) {
+      target = pickModel(models.value, input.model ?? model.value, "抽取用文本模型");
+      // Agent 显式选的模型回写到面板下拉，人工看得见这次用的是哪一个，也随时能改成自己的。
+      model.value = modelKey(target);
+    }
+    if (wantImages) {
+      imageTarget = pickModel(imageModels.value, input.imageModel ?? imageModel.value, "资产图图片模型");
+      imageModel.value = modelKey(imageTarget);
+    }
     let text: string | undefined;
-    if (!input.extraction) {
+    if (!given) {
       text = await resolveSource(input);
       if (!text.trim()) throw new Error("请先粘贴正文或选择工作区文本文件");
     }
@@ -334,13 +399,13 @@ async function runImport(input: ImportRequest): Promise<AssetImportSummary> {
       workspace: files.getWorkspaceFiles(),
       model: target,
       text,
-      extraction: input.extraction,
+      extraction: given,
       clips: input.clips,
       ratio: pickRatio(input.ratio ?? ratio.value),
       style: input.style ?? (style.value.trim() || undefined),
       systemPrompt: input.systemPrompt ?? (systemPrompt.value.trim() || undefined),
-      generateImages: input.generateImages ?? generateImages.value,
-      imageModel: imageModels.value[0],
+      generateImages: wantImages,
+      imageModel: imageTarget,
       assetDirectory: `assets/${node.id}`,
       createImageNode: item => Promise.resolve(createImageNode(item)),
       signal,
@@ -397,6 +462,30 @@ onBeforeUnmount(() => {
   controller = undefined;
 });
 
+/**
+ * node:importModels 读这里：可用清单 + 面板当前选择。Agent 只能从这里给的编号里挑，
+ * 挑完用 node:setModel 定下来或直接带进 node:importScript，不再存在「节点自己猜一个模型」。
+ */
+async function modelChoices() {
+  await loadModels();
+  return {
+    text: models.value.map(item => ({
+      value: modelKey(item), label: item.label, providerLabel: item.providerLabel, protocol: item.protocol,
+      contextWindow: item.contextWindow, maxOutputTokens: item.maxOutputTokens,
+    })),
+    image: imageModels.value.map(item => ({ value: modelKey(item), label: item.label, providerLabel: item.providerLabel })),
+    current: { model: model.value, imageModel: imageModel.value },
+  };
+}
+
+/** node:setModel：Agent 调整面板当前的抽取/出图模型；只认清单内编号，人工之后仍能在下拉里改回去。 */
+async function setModel(input: { model?: string; imageModel?: string }) {
+  await loadModels();
+  if (input.model !== undefined) model.value = modelKey(pickModel(models.value, input.model, "抽取用文本模型"));
+  if (input.imageModel !== undefined) imageModel.value = modelKey(pickModel(imageModels.value, input.imageModel, "资产图图片模型"));
+  return { model: model.value, imageModel: imageModel.value };
+}
+
 /** node:importStatus 读的就是这里：跑没跑、跑到第几张、上次结果、失败与提醒清单、取消后的残留节点。 */
 function status() {
   return {
@@ -414,7 +503,7 @@ function status() {
   };
 }
 
-defineExpose({ open, close, runImport, extracting, running, status });
+defineExpose({ open, close, runImport, extracting, running, status, modelChoices, setModel });
 </script>
 
 <style scoped lang="scss">

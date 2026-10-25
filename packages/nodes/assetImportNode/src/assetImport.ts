@@ -161,7 +161,8 @@ const extractionSystemPrompt = `你是短剧/漫剧的资产与分镜抽取器�
 6. 原文里出现的视频提示词段落（段首为 subject_definitions、summary、retention_analysis、detailed_description、overall_soundscape、non_diegetic_music 这些官方段名）就是这一镜 prompt 的正文，必须整段原样落进对应分镜的 prompt 字段，段名、顺序、换行都照抄，不要压缩、不要改写成描述句、不要丢掉任何一段。
 7. continuity 能承接就承接：同一段落、同一空间里延续上一镜画面与动作时写 "context"；换场、时间跳转、需要重新构图或独立起拍，以及首镜、不足 10 秒、参考多于 3 个时写 "shot"。引擎对 context 的硬限制是至少 10 秒、参考合计最多 3 个，写错会被校验拦下。`;
 
-const extractionSchema = z.object({
+/** 抽取结果的契约：模型返回与 Agent 直接传入的结构化结果共用它，不另立口径。 */
+export const extractionSchema = z.object({
   style: z.string().default(""),
   systemPrompt: z.string().default(""),
   assets: z.array(z.object({
@@ -195,14 +196,22 @@ export function parseExtraction(text: string): AssetExtraction {
   } catch {
     throw new Error("模型返回的 JSON 解析失败，请重试或更换文本模型");
   }
+  return normalizeExtraction(parsed);
+}
+
+/**
+ * 契约归一：模型抽取与 Agent 传入的结构化结果走同一条路（校验、去重、秒数夹取、参考过滤），
+ * 调用方是谁不影响落盘口径，所以文案不带「模型」字样。
+ */
+export function normalizeExtraction(parsed: unknown): AssetExtraction {
   const result = extractionSchema.safeParse(parsed);
   if (!result.success) {
     const issue = result.error.issues[0];
-    throw new Error(`模型返回的资产/分镜结构不符合契约：${issue?.path.join(".") || "根对象"} ${issue?.message || ""}`.trim());
+    throw new Error(`资产/分镜结构不符合契约：${issue?.path.join(".") || "根对象"} ${issue?.message || ""}`.trim());
   }
   const ids = new Set<string>();
   for (const asset of result.data.assets) {
-    if (ids.has(asset.id)) throw new Error(`模型返回了重复资产编号 ${asset.id}`);
+    if (ids.has(asset.id)) throw new Error(`重复资产编号 ${asset.id}`);
     ids.add(asset.id);
   }
   return {
@@ -220,6 +229,12 @@ export function parseExtraction(text: string): AssetExtraction {
       referenceIds: [...new Set(shot.referenceIds.filter(id => ids.has(id)))],
     })),
   };
+}
+
+/** 缺模型时的报错要说清另一条路怎么走，别把调用方逼回「盲选一个默认模型」。 */
+function requireExtractModel(model: AssetImportModel | undefined): AssetImportModel {
+  if (model) return model;
+  throw new Error("未指定可用的文本模型：设置里添加文本模型后先用 node:importModels 确认编号并传 model；资产卡与分镜已定稿时改传 extraction，本节点不再调用模型");
 }
 
 export async function extractAssets(options: {
@@ -480,7 +495,8 @@ export async function writePlanFiles(options: {
 export type AssetImportInput = {
   ai: AssetImportAi;
   workspace: WorkspaceFiles;
-  model: AssetImportModel;
+  /** 抽取用文本模型：只有还要调模型抽正文时才需要，已给 extraction 的确定性导入可以完全不传。 */
+  model?: AssetImportModel;
   text?: string;
   /** 已抽取（并已按勾选裁剪）的结果：传了就跳过再次调用模型，避免预览与落盘抽到两份不同的内容。 */
   extraction?: AssetExtraction;
@@ -505,7 +521,9 @@ export async function importAssets(options: AssetImportInput): Promise<AssetImpo
   // ACT: 占用探测提到入口——原来只在 writePlanFiles 里做，重跑会先烧完文本模型与全部出图，最后才收到「已存在，未覆盖」。
   await requireNewPlanFiles(options.workspace);
   options.onProgress?.({ phase: "extract", done: 0, total: 0 });
-  const extraction = options.extraction ?? await extractAssets({ ai: options.ai, model: options.model, text: options.text ?? "", signal: options.signal });
+  // ACT: 契约优先——资产卡与分镜已经定稿成结构化数据时直接传 extraction，本节点只做校验与落盘，一次模型都不调；
+  // 只有还要从散文里抽的时候才需要文本模型（会话 Agent 确认过可用的那一个）。
+  const extraction = options.extraction ?? await extractAssets({ ai: options.ai, model: requireExtractModel(options.model), text: options.text ?? "", signal: options.signal });
   options.onExtracted?.(extraction);
   const assets = extraction.assets;
   // ACT: clips 覆盖的纯内存校验提前到这里——出图是整个导入最贵的一步，非法覆盖不该等图烧完、图片节点建好才报

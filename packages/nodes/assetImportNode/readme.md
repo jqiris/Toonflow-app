@@ -13,11 +13,12 @@
 - 分镜的参考清单只留本次真的出了图的图片资产：出图失败的卡会从 `clips[].referenceIds` 里剔掉（校验器 V13 只看卡在不在索引里、不看 `nodeId`，失败卡留着会让多轨派工报「参考图未就绪」）；被剔掉、超过引擎上限（单镜图片参考 ≤9、承接镜 ≤3）、承接镜不足 10 秒都记进 `warnings`，不中断导入。
 - 原文里已经写好视频提示词的镜头，抽取时整段原样保留（六个官方段名与段序照抄，不改写成一句话）；落盘时按行首段名拆分进三段字段——正文进 `integratedMultimodalDescription`，`overall_soundscape:` / `non_diegetic_music:` 两段各进同名字段（段名不进字段，与多轨编辑器写入口径一致，免得工程每镜带两条「缺声音段」的 V11 warning）。段落要补写或改写时用 `clips` 按 `clipId` 覆盖。
 - 分镜的 `continuity` 默认按引擎口径「能承接就承接」：上一镜存在 + 本镜 ≥10 秒 + 参考 ≤3 才算承接（`context`），否则独立起拍（`shot`）；模型或 `clips` 显式给了值就照用。
-- 无文本模型时面板首屏显式报错并禁用抽取；无图片模型时同样显式提示，取消勾选出图仍可只导入资产卡与分镜，不静默降级。
+- 模型一律显式选择，不静默回落：无文本模型时面板首屏报错并禁用抽取；无图片模型时显式提示，取消勾选出图仍可只导入资产卡与分镜。**面板与 `node:importScript` 都不再默认列表第一个模型**——盲选的模型若密钥没配好，整条链路会一路挂到超时，比直接报错难查得多。
+- 本节点是「会话 Agent 与画布之间的契约工具」：资产卡与分镜已经定稿（会话里抽好、或从 `assets/assetCards.md` 整理出来）时直接传 `extraction`，节点纯校验落盘、一次模型都不调；只有散文要抽时才传 `path`/`text` + `model`。
 
 ## 对话 Agent 的节点函数
 
-节点注册两个函数：`node:importScript`（跑一次导入）与 `node:importStatus`（看进度与上次结果）。
+节点注册四个函数：`node:importScript`（跑一次导入）、`node:importModels`（列出可用文本/图片模型与面板当前选择）、`node:setModel`（Agent 调整面板当前模型）、`node:importStatus`（看进度与上次结果）。
 
 `node:importScript`（节点自身注册）：
 
@@ -25,7 +26,9 @@
 | --- | --- |
 | `path` | 工作区内的**剧本文本**路径，与 `text` 二选一；不要指向 `assets/assetCards.md`，那会把已定稿的卡片当正文再抽一遍 |
 | `text` | 直接给出的正文，与 `path` 二选一 |
-| `model` | 抽取用文本模型，`JSON.stringify([providerId, modelId])`（数组字符串）；不传用面板当前选择 |
+| `extraction` | **定稿直读**：`{ style, systemPrompt, assets[], shots[] }` 整批结构化结果（契约就是 `assetImport.ts` 导出的 `extractionSchema`，与模型返回同一个口径）。传了就不再调文本模型，也不需要 `model`/`path`/`text`；结构不合契约、编号重复会在出图与写盘**之前**报错 |
+| `model` | 抽取用文本模型，`JSON.stringify([providerId, modelId])`（数组字符串），编号必须来自 `node:importModels` 的 `text` 清单；需要抽正文时**必填**——不在清单里或没选就直接报错，不再静默用面板默认（面板默认可能是不可用的模型，会一路挂到超时） |
+| `imageModel` | 出资产图的图片模型，同上取 `node:importModels` 的 `image` 清单；`generateImages` 为真时必填，同样不回落到列表第一个。Agent 选的模型会回写面板下拉，人工看得见也随时能改 |
 | `ratio` | 工程画幅与分镜画幅，取值 `9:16` / `16:9` / `1:1` / `4:3` / `3:4`；非法值回落到 `9:16`（资产卡的画幅另按类别标准档位归一） |
 | `style` / `systemPrompt` | 写入工程 `global.style` / `global.systemPrompt` |
 | `generateImages` | 是否为资产卡出图并放进画布（需要图片模型） |
@@ -33,9 +36,11 @@
 
 返回 `{ cards, shots, images, failed, warnings, indexPath, projectPath }`：`failed: [{ id, reason }]` 是出图失败的卡（单张失败不中断整条导入，失败卡在索引里 `nodeId` 为 `null`，补一张即可，并自动从参考清单里移除）；`warnings` 是不中断导入、但已经不满足引擎口径的提醒（参考超上限被截断、参考未出图被移除、`clips` 覆盖的参考被滤空、承接镜不足 10 秒、画幅被归一、秒数被改写、首镜写了承接被归一）。与面板按钮共用同一条链路（`src/assetImport.ts` 的 `importAssets`），只是不依赖面板打开与按钮状态；面板预览过的结果会带着走，不会二次调用模型。
 
-> **取工具的前提**：不依赖「面板打开」指的是弹层收着也能跑，但这两个函数属于节点工具——**目标画布的节点必须先存在**（用户放上画布，或 agent 先 `addNode`），且**工作区画布页已加载**（`apps/web` 的 `getCanvasContext()` 在画布未初始化时返回空，服务端就注入不了 `tools`）。纯聊天、没有画布上下文的会话里取不到任何 `node:` 工具，这时先请用户打开目标项目的画布。
+> **取工具的前提**：不依赖「面板打开」指的是弹层收着也能跑，但这些函数都属于节点工具——**目标画布的节点必须先存在**（用户放上画布，或 agent 先 `addNode`），且**工作区画布页已加载**（`apps/web` 的 `getCanvasContext()` 在画布未初始化时返回空，服务端就注入不了 `tools`）。纯聊天、没有画布上下文的会话里取不到任何 `node:` 工具，这时先请用户打开目标项目的画布。
 
-两个函数都受 `nodeTools` 的超时约束（`packages/nodeScaffold/src/nodeTools.ts:136` 默认 120 秒）：`node:importScript` 显式设了 `timeoutMs: 30 * 60 * 1000`，抽取加逐张出图一次调用等到跑完；面板按钮直调 `runImport`，不受这个超时限制。
+**超时的真实口径**：`node:importScript` 显式设了 `timeoutMs: 30 * 60 * 1000`（`packages/nodeScaffold/src/nodeTools.ts:143` 的默认是 120 秒），面板按钮直调 `runImport` 也不受这个限制——但**会话 Agent 走不到 30 分钟**：调用要经过 `apps/server/src/agent/bridge/canvas.ts:38` 与 `apps/web/src/pages/workspace/panels/canvas/useCanvasTools.ts:81` 两层 `AbortSignal.timeout(120000)`（只豁免 `transcribeAudio`），节点内部的放宽永远轮不到。所以 Agent 侧长任务要么用 `extraction` 走确定性落盘（秒级），要么分批、并用 `node:importStatus` 观察。中断后已建好的图片节点与 `assets/<nodeId>/` 不回收，重跑前还得先清 `plan/assetIndex.json`/`plan/story.mtrack`，否则会撞 `requireNewPlanFiles`。
+
+`node:importModels`（无参数）返回 `{ text: [{ value, label, providerLabel, protocol, contextWindow, maxOutputTokens }], image: [{ value, label, providerLabel }], current: { model, imageModel } }`，`value` 就是能直接填进 `model`/`imageModel` 的字符串。`node:setModel`（`{ model?, imageModel? }`）把 Agent 确认过可用的模型写进面板当前选择，编号不在清单里同样报错。取到清单后自己判断哪个模型跑得通（密钥、上下文长度）是会话 Agent 的职责——节点只保证「不合清单的选择绝不静默生效」。长正文抽取前先看 `contextWindow`：`assetImport.ts` 的 `scriptLimit` 是 20 万字符，但真正把整篇塞进上下文的是所选文本模型的窗口。
 
 `node:importStatus`（无参数）：
 
