@@ -7,8 +7,8 @@
         type="checkbox"
         :checked="accepted"
         :disabled="disabled"
-        :aria-label="`勾选${label}用于合并`"
-        title="勾选此镜头用于合并"
+        :aria-label="`勾选${label}用于合并（验收）`"
+        title="勾选此镜头用于合并（即验收）"
         @click.stop
         @change="emit('toggleAccept')" />
       <span class="versionTitle">{{ label }}</span>

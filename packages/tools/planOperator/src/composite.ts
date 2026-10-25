@@ -181,7 +181,7 @@ export async function planComposite(store: PlanStore, projectPath: string, outpu
 
   const accepted = clips.filter(clip => clip.status === "accepted");
   if (accepted.length === 0) {
-    throw new Error("没有 accepted 片段可合成：请先在多轨编辑器里把要合成的片段验收为 accepted");
+    throw new Error("没有 accepted 片段可合成：请先在多轨编辑器验收要合成的片段（镜头编辑器「镜头操作」›验收，或「项目与成片」浮窗勾选「用于合并」）");
   }
 
   // V14 复核：只含 accepted 镜、按 clipId 排序后连续无空洞。复用校验器同一判定。
