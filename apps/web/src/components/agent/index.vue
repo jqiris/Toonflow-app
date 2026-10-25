@@ -8,6 +8,9 @@
       :parentFile="selectedConversation?.parentFile"
       :subAgents="selectedConversation?.subAgents"
       :loading="loading || historyLoading"
+      :running="runningCurrent"
+      :backgroundRunning="runningOther"
+      :noticeCount="noticeCount"
       @open-sub-agent="selectConversation"
       @back="backToParent"
       @new-chat="newConversation"
@@ -29,12 +32,13 @@
       :disabled="loading || !initialized"
       @session="setSessionFile(item, $event)"
       @event="receiveAgentEvent"
-      @sent="updateConversationName(item, $event)" />
+      @sent="updateConversationName(item, $event)"
+      @idle="flushBatchNotices" />
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch, type ComponentPublicInstance } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch, type ComponentPublicInstance } from "vue";
 import axios from "axios";
 import { translate } from "@toonflow/i18n/vue";
 import { ElMessage } from "element-plus";
@@ -46,6 +50,8 @@ import agentMenu from "./menu.vue";
 import conversation from "./conversation.vue";
 
 const visible = defineModel<boolean>({ default: false });
+// runningFile 由外层（useAgentRunStatus）按服务端 running 给出：哪个会话文件正在跑，不靠本地 busy。
+const props = defineProps<{ runningFile?: string }>();
 type OpenConversation = { key: number; name: string; file?: string; parentFile?: string; subAgents: AgentSubAgent[]; session: AgentConversation | null };
 // ACT: 会话实例保留到工作区关闭，让切换后的回复继续接收流式内容。
 const conversations = ref<OpenConversation[]>([]);
@@ -57,6 +63,9 @@ const name = computed(() => {
   return value && value !== "新对话" ? value : translate("新对话");
 });
 const sessionFile = computed(() => selectedConversation.value?.file);
+// 当前会话在跑 / 别的会话在跑：给标题栏状态条用，两者互斥。
+const runningCurrent = computed(() => !!props.runningFile && props.runningFile === sessionFile.value);
+const runningOther = computed(() => !!props.runningFile && props.runningFile !== sessionFile.value);
 const workspaceStore = useWorkspaceStore();
 const history = ref<AgentHistory[]>([]);
 const loading = ref(false);
@@ -65,6 +74,8 @@ const initialized = ref(false);
 let requestId = 0;
 let nextConversationKey = 0;
 const conversationRefs = new Map<number, InstanceType<typeof conversation>>();
+// 外部切会话进行时，loadHistory 的“自动展示最新”不抢 conversationKey；由切换方负责展示目标会话。
+const focusTarget = ref<string | undefined>(undefined);
 const pendingEvents = new Map<number, AgentEvent[]>();
 
 function showConversation(session: AgentConversation | null, activate = true) {
@@ -196,6 +207,7 @@ async function loadHistory(openLatest = false) {
     if (openLatest) {
       const session = !workspaceStore.pendingAgentMessage && data.data[0] ? await readConversation(directory, data.data[0].file) : null;
       if (currentRequest !== requestId) return;
+      if (focusTarget.value) return; // 外部正在切会话，由切换方负责展示目标会话，避免两者抢 conversationKey
       showConversation(session);
       initialized.value = true;
     }
@@ -282,12 +294,18 @@ async function removeConversation(file: string) {
   }
 }
 
+/** 多轨批次结束通知的待发队列：带所属工程目录，切换工程时随会话一起清空（须声明在下面的 watch 之前）。 */
+const pendingBatchNotices = ref<{ batchId: string; text: string; directory?: string }[]>([]);
+/** 待处理通知数：标题栏直接显示，否则用户只有看到会话里冒出消息才知道通知在排队。 */
+const noticeCount = computed(() => pendingBatchNotices.value.length);
+
 watch(() => workspaceStore.project?.directory, directory => {
   requestId++;
   history.value = [];
   conversations.value = [];
   conversationRefs.clear();
   pendingEvents.clear();
+  pendingBatchNotices.value = [];
   initialized.value = false;
   loading.value = false;
   historyLoading.value = false;
@@ -297,7 +315,78 @@ watch(() => workspaceStore.project?.directory, directory => {
 watch(visible, active => {
   if (active && !initialized.value) void loadHistory(true);
 });
-onBeforeUnmount(() => { requestId++; });
+/**
+ * 多轨批次结束通知（multitrackEditor.vue 派发的 window 事件）：让 agent 自己接着往下做，
+ * 而不是等用户发现生成停了再去问它。投给当前打开的会话；没有会话时只提示，不凭空开一轮。
+ * 服务端无法代劳：自起轮次拿不到客户端注入的 canvas.tools，node:* / planOperator 工具都不可用。
+ */
+function deliverBatchNotice(text: string) {
+  const item = selectedConversation.value;
+  const view = item ? conversationRefs.get(item.key) : undefined;
+  if (!view || !view.canAcceptAutoMessage()) return false;
+  // sendMessage 返回是否真正进入发送链路：未打开项目/未选模型时它会早退，这里不能算已投递。
+  return view.sendMessage(undefined, text);
+}
+
+/** 队列就绪后按顺序补发：面板没打开、会话正忙、正在编辑历史消息时都不丢通知；只投当前工程的通知。 */
+function flushBatchNotices() {
+  const directory = workspaceStore.project?.directory;
+  while (pendingBatchNotices.value.length) {
+    const head = pendingBatchNotices.value[0]!;
+    if (head.directory && head.directory !== directory) { pendingBatchNotices.value.shift(); continue; } // 换工程后旧通知直接丢弃（directory watch 已清过一次，这里挡竞态）
+    if (!deliverBatchNotice(head.text)) return;
+    pendingBatchNotices.value.shift();
+  }
+}
+
+function onMtrackBatchDone(event: Event) {
+  const detail = (event as CustomEvent<{ nodeId?: string; projectPath?: string; batchId?: string; origin?: string; kind?: "batch" | "clip"; total?: number; done?: number; failed?: number; pending?: number; nodeLabel?: string }>).detail;
+  if (!detail) return;
+  const total = detail.total ?? 0;
+  const summary = `成功 ${detail.done ?? 0} 镜、失败 ${detail.failed ?? 0} 镜、未生成 ${detail.pending ?? 0} 镜`;
+  const target = detail.nodeLabel || detail.projectPath || detail.nodeId || "多轨节点";
+  const origin = detail.origin === "agent" ? "由你发起的派工" : "由界面发起的派工";
+  // 消费端按 detail.kind 判定粒度：clip 为单镜，batch 为批次；total 只用于批次文案，不再当粒度依据。
+  const scope = detail.kind === "clip" ? "单镜生成已结束" : `生成批次已结束：共 ${total} 镜`;
+  const text = `（自动通知，非用户输入）多轨工程 ${target} 的${scope}，${summary}（${origin}）。请核对结果并继续后续操作。`;
+  // 面板没打开时先把它摆出来，等会话就位再补发：通知不能只在「面板恰好开着」时才生效。
+  // 按 batchId 去重排队（单槽会被后到的批次顶掉），补发只在真正发出后才出队；队列项带工程目录，跨工程不投。
+  if (!deliverBatchNotice(text)) {
+    const batchId = detail.batchId || `${target}:${Date.now()}`;
+    if (!pendingBatchNotices.value.some(item => item.batchId === batchId)) pendingBatchNotices.value.push({ batchId, text, directory: workspaceStore.project?.directory });
+    visible.value = true;
+  }
+}
+
+/**
+ * 从外部把指定会话切到前台（浮窗收起时点入口会走这里）。
+ * 首屏的列表/详情请求正在飞时 selectConversation 会早退，所以最多等 1 秒再切；
+ * 等不到（仍在加载）就放弃，不给调用方留一个挂起的 Promise。
+ */
+async function focusConversation(file: string) {
+  visible.value = true;
+  if (file === sessionFile.value) return;
+  focusTarget.value = file;
+  try {
+    for (let attempt = 0; attempt < 40; attempt++) {
+      if (file === sessionFile.value) return; // 已切入目标会话
+      if (!loading.value && !historyLoading.value) await selectConversation(file);
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+  } finally {
+    focusTarget.value = undefined;
+  }
+}
+
+watch([conversations, selectedConversation, pendingBatchNotices], flushBatchNotices, { flush: "post" });
+
+defineExpose({ focusConversation });
+
+onMounted(() => window.addEventListener("toonflow:mtrack-batch-done", onMtrackBatchDone));
+onBeforeUnmount(() => {
+  requestId++;
+  window.removeEventListener("toonflow:mtrack-batch-done", onMtrackBatchDone);
+});
 
 </script>
 

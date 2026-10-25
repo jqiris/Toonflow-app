@@ -63,7 +63,7 @@ import messageList from "./conversation/messageList.vue";
 import messageInput from "./conversation/messageInput.vue";
 
 const props = defineProps<{ active: boolean; initialSession: AgentConversation | null; sessionFile?: string; disabled: boolean }>();
-const emit = defineEmits<{ session: [file: string]; sent: [prompt: string]; event: [event: AgentEvent] }>();
+const emit = defineEmits<{ session: [file: string]; sent: [prompt: string]; event: [event: AgentEvent]; idle: [] }>();
 const workspaceStore = useWorkspaceStore();
 const directory = workspaceStore.project?.directory;
 const createCanvasContext = inject<(() => CanvasContext | undefined) | undefined>("canvas", undefined);
@@ -113,7 +113,16 @@ function receiveEvent(event: AgentEvent) {
   applyEvent(event);
 }
 
-defineExpose({ receiveEvent });
+/**
+ * 自动消息（多轨批次结束通知）现在能不能发：忙、正在编辑历史消息、输入框没就绪时都不发，
+ * 由调用方排队重试——否则 sendMessage 会静默 return，通知就丢了。
+ * 未打开项目、未选模型也会让 sendMessage 早退，这里必须先挡住，避免调用方把「没发出去」当成已投递。
+ */
+function canAcceptAutoMessage() {
+  return !locked.value && !!input.value && editingId.value === undefined && !!directory && !!selectedModelChoice.value;
+}
+
+defineExpose({ receiveEvent, sendMessage, canAcceptAutoMessage });
 
 function submitMessage() {
   return sendMessage(editingId.value ? messages.value.find(item => item.id === editingId.value) : undefined);
@@ -205,26 +214,41 @@ async function sendCanvasResult(event: Extract<AgentEvent, { type: "canvasCall" 
   }
 }
 
-async function sendMessage(source?: AgentMessage) {
-  const instance = input.value;
-  const draft = instance?.getDraft();
-  const editing = source && editingId.value === source.id;
-  const prompt = (source && !editing ? source.content : (draft?.prompt ?? "")).trim();
-  const attachments = reactive((source && !editing ? source.attachments ?? [] : draft?.attachments ?? []).map(item => ({ ...item })));
-  const mentionedIds = source && !editing ? (source.mentions ?? []).filter(mention => prompt.includes(`{{mention:${mention.id}}}`)).map(mention => mention.id)
-    : draft?.mentionedIds ?? [];
-  const references = source && !editing ? source.mentions ?? [] : draft?.mentions ?? [];
-  const mentions = references.filter(mention => mentionedIds.includes(mention.id)).map(mention => ({ ...mention }));
-  if (mentionedIds.some(id => !mentions.some(mention => mention.id === id))) return ElMessage.warning("存在无法读取的提及，请删除后重新选择");
-  if (!source && editingId.value !== undefined) return;
-  const resendIndex = source ? messages.value.findIndex(item => item.id === source.id) : -1;
-  if (source && (source.role !== "user" || resendIndex < 0)) return;
-  const resendFrom = source ? source.entryId ?? messages.value.slice(resendIndex + 1).find(item => item.role === "user" && item.entryId)?.entryId : undefined;
-  if (locked.value || !instance || (!prompt && !attachments.length)) return;
-  const model = selectedModelChoice.value;
-  if (!directory) return ElMessage.warning("请先打开项目");
-  if (!model) return ElMessage.warning("请先选择模型");
+/** 用户输入与自动消息共用的早退校验：返回 false 表示没有、也不会进入发送链路。 */
+function canCommitMessage(source?: AgentMessage, text?: string, draftPrompt?: string, draftAttachmentCount = 0) {
+  const auto = typeof text === "string";
+  const prompt = (source && editingId.value !== source.id ? source.content : auto ? text : (draftPrompt ?? "")).trim();
+  if (!source && editingId.value !== undefined) return false;
+  if (source && (source.role !== "user" || messages.value.findIndex(item => item.id === source.id) < 0)) return false;
+  if (locked.value || !input.value || (!prompt && !draftAttachmentCount)) return false;
+  if (!directory) { ElMessage.warning("请先打开项目"); return false; }
+  if (!selectedModelChoice.value) { ElMessage.warning("请先选择模型"); return false; }
+  return true;
+}
 
+/**
+ * 发送链路本体；只在 canCommitMessage 通过后调用。调用方与 sendMessage 之间不允许有 await，
+ * 校验到置 busy 必须原子完成，排队的自动通知才不会被别的轮次插队。
+ */
+async function runMessageSend(source?: AgentMessage, text?: string) {
+  const instance = input.value;
+  const model = selectedModelChoice.value;
+  // 早退已由 canCommitMessage 在同步链路里挡住，这里重复一次只为类型收窄，不是业务分支。
+  if (!instance || !model || !directory) return;
+  const draft = instance.getDraft();
+  const editing = source && editingId.value === source.id;
+  // text：非用户输入的自动消息（多轨批次结束通知）复用同一条发送链路，才能带流式 UI 与画布上下文。
+  // 用 text 时不读草稿：自动消息不能把用户正在输入但没发送的草稿顶替掉，也不该带走草稿的附件与提及。
+  const auto = typeof text === "string";
+  const prompt = (source && !editing ? source.content : auto ? text : (draft?.prompt ?? "")).trim();
+  const attachments = reactive((source && !editing ? source.attachments ?? [] : auto ? [] : draft?.attachments ?? []).map(item => ({ ...item })));
+  const mentionedIds = source && !editing ? (source.mentions ?? []).filter(mention => prompt.includes(`{{mention:${mention.id}}}`)).map(mention => mention.id)
+    : auto ? [] : draft?.mentionedIds ?? [];
+  const references = source && !editing ? source.mentions ?? [] : auto ? [] : draft?.mentions ?? [];
+  const mentions = references.filter(mention => mentionedIds.includes(mention.id)).map(mention => ({ ...mention }));
+  if (mentionedIds.some(id => !mentions.some(mention => mention.id === id))) { ElMessage.warning("存在无法读取的提及，请删除后重新选择"); return; }
+  const resendIndex = source ? messages.value.findIndex(item => item.id === source.id) : -1;
+  const resendFrom = source ? source.entryId ?? messages.value.slice(resendIndex + 1).find(item => item.role === "user" && item.entryId)?.entryId : undefined;
   const requestController = new AbortController();
   const canvasContext = createCanvasContext?.();
   controller = requestController;
@@ -245,7 +269,7 @@ async function sendMessage(source?: AgentMessage) {
   const activeChildFiles = new Set<string>();
   const finishStats = anonymousData.startAgent();
   try {
-    if (!source) await instance.clearDraft();
+    if (!source && !auto) await instance.clearDraft();
     requestController.signal.throwIfAborted();
     await uploadAttachments(attachments, directory, requestController.signal);
     const response = await fetch("/api/agent", {
@@ -306,7 +330,9 @@ async function sendMessage(source?: AgentMessage) {
     }
     if (source && !accepted) throw new Error("服务端未确认重发，请重新打开对话后重试");
     finishStats("success");
-    emit("sent", mentionPlainText(prompt, mentions) || attachments[0]?.name || "新对话");
+    // ACT: 自动消息（多轨批次结束通知）不参与会话命名——宿主按这个事件给「新对话」命名，
+    // 让通知文案当标题会把还没说过话的新会话命名成「（自动通知，非用户输入）…」。
+    if (!auto) emit("sent", mentionPlainText(prompt, mentions) || attachments[0]?.name || "新对话");
   } catch (error) {
     finishStats(requestController.signal.aborted ? "cancelled" : "failed");
     const responseMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
@@ -330,6 +356,22 @@ async function sendMessage(source?: AgentMessage) {
     busy.value = false;
     controller = undefined;
   }
+}
+
+// 回合结束（busy 下降）：通知宿主补发排队的批次通知——宿主的 flush watch 只盯会话列表，看不见这里的忙闲变化。
+watch(busy, running => { if (!running) emit("idle"); });
+
+/**
+ * 同步返回本轮是否提交进入发送链路：早退（忙、校验不过、未选模型等）一律 false 且不发请求，
+ * 排队的自动通知据此决定出队还是留队；一旦发出请求（含后续失败），返回 true——失败会在对话里留错误气泡，不再重投。
+ * 校验到置 busy 之间没有 await，排队通知不会被用户输入插队。
+ */
+function sendMessage(source?: AgentMessage, text?: string): boolean {
+  const instance = input.value;
+  const draft = instance?.getDraft();
+  if (!canCommitMessage(source, text, draft?.prompt, draft?.attachments.length)) return false;
+  void runMessageSend(source, text);
+  return true;
 }
 
 watch(() => !props.initialSession?.parentFile && !!workspaceStore.pendingAgentMessage && props.active && !locked.value && !!input.value && !!createCanvasContext?.(), async ready => {

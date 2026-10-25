@@ -15,6 +15,12 @@
     <span v-else class="conversationName">
       <span class="conversationTitle" :class="{ readOnly: parentFile }" :title="name" :tabindex="sessionFile && !parentFile ? 0 : -1" @dblclick="editName" @keydown.enter.prevent="editName">{{ name }}</span>
     </span>
+    <span
+      class="runState"
+      :class="{ running: running, background: !running && backgroundRunning }"
+      role="status"
+      :title="runStateTitle">{{ runStateLabel }}</span>
+    <span v-if="pendingCount > 0" class="noticeBadge" role="status" :title="noticeTitle">{{ noticeText }}</span>
     <div class="menuActions">
       <el-popover v-if="subAgents?.length" v-model:visible="subAgentsVisible" trigger="click" placement="bottom-end" :width="340" :showArrow="false" :popperStyle="{ maxWidth: 'calc(100vw - 24px)' }">
         <template #reference>
@@ -85,7 +91,7 @@
 
 <script setup lang="ts">
 import axios from "axios";
-import { nextTick, ref, shallowRef, watch } from "vue";
+import { computed, nextTick, ref, shallowRef, watch } from "vue";
 import { ElMessage, ElMessageBox, type InputInstance } from "element-plus";
 import type { AgentHistory } from "./types";
 import type { AgentSubAgent } from "@toonflow/server/agent/types";
@@ -105,10 +111,24 @@ const props = defineProps<{
   loading: boolean;
   subAgents?: AgentSubAgent[];
   parentFile?: string;
+  // 运行态由外层按服务端 running 给出；noticeCount 是自动通知的待补发数。
+  running?: boolean;
+  backgroundRunning?: boolean;
+  noticeCount?: number;
 }>();
 const emit = defineEmits<{ newChat: []; history: []; select: [file: string]; rename: [file: string, name: string]; remove: [file: string]; close: []; openSubAgent: [file: string]; back: [] }>();
 const historyVisible = ref(false);
 const subAgentsVisible = ref(false);
+const runStateLabel = computed(() => (props.running ? "运行中" : props.backgroundRunning ? "后台运行中" : "空闲"));
+const pendingCount = computed(() => props.noticeCount ?? 0);
+const noticeText = computed(() => `待处理通知 ${pendingCount.value}`);
+const noticeTitle = computed(() => `${pendingCount.value} 条自动通知排队中，会话空闲后自动补发`);
+const runStateTitle = computed(() =>
+  props.running
+    ? "当前会话正在生成"
+    : props.backgroundRunning
+      ? "另一个会话正在后台生成，设计区入口可一键切过去"
+      : "当前没有正在生成的轮次");
 const editingName = ref(false);
 const nameDraft = ref("");
 const nameInput = ref<InputInstance>();
@@ -215,6 +235,45 @@ async function renameHistory(item: AgentHistory) {
       user-select: text;
       &.readOnly { cursor: default; }
     }
+  }
+
+  .runState,
+  .noticeBadge {
+    flex-shrink: 0;
+    padding: 1px 7px;
+    border: 1px solid var(--el-border-color-lighter);
+    border-radius: 9px;
+    color: var(--el-text-color-secondary);
+    font-size: 11px;
+    line-height: 16px;
+    white-space: nowrap;
+  }
+
+  .runState.running {
+    border-color: color-mix(in srgb, var(--el-color-primary) 55%, transparent);
+    background: color-mix(in srgb, var(--el-color-primary) 12%, transparent);
+    color: var(--el-color-primary);
+
+    // 状态由文字承担，动效只提示「还在跑」，避免闪烁刺激。
+    &::before {
+      content: "";
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      margin-right: 4px;
+      vertical-align: 1px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: runStatePulse 1.4s ease-in-out infinite;
+    }
+  }
+
+  // 别的会话在跑：虚线框，和当前会话的实心「运行中」区分开。
+  .runState.background { border-style: dashed; }
+
+  .noticeBadge {
+    border-color: color-mix(in srgb, var(--el-color-warning) 55%, transparent);
+    color: var(--el-color-warning);
   }
 
   .menuActions {
@@ -413,5 +472,12 @@ async function renameHistory(item: AgentHistory) {
       }
     }
   }
+}
+@keyframes runStatePulse {
+  50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agentMenu .runState.running::before { animation: none; }
 }
 </style>

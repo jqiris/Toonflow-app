@@ -177,7 +177,7 @@ import { useNodeToolsContext } from "@toonflow/nodes-scaffold/nodeTools";
 import { useWorkspaceStore } from "@/stores/workspace";
 import { generalSettings } from "@/stores/settings";
 import { getShortcutBindings, shortcutLabel, shortcutMatches, shortcutPressed } from "@/lib/canvasShortcuts";
-import useWorkspaceFiles from "@/lib/workspaceFiles";
+import useWorkspaceFiles, { type TextSnapshot } from "@/lib/workspaceFiles";
 import anonymousData from "@/lib/anonymousData";
 import { createClipboardMediaFile, dropCanvasFiles, getClipboardMediaFiles, importCanvasFiles, isCanvasFileDrag } from "./canvasDrop";
 import "@vue-flow/core/dist/style.css";
@@ -397,8 +397,10 @@ function documentHandles(node: Node<DocumentNodeData>) {
 async function readDocumentCanvas(directory: string, canvasPath: string, nodeId: string) {
   checkDocumentDirectory(directory);
   const files = useWorkspaceFiles(directory);
-  const canvas = await files.readJson<{ toonflowCanvas?: boolean; nodes?: Node<DocumentNodeData>[] }>(canvasPath);
+  // ACT: 用快照读取而不是 readJson，顺带拿到磁盘 revision 供并发写保护（expectedRevision）使用。
+  const snapshot = await files.readTextSnapshot(canvasPath);
   checkDocumentDirectory(directory);
+  const canvas = JSON.parse(snapshot.text) as { toonflowCanvas?: boolean; nodes?: Node<DocumentNodeData>[] };
   if (canvas?.toonflowCanvas !== true || !Array.isArray(canvas.nodes)) throw new Error("文件不是有效画布");
   const node = canvas.nodes.find((item) => item && item.id === nodeId);
   if (!node) throw new Error("节点已删除，请刷新文件树");
@@ -415,7 +417,7 @@ async function readDocumentCanvas(directory: string, canvasPath: string, nodeId:
       textPath.split(/[\\/]/).includes(".."))
   )
     throw new Error("文本文件路径必须位于工作区内");
-  return { files, canvas, node, liveNode, textPath };
+  return { files, canvas, node, liveNode, textPath, snapshot };
 }
 
 async function readDocumentNode(directory: string, canvasPath: string, nodeId: string) {
@@ -442,7 +444,7 @@ async function readDocumentNode(directory: string, canvasPath: string, nodeId: s
 async function saveDocumentNode(directory: string, canvasPath: string, nodeId: string, handleId: string, text: string, expectedText?: string) {
   checkDocumentDirectory(directory);
   await flushCanvasSave(async () => {
-    const { files, canvas, node, liveNode, textPath } = await readDocumentCanvas(directory, canvasPath, nodeId);
+    const { files, canvas, node, liveNode, textPath, snapshot } = await readDocumentCanvas(directory, canvasPath, nodeId);
     if (!documentHandles(liveNode ?? node).some((handle) => handle.id === handleId)) throw new Error("文本输出已删除，请重新打开节点");
     if (expectedText !== undefined) {
       const output = (liveNode ?? node).data?.outputs?.[handleId];
@@ -455,23 +457,43 @@ async function saveDocumentNode(directory: string, canvasPath: string, nodeId: s
       // 节点工具已同步输出并排队保存；等待期间用户可能继续编辑，不能再写入旧文本快照。
       return;
     }
+    const documentPath = textPath ?? `assets/${nodeId}/${handleId === "text" ? "content.md" : `${handleId}.md`}`;
+    if (textPath === undefined) await writeDocumentText(files, documentPath, text);
+    else await files.write(textPath, text);
     if (liveNode && canvasId.value === canvasPath && findNode(nodeId) === liveNode) {
-      const output = liveNode.data.outputs?.[handleId];
-      if (output?.dataType === "STRING") output.value = text;
-      else if (textPath === undefined) (liveNode.data.outputs ??= {})[handleId] = { dataType: "STRING", value: text };
-    }
-    canvasMenuRef.value?.syncDocumentNode(canvasPath, nodeId, handleId, text, textPath === undefined);
-    if (textPath !== undefined) {
-      await files.write(textPath, text);
+      // ACT: 正文不再内联进 outputs（否则会随画布 JSON 落盘，撑爆 agent 的 64 KiB 读取上限）；
+      // 只记路径，读取侧按 textPath 回读文件（documentHandles 的 storedText 分支）。
+      liveNode.data.textPath = documentPath;
+      dropInlineDocumentText(liveNode.data.outputs?.[handleId]);
     } else {
       const data = (node.data ??= {});
-      const output = data.outputs?.[handleId];
-      if (output?.dataType === "STRING") output.value = text;
-      else (data.outputs ??= {})[handleId] = { dataType: "STRING", value: text };
-      await files.writeJson(canvasPath, canvas);
+      data.textPath = documentPath;
+      dropInlineDocumentText(data.outputs?.[handleId]);
+      await writeCanvasFile(directory, canvasPath, canvas, snapshot);
     }
     checkDocumentDirectory(directory);
   });
+}
+
+function dropInlineDocumentText(output?: NodeOutput) {
+  if (output?.dataType === "STRING") Reflect.deleteProperty(output, "value");
+}
+
+// ACT: 没有 textPath 的历史文档节点也把正文落到工作区文件（与文本节点 assets/<id>/content.md 同一约定），
+// 画布 JSON 只留 data.textPath。上限：文件已存在时按刚读到的 revision 覆盖，不做正文级冲突合并。
+async function writeDocumentText(files: ReturnType<typeof useWorkspaceFiles>, path: string, text: string) {
+  const parent = path.slice(0, path.lastIndexOf("/"));
+  for (const directory of ["assets", parent]) {
+    await files.mkdir(directory).catch((error: { response?: { data?: { data?: { code?: string } } } }) => {
+      if (error.response?.data?.data?.code !== "EEXIST") throw error;
+    });
+  }
+  const existing = await files.readTextSnapshot(path).catch((error: { response?: { status?: number } }) => {
+    if (error.response?.status === 404) return undefined;
+    throw error;
+  });
+  if (existing) await files.writeTextSnapshot(path, text, existing);
+  else await files.write(path, text, true);
 }
 
 function showEdgeDisconnect({ event, edge }: EdgeMouseEvent) {
@@ -559,26 +581,60 @@ let savePaused = false;
 let saveCancelled = false;
 let changedWhilePaused = false;
 let saveRevision = 0;
+type CanvasRevision = Pick<TextSnapshot, "revision" | "encoding">;
+// ACT: 画布 JSON 的并发写保护。同页仍由 saving 串行；多窗口/多客户端交给服务端 expectedRevision 做 CAS
+// （workspaces/files/write.ts:21-28 比对磁盘 sha256，冲突返回 ESTALE 409），冲突时阻断本次保存并提示重载，不静默覆盖。
+// 上限：基线是「装载画布时」读到的 revision；装载与首次写入之间（例如菜单刚建的新画布）若被外部改写，
+// 这次保存会覆盖它。要彻底闭合需要画布装载侧（canvasMenu）读取时一并带出 revision。
+// 恢复路径：重新载入画布（切换画布/重开工作区）会重新取基线；冲突期间后续保存一律被阻断。
+const canvasRevisions = new Map<string, CanvasRevision>();
+const canvasRevisionKey = (directory: string, fileName: string) => `${directory}\u0000${fileName}`;
+
+async function seedCanvasRevision(directory: string, fileName: string) {
+  const snapshot = await useWorkspaceFiles(directory).readTextSnapshot(fileName).catch(() => undefined);
+  if (snapshot) canvasRevisions.set(canvasRevisionKey(directory, fileName), snapshot);
+  else canvasRevisions.delete(canvasRevisionKey(directory, fileName));
+}
+
+async function writeCanvasFile(directory: string, fileName: string, data: unknown, baseline?: CanvasRevision) {
+  const files = useWorkspaceFiles(directory);
+  const key = canvasRevisionKey(directory, fileName);
+  const text = `${JSON.stringify(data, null, 2)}\n`;
+  let current = baseline ?? canvasRevisions.get(key);
+  if (!current) {
+    await seedCanvasRevision(directory, fileName);
+    current = canvasRevisions.get(key);
+  }
+  if (!current) {
+    // ACT: 读不到基线（文件刚建/读取失败）时退回普通写入，随后重新取基线；这一段没有 CAS 保护。
+    await files.write(fileName, text);
+    await seedCanvasRevision(directory, fileName);
+    return;
+  }
+  const revision = await files.writeTextSnapshot(fileName, text, current);
+  canvasRevisions.set(key, { revision, encoding: current.encoding });
+}
+
+function canvasSaveMessage(error: unknown) {
+  if (axios.isAxiosError<{ message?: string; data?: { code?: string } }>(error) && error.response?.data.data?.code === "ESTALE")
+    return "画布已被其他窗口或外部修改，本次保存已阻断：请重新载入画布后再编辑（当前画布上的改动没有丢失）";
+  return axios.isAxiosError<{ message?: string }>(error) ? error.response?.data.message || error.message : error instanceof Error ? error.message : "画布保存失败";
+}
+
 const saveCanvas = debounce((directory: string, fileName: string) => {
   const flow = toObject();
   const revision = saveRevision;
-  // ACT: 同页保存按顺序完成，防止慢请求覆盖后续修改；不处理多个客户端的并发编辑。
+  // ACT: 同页保存按顺序完成，防止慢请求覆盖后续修改；跨客户端由 writeCanvasFile 的 expectedRevision CAS 阻断。
   saving = saving.then(async () => {
     try {
-      await useWorkspaceFiles(directory).writeJson(fileName, { toonflowCanvas: true, nodes: flow.nodes, edges: flow.edges, viewport: flow.viewport });
+      await writeCanvasFile(directory, fileName, { toonflowCanvas: true, nodes: flow.nodes, edges: flow.edges, viewport: flow.viewport });
       saveError = undefined;
       canvasSaveError.value = "";
       if (revision === saveRevision) canvasDirty.value = false;
     } catch (err) {
       saveError = err;
-      canvasSaveError.value = axios.isAxiosError<{ message?: string }>(err) ? err.response?.data.message || err.message : err instanceof Error ? err.message : "画布保存失败";
-      ElMessage.error(
-        axios.isAxiosError<{ message?: string }>(err)
-          ? err.response?.data.message || "画布保存失败"
-          : err instanceof Error
-          ? err.message
-          : "画布保存失败"
-      );
+      canvasSaveError.value = canvasSaveMessage(err);
+      ElMessage.error(canvasSaveError.value);
     }
   });
 }, 500);
@@ -673,6 +729,8 @@ watch(
       canvasController.abort(new Error("画布已重新加载，本次画布调用已停止"));
       canvasController = new AbortController();
     }
+    // ACT: 画布装载/重命名后重取磁盘 revision，后续保存都按它做 CAS。
+    if (directory && fileName) void seedCanvasRevision(directory, fileName);
     if (!savePaused) saveCanvas.flush();
   },
   { flush: "sync" }
@@ -690,7 +748,7 @@ watch(() => props.active, (active) => {
 function flushCanvasSave(action?: () => Promise<void>): Promise<void> {
   // ACT: 完整保存及其文件操作串行执行，重命名暂停期间的显式保存也必须等待。
   const next = flushing.then(() => saveCanvasState(action)).then(() => { canvasSaveError.value = ""; }, error => {
-    canvasSaveError.value = axios.isAxiosError<{ message?: string }>(error) ? error.response?.data.message || error.message : error instanceof Error ? error.message : "画布保存失败";
+    canvasSaveError.value = canvasSaveMessage(error);
     throw error;
   });
   flushing = next.catch(() => {});

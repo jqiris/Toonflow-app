@@ -99,18 +99,25 @@
             </el-tooltip>
           </div>
         </el-card>
-        <el-tooltip v-if="!agentVisible" content="Toonflow Agent" placement="top" :showArrow="false" :hideAfter="0">
+        <el-tooltip v-if="!agentVisible" :content="agentRunning ? 'Toonflow Agent · 后台运行中' : 'Toonflow Agent'" placement="top" :showArrow="false" :hideAfter="0">
           <el-button
             class="agentButton"
-            :class="{ standalone: activePanel !== 'canvas' }"
+            :class="{ standalone: activePanel !== 'canvas', running: agentRunning }"
             :aria-expanded="agentVisible"
-            aria-label="Toonflow Agent"
+            :aria-label="agentRunning ? 'Toonflow Agent（后台运行中，点击回到运行中的会话）' : 'Toonflow Agent'"
             aria-controls="agentPanel"
-            @click="agentVisible = !agentVisible"></el-button>
+            @click="openAgent">
+            <span v-if="agentRunning" class="agentRunningDot" aria-hidden="true"></span>
+          </el-button>
         </el-tooltip>
       </div>
     </div>
-    <floatingAgent v-model="agentVisible" :inert="workspaceStore.projectLoadingVisible" @resize="agentWidth = $event" />
+    <floatingAgent
+      ref="agentPanel"
+      v-model="agentVisible"
+      :inert="workspaceStore.projectLoadingVisible"
+      :runningFile="agentRunningFile"
+      @resize="agentWidth = $event" />
     <settings v-model="settingsVisible" />
     <el-dialog v-model="contactVisible" :title="contactInfo.title" width="min(360px, calc(100vw - 32px))" alignCenter appendToBody>
       <div class="contactContent">
@@ -145,6 +152,7 @@ import canvasPanel from "./panels/canvas/canvasHost.vue";
 import type { DocumentNodeOptions } from "./panels/canvas/canvasFiles";
 import workspaceMenu from "./components/workspaceMenu.vue";
 import floatingAgent from "./components/floatingAgent.vue";
+import useAgentRunStatus from "./components/useAgentRunStatus";
 
 const documentPanel = defineAsyncComponent(() => import("./panels/document/index.vue"));
 
@@ -157,6 +165,7 @@ function preventSideButtonNavigation(event: MouseEvent) {
 }
 onMounted(() => {
   anonymousData.track("workspace.canvas");
+  startAgentRunPoll();
   for (const eventName of sideButtonEvents) window.addEventListener(eventName, preventSideButtonNavigation, true);
 });
 onScopeDispose(() => {
@@ -169,7 +178,18 @@ const panelOptions = [
   { label: "文档", value: "document", icon: IconFileText },
 ];
 const agentVisible = ref(true);
+const agentPanel = ref<InstanceType<typeof floatingAgent>>();
 const agentWidth = ref(0);
+// 后台运行状态以服务端会话的 running 为准（见 useAgentRunStatus），刷新后也能看到，不只靠本地流式状态。
+const { runningFile: agentRunningFile, start: startAgentRunPoll } = useAgentRunStatus();
+const agentRunning = computed(() => !!agentRunningFile.value);
+
+/** 点入口：先展开（触发首屏加载），再切到后台正在跑的会话，省掉「自己去历史里找」这一步。 */
+function openAgent() {
+  const file = agentRunningFile.value;
+  agentVisible.value = true;
+  if (file) agentPanel.value?.focusConversation(file);
+}
 const settingsVisible = ref(false);
 const helpVisible = ref(false);
 const contactVisible = ref(false);
@@ -542,6 +562,28 @@ function saveDocumentNode(directory: string, canvasPath: string, nodeId: string,
           transform: translateY(-1px);
           border-color: #87f2eb99;
           box-shadow: inset 0 1px 0 #ffffff70;
+        }
+
+        // 后台有轮次在跑：入口本身就能认出来（浮窗收起时这是唯一可见位置）。
+        &.running {
+          border-color: color-mix(in srgb, var(--el-color-primary) 65%, #6edfdc 35%);
+          box-shadow: inset 0 1px 0 #ffffff70, 0 0 0 2px color-mix(in srgb, var(--el-color-primary) 32%, transparent);
+
+          &::before {
+            filter: saturate(1.3) brightness(1.08);
+          }
+        }
+
+        .agentRunningDot {
+          position: absolute;
+          right: 2px;
+          bottom: 2px;
+          width: 9px;
+          height: 9px;
+          border-radius: 50%;
+          background: var(--el-color-primary);
+          box-shadow: 0 0 0 2px var(--el-bg-color-overlay);
+          pointer-events: none;
         }
 
         &:active {

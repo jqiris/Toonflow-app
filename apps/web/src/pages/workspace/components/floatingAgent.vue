@@ -27,7 +27,7 @@
         tabindex="0"
         @pointerdown.stop="startInteraction($event, handle.edge)"
         @keydown="resizeWithKeyboard($event, handle.edge)" />
-      <agent v-model="visible">
+      <agent ref="agentRef" v-model="visible" :runningFile="runningFile">
         <template #menuActions>
           <el-button
             text
@@ -50,7 +50,12 @@ import { IconLayoutSidebarRight, IconAppWindowBottomRight } from "@tabler/icons-
 import agent from "@/components/agent/index.vue";
 
 const visible = defineModel<boolean>({ default: false });
+// 运行态只透传文件名，判定在 useAgentRunStatus（服务端 running）；这里不自己算，避免两处口径。
+defineProps<{ runningFile?: string }>();
 const emit = defineEmits<{ resize: [width: number] }>();
+const agentRef = ref<InstanceType<typeof agent>>();
+// 收起浮窗时也要能从入口把指定会话拉到前台，所以把 agent 的切换能力往上传一层。
+defineExpose({ focusConversation: (file: string) => agentRef.value?.focusConversation(file) });
 const docked = ref(false);
 const viewport = reactive({ width: window.innerWidth, height: window.innerHeight });
 const gap = computed(() => Math.min(15, viewport.width / 2, viewport.height / 2));

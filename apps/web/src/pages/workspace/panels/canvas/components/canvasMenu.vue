@@ -799,16 +799,7 @@ async function saveCanvas(event?: Event) {
   }
 }
 
-function syncDocumentNode(canvasId: string, nodeId: string, handleId: string, text: string, inline: boolean) {
-  const node = canvases.value.find(canvas => canvas.id === canvasId)?.flow?.nodes.find(node => node.id === nodeId);
-  if (!node) return;
-  const data = node.data ??= {};
-  const output = data.outputs?.[handleId];
-  if (output?.dataType === "STRING") output.value = text;
-  else if (inline) (data.outputs ??= {})[handleId] = { dataType: "STRING", value: text };
-}
-
-defineExpose({ getCanvases, peekCanvases, initialized, addCanvas, switchCanvas, renameCanvas, syncCanvasPath, syncDocumentNode, loadError });
+defineExpose({ getCanvases, peekCanvases, initialized, addCanvas, switchCanvas, renameCanvas, syncCanvasPath, loadError });
 </script>
 
 <style lang="scss" scoped>

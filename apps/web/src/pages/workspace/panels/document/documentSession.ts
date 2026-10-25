@@ -61,6 +61,7 @@ export function createDocumentSession(resource: ExtResource, extension: ExtDefin
     }
     while (!disposed) {
       clearTimeout(timer);
+      if (session.conflict) return; // ESTALE 冲突：停止自动保存重试，等待用户重载（reloadDisk 会解除冲突）
       if (context.dirty && queuedRevision !== revision) {
         const currentRevision = revision;
         const text = context.text;
