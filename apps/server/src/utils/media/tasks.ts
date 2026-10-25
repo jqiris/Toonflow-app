@@ -58,9 +58,18 @@ function cleanup() {
     if (task.settledAt !== undefined) {
       if (task.settledAt + settledTtl <= now) tasks.delete(taskId);
     // ACT: 原为 120s——单镜实测常超 5 分钟，关标签/合盖/定时器冻结就会把已付费任务停掉（审计 P1-2）。
-    // 放宽到 30 分钟后，页面断开仍让供应商跑完；结果在 settledAt 后再留 5 分钟，重开页面经 attempts 里的 taskId 可对账找回。
+    // 放宽到 30 分钟后，页面断开仍让供应商跑完；结果在 settledAt 后再留 24 小时（settledTtl），重开页面经 attempts 里的 taskId 可对账找回。
     } else if (task.touchedAt + 1800000 <= now) stop(task, "生成任务因页面长时间未连接而停止");
   }
+  // ACT: settled 表原来只进不出：常驻进程内存与 mediaTasks.json 随任务周龄膨胀。过期项同轮删除，删除发生时落盘一次。
+  let removed = false;
+  for (const [taskId, task] of settled) {
+    if (task.settledAt + settledTtl <= now) {
+      settled.delete(taskId);
+      removed = true;
+    }
+  }
+  if (removed) persistSettled();
 }
 
 const cleanupTimer = setInterval(cleanup, 30000);

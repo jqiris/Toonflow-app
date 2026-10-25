@@ -23,10 +23,16 @@ const app = await createApp({
 });
 const { initializeMcpRuntime } = await import("./utils/mcp/runtime");
 const { startMobileLinkRuntime } = await import("./utils/mobileLink");
-app.listen(realPort, async (error?: Error) => {
-  if (error) throw error;
+// ACT: listen 回调只在成功时执行且不带参数；端口占用（EADDRINUSE）走 server 的 "error" 事件，
+// 原来无人监听会裸崩。这里显式监听并给出可执行的处置提示。
+const server = app.listen(realPort, async () => {
   await initializeMcpRuntime(app, `http://127.0.0.1:${realPort}`, resolve(appDirectory, fromSource ? "packages/mcp/src/stdio.ts" : "build/mcp/stdio.js"));
   await startMobileLinkRuntime(app).catch(error => console.error("设备互联启动失败：", error));
   console.log(`[服务启动成功]: http://localhost:${realPort}`);
   console.log(`[启动耗时]: ${(Date.now() - startTime).toFixed(2)}ms`);
+});
+server.on("error", (error: NodeJS.ErrnoException) => {
+  if (error.code === "EADDRINUSE") console.error(`[服务启动失败]: 端口 ${realPort} 已被占用。请关闭占用该端口的程序，或通过环境变量 TOONFLOW_SERVER_PORT 换一个端口后重新启动。`);
+  else console.error("[服务启动失败]:", error.message);
+  process.exit(1);
 });

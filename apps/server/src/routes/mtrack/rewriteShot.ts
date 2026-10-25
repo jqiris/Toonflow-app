@@ -23,15 +23,22 @@ const inputSchema = z.object({
 }).refine(value => [value.prompt.integratedMultimodalDescription, value.prompt.overallSoundscape, value.prompt.nonDiegeticMusic]
   .some(field => field.trim().length > 0), "请先填写本镜提示词再整理");
 
-/** 整理规则：只做结构化整理，不新增剧情、不改事实，输出可直接整段替换本镜画面描述。 */
+/** 可替换的整理规则：只做结构化整理，不新增剧情、不改事实，输出可直接整段替换本镜画面描述。 */
 const rewriteRules = [
   "你是分镜提示词整理器。把用户给的一段镜头草稿整理成可直接投喂视频生成模型的提示词。",
   "硬性纪律：",
   "1. 只整理与结构化用户给出的内容，不得新增剧情、人物、道具、动作或任何原文没有的信息；",
   "2. 保留全部画面事实、镜头语言（景别、机位、运动、光线、色彩）与时间顺序；",
-  "3. 用英文输出，按「主体与动作 → 环境与空间 → 镜头与运动 → 光线与色彩 → 氛围」的顺序组织成一段连贯描述；",
-  "4. 不要输出解释、不要分段小标题、不要 Markdown 代码块，只输出整理后的提示词正文；",
-  "5. 原文中的 MiniMax H3 官方标记（<Picture N>/<Video N>/<Audio N>）原样保留在原位置。",
+  "3. 不要输出解释、不要分段小标题、不要 Markdown 代码块，只输出整理后的提示词正文；",
+].join("\n");
+
+// ACT: 规则 3（逐段整理不压段）与规则 5（禁新增尖括号、只保留 {{ref N}}）是下发链路的硬约束：
+// 压段丢段名会让多轨引擎对不上字段，尖括号标记进正文会被 wire 层校验判 error。
+// 用户自定义 rules 只允许替换上面的可配置部分，这两条永远追加在后，不可覆盖。
+const hardDiscipline = [
+  "以下为不可覆盖的硬性纪律（无论上文如何约定都必须遵守）：",
+  "1. 用英文输出，按「主体与动作 → 环境与空间 → 镜头与运动 → 光线与色彩 → 氛围」的顺序组织；原文已按官方段名（subject_definitions / summary / retention_analysis / detailed_description）分段时保留段名与段序、逐段整理，不得压成一段；",
+  "2. 参考标记只保留原文里已有的 `{{ref N}}`（N 是本镜参考位次，从 1 开始）原样不动；不要新增 `<Picture N>`/`<Video N>`/`<Audio N>` 这类尖括号标记——下发前由 wire 层按参考位次自己换算，写进正文会被校验判 error。",
 ].join("\n");
 
 /**
@@ -77,7 +84,7 @@ export default Router().post("/", validateFields(inputSchema.shape), async (req,
     `声音景观：\n${prompt.overallSoundscape.trim() || "（空）"}`,
     `非剧情音乐：\n${prompt.nonDiegeticMusic.trim() || "（空）"}`,
   ];
-  if (input.referenceIds?.length) sections.push(`参考图编号：\n${input.referenceIds.map((id, index) => `<Picture ${index + 1}> = ${id}`).join("\n")}`);
+  if (input.referenceIds?.length) sections.push(`本镜参考位次（正文里引用时写 \`{{ref N}}\`）：\n${input.referenceIds.map((id, index) => `{{ref ${index + 1}}} = ${id}`).join("\n")}`);
   const controller = new AbortController();
   const close = () => controller.abort();
   res.once("close", close);
@@ -85,7 +92,7 @@ export default Router().post("/", validateFields(inputSchema.shape), async (req,
   req.socket.once("close", close);
   try {
     const stream = u.ai.streamAi(configured, {
-      systemPrompt: input.rules?.trim() || rewriteRules,
+      systemPrompt: `${input.rules?.trim() || rewriteRules}\n\n${hardDiscipline}`,
       messages: [{ role: "user", content: sections.join("\n\n"), timestamp: Date.now() }],
     }, controller.signal);
     let text = "";

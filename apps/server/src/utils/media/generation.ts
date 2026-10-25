@@ -109,8 +109,37 @@ async function assetBytes(asset: MediaAsset, mediaType: "image" | "video" | "aud
   return { bytes, mimeType };
 }
 
+/** 节点输出目录用的是 uuid，形如标准 36 位（含 4 个短横线）时它不是代号目录。 */
+const uuidNamePattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * 引擎任务名（供应商侧再拼成「参考视频-S011-时间戳」）里的代号：优先请求自带的 label，
+ * 请求没带代号时从输出目录取（`assets/S011` → S011）——老客户端不带 label 也能出代号，
+ * 否则任务名会退化成提示词首段那种没法辨识的文字。
+ */
+function labelWithCode(label: string | undefined, outputDirectory: string | undefined) {
+  const codePattern = "(?:KF|SC|C|P|S)";
+  const trimmed = (label ?? "").trim();
+  // ACT: label 侧与目录侧同口径限 1-3 位数字（与供应商侧 jobCode 一致）——位数不限会把 `镜头 S0111`
+  // 判成「已带代号」原样下发，但供应商按 1-3 位配不出，成了两不管；超位数的现在走目录提取，提不到就退回无代号口径。
+  if (trimmed && new RegExp(`(?:^|[^A-Za-z0-9])${codePattern}\\d{1,3}(?![0-9])`, "i").test(trimmed)) return trimmed;
+  // ACT: 代号必须落在目录段开头且后接非字母数字（`assets/S011`、`assets\S011`），并排除 uuid 目录——
+  // 旧写法匹配路径里任意位置，把节点输出目录 assets/<uuid> 里以 c 开头接数字的片段也当代号（实测误拼率 2.98%）。
+  // ACT: 已知上限：以代号前缀字母开头的短目录名（如 assets/s3）会被误判成代号 S3；升级方向是只认工作区约定目录（assets/、shots/）下的名字。
+  let code: string | undefined;
+  for (const segment of (outputDirectory ?? "").split(/[\\/]/)) {
+    const name = segment.trim();
+    if (!name || uuidNamePattern.test(name)) continue;
+    code = new RegExp(`^(${codePattern}\\d{1,3})(?![A-Za-z0-9])`, "i").exec(name)?.[1];
+    if (code) break;
+  }
+  if (!code) return trimmed || undefined;
+  return trimmed ? `${trimmed} ${code.toUpperCase()}` : code.toUpperCase();
+}
+
 async function prepareRequest<T>(directory: string | undefined, mediaType: "image" | "video" | "audio", request: MediaGenerationRequest,
   read: (cwd: string, reference: MediaReference, type: string, signal?: AbortSignal) => Promise<T>, signal?: AbortSignal) {
+  const label = labelWithCode(request.label, request.outputDirectory);
   const references = async (items: MediaReference[] | undefined, type: string) => {
     if (!items?.length) return items ? [] : undefined;
     if (!directory) invalid("参考媒体需要工作目录");
@@ -124,13 +153,17 @@ async function prepareRequest<T>(directory: string | undefined, mediaType: "imag
     type: "audio" as const, model: request.modelId, text: request.prompt, images, audios: await references(request.audios, "audio"),
     voice: request.voice, speed: request.speed, volume: request.volume, pitch: request.pitch, language: request.language, format: request.format, sampleRate: request.sampleRate,
   };
-  if (mediaType === "image") return { type: "image" as const, model: request.modelId, prompt: request.prompt, images, ratio: request.ratio, size: request.size };
+  if (mediaType === "image") return {
+    type: "image" as const, model: request.modelId, prompt: request.prompt, images, ratio: request.ratio, size: request.size,
+    ...(label ? { label } : {}),
+  };
   return {
     type: "video" as const, model: request.modelId, prompt: request.prompt, images,
     videos: await references(request.videos, "video"), audios: await references(request.audios, "audio"),
     firstFrame: (await references(request.firstFrame ? [request.firstFrame] : undefined, "image"))?.[0],
     lastFrame: (await references(request.lastFrame ? [request.lastFrame] : undefined, "image"))?.[0],
     ...(request.continueFrom ? { continueFrom: request.continueFrom } : {}),
+    ...(label ? { label } : {}),
     ratio: request.ratio, resolution: request.resolution, duration: request.duration, generateAudio: request.generateAudio, mode: request.mode,
   };
 }

@@ -1,4 +1,5 @@
 import { lstat, mkdir, readFile, readdir, writeAtomic } from "@toonflow/file";
+import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { parseExt } from "@/utils/plugins/ext";
 import { requireNewerVersion } from "@/utils/plugins/install";
@@ -40,8 +41,11 @@ export default async function initializeExt(targetDirectory: string, sourceDirec
         try { requireNewerVersion(version, incoming.version, name); newer = true; }
         catch (error) { if ((error as { status?: number }).status !== 409) throw error; }
         // 同版本只更新仍与上次内置包一致的文件，市场安装或本地修改的包保留。
+        // ACT: 哈希两种写法都认——服务端自己写入的是 Bun.hash，构建器（vite 配置上下文没有 Bun 全局）
+        // 写入的是 sha256，两者都只用于判断「这份文件还是我们上次写的那份、没被人改过」。
         const bundled = state[name];
-        if (!newer && !(version === incoming.version && bundled?.hash === Bun.hash(previous).toString(16) && bundled.revision !== revision)) continue;
+        const unchanged = bundled?.hash === Bun.hash(previous).toString(16) || bundled?.hash === createHash("sha256").update(previous).digest("hex");
+        if (!newer && !(version === incoming.version && unchanged && bundled.revision !== revision)) continue;
       }
       await writeWorkspaceFile(path, source, !current);
       state[name] = { hash: Bun.hash(source).toString(16), revision };

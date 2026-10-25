@@ -29,6 +29,8 @@ export default Router().post("/", validateFields({
     if (!res.destroyed) res.set("Cache-Control", "no-store").json(success(price));
   } catch (err) {
     if (!controller.signal.aborted) throw err;
+    // ACT: aborted 吞错后若不落响应，非断开类 abort 源（如未来加超时）会让连接悬挂；客户端断开时 destroyed 已为真，跳过。
+    if (!res.writableEnded && !res.destroyed) res.end();
   } finally {
     res.off("close", close);
     req.off("aborted", close);
