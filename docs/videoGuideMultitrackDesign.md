@@ -4,6 +4,8 @@
 > 基线环境事实（r1 实测，引擎 v0.4.17 / build 2026.10.20.133102）：引擎↔技能包契约一致；`/jobs/{id}/resume` 实测可用（features jobs.resume=true），同 ref 同内容→HTTP 200 原任务、改内容→409，`failed`/`cancelled` 不自动恢复由引擎文案保证。
 >
 > **历史设计，勿作引导**：本文是视频引导多轨化的设计冻结稿（r3），文中「把选段 + 派工意图交给 agent 会话」的桥接假设**已被直连实现取代**——实际是 `packages/nodeShared/src/mtrack/directDispatch.ts` 的 `beginDirectDispatch`：编辑器自己经画布 `nodeTools` 逐镜生成、不经对话模型；文中提到的 `agentDispatch.ts` 已不存在。现行口径见 `packages/skills/assetCard/references/generationRunbook.md`（§十二、§十五、§十五·五）；本文仅作历史参考，不据此施工。
+>
+> **现状更新（2026-10-25）**：文中 A-10/A-15 的「资产接入三步（`connectNodes` → `node:setReferenceOrder` → `node:editProject`）」只用于已有工程补接；新项目的资产与分镜接入由画布「导入资产与分镜」节点（`packages/nodes/assetImportNode`）承接，正文参考标记统一写 `{{ref N}}`，`<Picture N>` 只是 wire 层换算后的模型侧标记。
 
 ## 0. 三问裁决总览
 
@@ -39,7 +41,7 @@
 | # | 文件 | 节（定位） | 动作与目标口径 |
 |---|---|---|---|
 | A-1 | `packages/skills/workflow/SKILL.md` | 「从哪里开始」路由表 | 表首新增一行判据：**任何视频制作/生成/继续意图，先按「多轨接入」节做形态判定**；命中多轨形态的行走新节，不锁进 Seedance 执行态。原「已定稿剧本+制作视频→立即锁 PART A」行改写为「…且形态为直连例外时，锁进 PART A」。 |
-| A-2 | 同上 | 「从哪里开始」表后、Seedance 锁存节之前**新增小节「多轨接入（默认制作路径）」** | 内容 = A1 统一分流口径（逐字基准）+ 指针链接：`assetCard` 技能（资产卡/多轨契约）与其 runbook 的 §十三、§十五·五；细则一律指针化，本文件不复写 runbook 内容（防两处漂移）。链接指向 [生成 SOP runbook](../assetCard/references/generationRunbook.md)。 |
+| A-2 | 同上 | 「从哪里开始」表后、Seedance 锁存节之前**新增小节「多轨接入（默认制作路径）」** | 内容 = A1 统一分流口径（逐字基准）+ 指针链接：`assetCard` 技能（资产卡/多轨契约）与其 runbook 的 §十三、§十五·五；细则一律指针化，本文件不复写 runbook 内容（防两处漂移）。链接指向 [生成 SOP runbook](../packages/skills/assetCard/references/generationRunbook.md)。 |
 | A-3 | 同上 | 「Seedance 路由锁存」节（含意图条款与全部锁存子弹） | 命中条件第 2 项限定为「**直连例外形态下**的制作/生成/继续/修订视频」；节首补一段：多轨形态下 PART A 仍作提示词创作内核（节拍/站位/连续性规则可用），但产物落 `clips[].prompt` 三字段、格式纪律以 runbook §四 为准，**A0 不问「Seedance 2.0 还是 2.5」**——多轨工程模型按工程声明（默认 FreeVideo MiniMax-H3）；用户点名要 Seedance 提示词写作时仍锁 PART A。其余锁存条款在不与上段冲突处原样保留。 |
 | A-4 | 同上 | 「Seedance 阶段硬隔离」:59 与「按当前创作问题读取方法」表 :1382 两处「进入执行层」落点 | 落点从「canvasExecution.md」改为「先按『多轨接入』节做形态判定：多轨 → assetCard runbook §十三/§十五·五；直连例外 → canvasExecution.md」。 |
 | A-5 | 同上 | 「在画布上推进」节点创建纪律（「一个剧情片段…默认对应一份完整提示词、一个视频生成节点」段） | 该句加限定「直连例外形态下」；补一句：「多轨工程中不逐段手建视频节点——节点由派工清单建/复用（runbook §一步 1.5、§十三.2），画布节点只是执行载体（assetCard 核心约定 3）。」 |

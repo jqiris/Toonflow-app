@@ -22,6 +22,8 @@
 >
 > **交付范围（captain 裁定）**：P0 → P1 → P2 为本轮目标；P3 默认不做（审阅 Y1，YAGNI），需要时另行立项。方案行数超出原定 450 行上限经裁定**不返工**：超出部分全部是审阅 A1–A4/C1–C3/D1–D3 修订带来的数据契约与可执行命令，裁掉会削弱契约完整性（三种行数统计口径不一致，以实际内容完整性为准）。
 
+> **现状更新（2026-10-25）**：资产卡与分镜接入已由画布「导入资产与分镜」节点（`packages/nodes/assetImportNode`）落地——抽取资产卡与分镜、批量出资产图、写 `plan/assetIndex.json` 与 `plan/story.mtrack` 一次完成；本文 K5 的 `plan/segmentMap.json` 与 `planOperator assemble` 属历史方案（现状见 `multitrackProductionPlan.md` §1）。角色参考板版面同步为 16:9·2K 四栏（半身像腰部以上、正面全身、90° 侧面全身、背面全身）。
+
 ### 0.2 复用优先、最小 diff
 
 - **P0/P1 零代码**：只新增技能目录与文档，构建、类型检查、运行时加载全部复用既有链路（`packages/skills` → `build/skills` → `data/skills`，`apps/server/src/app.ts` 首次安装只补缺失）。
@@ -244,7 +246,7 @@ packages/tools/planOperator/
 | V4 | 构图卡不参与派生、必须至少一个母版参考 | 报错 |
 | V5 | `segmentMap` 中每个 `nodeId` 必须出现在画布快照中、类型为生成节点 | 报错 |
 | V6 | 节点入边数 = `references.length`，且按 `referenceOrder` 排序后与 `references` 顺序一致 | 报错（防「改方案没保存就出图」，LSC §5.3） |
-| V7 | 视频提示词中的官方标记 `<Picture N>`/`<Video N>`/`<Audio N>` 只查越界（上限按类型计数） | 报错；旧 `{{ref N}}` 只报迁移 warning（原「每个 N 至少出现一次」要求已取消） |
+| V7 | 视频提示词里的参考标记：写作者写 `{{ref N}}`（N = 参考位次）；`<Picture N>`/`<Video N>`/`<Audio N>` 属 wire 层换算结果，写进正文即非法 | 报错：尖括号 level=error（`planValidator.ts:239-245`）；`{{ref N}}` 越界才报错、不查重号 |
 | V8 | 参考条数超过当前节点**实际匹配模式**的上限（空镜参考集非空或含 VIDEO/AUDIO 时，`MiniMax-H3` 只能落 `startFrameOptional` 的 2 图；图像节点 `multiReference` 4 图） | 报错，指明应改用拼板或改用模式 |
 | V9 | `textOnly` 卡不得有 `nodeId`、不得被引用为图片参考 | 警告 |
 | V10 | 节点的 `data.mode` 必须仍是快照时该模型「匹配模式集合」的成员（防止连线后 Vue Flow 的同步 `watch` 悄悄把模式切走，见 `videoGenerationNode` 第 190–197 行） | 报错 |

@@ -5,6 +5,8 @@
 > 冻结范围：`docs/requirementMultitrackAgentBridge.md`。禁止改动 `packages/`、`apps/`。
 >
 > **历史设计，勿作引导**：本文是「多轨界面 → agent 执行桥」的冻结需求记录，**该桥接方案未实施**——实际落地为 `packages/nodeShared/src/mtrack/directDispatch.ts` 直连派工（编辑器自己经画布 `nodeTools` 逐镜生成，不经对话模型），文中提到的 `agentDispatch.ts` 并不存在。现行口径见 `packages/skills/assetCard/references/generationRunbook.md`（§十五、§十五·五）；本文仅作历史参考。
+>
+> **现状更新（2026-10-25）**：下文 §5 调用序列里「`node:setPrompt` 写作者已写好的官方六段正文（含 `<Picture N>`）」**已反转**：写作者正文统一写 `{{ref N}}`（`N` = 本镜 `referenceIds` 位次），尖括号 `<Picture N>`/`<Video N>`/`<Audio N>` 只是 wire 层按参考 `dataType` 换算的模型侧标记，写进正文会被 V7 判 error（`packages/tools/planOperator/src/planValidator.ts` 的 V7 分支）；引擎只拼「全片风格/全片约束」前缀与漏写段名兜底，不代写六段正文。现行口径见 `generationRunbook.md` §四。
 
 ## 0. 现状链路盘点（契约的事实基础）
 
@@ -94,7 +96,7 @@ grep -n 'getCanvasContext' apps/web/src/pages/workspace/panels/canvas/canvasHost
 ```
 node:getConfig        → 读当前 matchingModes / 可用 duration / resolution / ratio（不许跳过）
 node:setConfig        → { providerId, modelId, duration=seconds, resolution, ratio, generateAudio, mode }
-node:setPrompt        → 写作者已写好的官方六段正文（含 `<Picture N>`；引擎只拼全片风格/全片约束前缀、正文原样透传，不代写任何段、不追加参考顺序声明）
+node:setPrompt        → 写作者已写好的官方六段正文（含 {{ref N}} 参考标记；尖括号 <Picture N> 一类不是写作者写法，下发前由 wire 层按 dataType 换算；引擎只拼全片风格/全片约束前缀、正文原样透传，不代写任何段、不追加参考顺序声明）
 node:generateVideo    → 空调用；记录提交时刻
 node:getGenerationStatus → 追终态；换轮/换会话前先 getCanvasNodes({fields:["outputs"]}) 读产物
 mtrackUpdate          → 回写 status/nodeId/assetPath/attempts（planOperator，走 §4 契约）

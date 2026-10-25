@@ -83,6 +83,8 @@
 - 为什么缺：两条路都用得上（局部补接 vs 全量装配），但没有「什么时候用哪条」的判据。
 - 由谁补：**技能文档**（决策树：已有画布接好的 → 只补缺；从零装配 → `assemble`）。
 
+> 现状更新（2026-10-25）：新项目主入口改为画布「导入资产与分镜」节点（`packages/nodes/assetImportNode`，抽取资产卡与分镜并批量出资产、写索引与 `plan/story.mtrack`）；`planOperator assemble` 与手工三步只用于已有工程补接，上文两条路径并存的现象已由该节点收敛。
+
 ### G10 MCP 侧没有 `planOperator` 的直连工具
 
 - 现象：MCP 只暴露 `createAgentTools` 产出的通用工具与 `listSkills`（`apps/server/src/utils/mcp/operations.ts:67`），`skillOperator` 读技能后再落到画布 node 工具或工作区文件读写；`planOperator` 不是 MCP server 直挂工具。

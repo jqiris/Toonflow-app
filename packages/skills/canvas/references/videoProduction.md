@@ -4,15 +4,15 @@
 
 ## 0. 逐阶段协作
 
-视频生成先判工程形态（见 workflow 技能「多轨接入（默认制作路径）」节）：工作区存在 `.mtrack` 工程，或任务属于分镜批量、跨镜连续性、需要状态回写与验收合成 → 默认走 assetCard 多轨链路（资产卡定稿 → 分镜接入多轨工程 → 逐镜按 runbook §十三 SOP 或 `node:dispatchGenerate` 二选一），不按本文件逐段手建单节点。形态为直连例外（无多轨工程且用户点名只要单条视频，或对既有单视频节点的局部重生成）时，**默认媒体模型为 freevideo / MiniMax-H3**（用户点名 Seedance 时才按其版本）：先完成并确认本次范围的完整剧本，再根据剧本生成角色、场景、道具资产；从完整剧本拆出多个片段，每片段的全部镜头转成一份视频提示词，资产直接作为视频输入。一个片段可以有多个镜头和动作，对应一个视频节点；不默认生成关键帧。用户明确提出首帧、首尾帧、构图锁定等特殊要求时，再增加对应阶段。
+视频生成先判工程形态（见 workflow 技能「多轨接入（默认制作路径）」节）：工作区存在 `.mtrack` 工程，或任务属于分镜批量、跨镜连续性、需要状态回写与验收合成 → 默认走 assetCard 多轨链路，顺序固定为：先出分镜稿 + 资产稿（文本层）→ 画布「导入资产与分镜」节点（`remote-assetImportNode`，工具 `node:importScript`）导入正文、抽取卡片与分镜、结构校对并（可选）批量出资产图 → 资产图节点连到多轨节点 `in` 端口 → `node:bindProject` 创建/绑定 `plan/story.mtrack` → 界面「参考素材」从连线上的资产卡打勾（勾选位次即 `{{ref N}}`）→ 逐镜按 runbook §十三 SOP 或 `node:dispatchGenerate` 派工 → 验收合成。**不要一上来就建多轨工程**，也不按本文件逐段手建单节点。形态为直连例外（无多轨工程且用户点名只要单条视频，或对既有单视频节点的局部重生成）时，**默认媒体模型为 freevideo / MiniMax-H3**（用户点名 Seedance 时才按其版本）：先完成并确认本次范围的完整剧本，再根据剧本生成角色、场景、道具资产；从完整剧本拆出多个片段，每片段的全部镜头转成一份视频提示词，资产直接作为视频输入。一个片段可以有多个镜头和动作，对应一个视频节点；不默认生成关键帧。用户明确提出首帧、首尾帧、构图锁定等特殊要求时，再增加对应阶段。
 
-写资产提示词前必须读取 [资产图规范](../../script/references/assetGuide.md)，拆片段和写视频提示词前必须读取 [片段制作指南](../../script/references/productionGuide.md)。本文件负责画布映射，不能用操作说明代替上述具体模板。
+写资产提示词前必须读取 assetCard 技能的 [资产卡模板](../../assetCard/references/assetCardTemplate.md) 与 [图片提示词规范](../../assetCard/references/imagePrompt.md)（`C` 卡只有四视图整版一种版面）；拆分镜和写视频提示词前必须读取 [生成 SOP runbook](../../assetCard/references/generationRunbook.md) §四。本文件负责画布映射，不能用操作说明代替上述具体模板；跨技能的 `script` 规范按 `available_skills` 中实际 `location` 定位。
 
 | 阶段 | 给用户看的成果 | 确认后才推进的内容 |
 | --- | --- | --- |
 | 需求与简报 | 已知需求、尚缺的受众/时长/画幅/风格/声音/参考用途 | 故事与剧本；每轮只问当前必要的少量问题 |
 | 完整剧本 | 本次范围的逐场正文、完整动作和对白/OS/VO、开头经过与结尾；梗概不能代替正文 | 根据剧本提取角色、场景和道具；不能因题目熟悉就跳过剧本 |
-| 资产设计与准备 | 剧本资产清单、分类型提示词、角色面部特写及正侧背三视图等实际资产成果 | 按确认范围生成并验收素材，已有合格资产复用；通过后供视频使用 |
+| 资产设计与准备 | 剧本资产清单、分类型提示词、角色的 16:9 + 2K 四视图整版（半身像 + 正面/90° 侧面/背面全身）等实际资产成果 | 按确认范围生成并验收素材，已有合格资产复用；通过后供视频使用 |
 | 剧本分片段与视频提示词 | 每片段的剧本范围、内部镜头、预计时长、承接状态及一份完整多参提示词 | 一个明确范围的完整片段小样，不按内部镜头各建生成任务 |
 | 视频小样 | 实际视频、已检查内容及需调整之处 | 用户确认效果后扩展其同意的镜头范围 |
 | 批量制作与交付 | 对应片段的素材、实际规格、剩余问题 | 剪辑/合成或下一批；没有合成能力就交付片段，不宣称成片 |
@@ -37,7 +37,7 @@
 | 内容 | 放在哪里 | 怎样使用 |
 | --- | --- | --- |
 | 创意简报、完整剧本、片段与镜头表 | 文本节点 | 保存可编辑的正文和规划；不直接连到图片或视频生成节点。 |
-| 角色、场景、道具设计 | 对应资产的图片生成节点 | 按资产图规范填写：角色面部特写加完整三视图，场景/道具按各自类型与画风布局；不把片段动作、对白、运镜当成出图提示词。 |
+| 角色、场景、道具设计 | 对应资产的图片生成节点 | 按资产图规范填写：角色出成一张 16:9 + 2K 的四视图整版（① 半身像（正面、腰部以上）② 正面全身 ③ 90° 侧面全身 ④ 背面全身；四栏等分、同一张图，②③④ 共用全身比例尺按脚底线对齐，① 按上半身放大不按肩线），场景/道具按各自类型与画风布局；不把片段动作、对白、运镜当成出图提示词。 |
 | 已确认角色图、场景图、道具图 | 已有媒体输出或素材节点 | 直接复用并连接多参视频节点；已有文件通过实际素材导入函数装入节点。 |
 | 一个片段的全部镜头（直连例外形态下） | 一个视频生成节点的提示词 | 从本段对应剧本与镜头计划转写一份三段式提示词，包含真实素材定义、顺序镜头及风格约束；不把内部镜头拆成多个节点。多轨工程形态下镜头内容落 `clips[].prompt`，由写作者直接按 MiniMax H3 官方 ref2va 六段书写、参考标记写 `{{ref N}}`（runbook §四/§十三）。 |
 | 特殊要求的关键帧或首尾帧 | 对应图片生成节点 | 仅在该路线已明确确认时准备，不作为多参制作的固定中间步骤。 |
@@ -46,7 +46,7 @@
 
 操作顺序为：`addNode` → 记录返回的 `node.id` → `getNodeTools` 查询函数 → `renameNodes`（需要时，传 `renames` 数组）→ `nodeTools` 填内容。创建时也可直接设置名称；已有节点从修改内容开始。只创建空节点或把提示词留在聊天里，都不算完成画布搭建。
 
-当前内置节点可能提供 `node:setText`、`node:setImage`、`node:setVideo`、`node:setAudio`、`node:setPrompt`、`node:getConfig`、`node:setConfig` 和相应生成函数；只有本次函数清单确实包含它时才使用，参数读取该函数说明，不将这些名称套给其他插件。多轨编辑器节点（`remote-multitrackNode`）则提供十六个函数：`node:getStatus`、`node:bindProject`、`node:readClips`、`node:readReferenceMap`、`node:editProject`、`node:saveProject`、`node:reloadProject`、`node:dispatchGenerate`、`node:cancelBatch`、`node:pauseBatch`、`node:resumeBatch`、`node:retryClip`、`node:rewritePrompt`、`node:refreshOutput` 十四个由节点自身注册（绑定工程、批量编辑、派工/取消；`node:readReferenceMap` 一次读全「镜 → 资产卡 → 画布节点 → {{ref N}} 位次」四段映射链并给出 `unconnectedCardIds` / `orphanSources`，不用自己拿 `readClips` + `assetIndex` + `getReferenceOrder` 三处缝合；`node:pauseBatch` 是软闸门——本镜结束后不再开始下一镜、不中断在跑镜头；`node:resumeBatch` 沿用同一批次号续跑剩余镜头；`node:retryClip` 只重派一镜、生成成功后作为新版本追加（旧视频保留、新视频成默认）；`node:rewritePrompt` 只调文本模型返回 `{ text, requiresReview }`、不改工程；刷新成片。派工/续跑/重试被拒时直接抛错并带原因，不返回成功快照），`node:getReferenceOrder`（读端口当前生效参考顺序与 `{{ref N}}` 文本，即画布 mention chip 文本）、`node:setReferenceOrder`（按给定 sources 顺序重写参考编号，资产接入三步第 2 步）两个引用函数由 `useNodeReferences()` 自动注册；`dispatchGenerate` 是界面「生成选中段」的等价物、立即返回不等待。多轨工程真源读写以 `planOperator` 的 `mtrackRead`/`mtrackUpdate` 为准，`node:editProject` 为编辑器等价能力，同经 `updatedAt` CAS 对账；细节见 assetCard 技能 runbook 的「对话 Agent 直接操作画布多轨节点」节。多轨镜头提示词按官方六段写，参考标记统一用 `{{ref N}}`（`N` = 本镜参考位次）；引擎只补全片风格/全片约束前缀。
+当前内置节点可能提供 `node:setText`、`node:setImage`、`node:setVideo`、`node:setAudio`、`node:setPrompt`、`node:getConfig`、`node:setConfig` 和相应生成函数；只有本次函数清单确实包含它时才使用，参数读取该函数说明，不将这些名称套给其他插件。多轨编辑器节点（`remote-multitrackNode`）则提供十六个函数：`node:getStatus`、`node:bindProject`、`node:readClips`、`node:readReferenceMap`、`node:editProject`、`node:saveProject`、`node:reloadProject`、`node:dispatchGenerate`、`node:cancelBatch`、`node:pauseBatch`、`node:resumeBatch`、`node:retryClip`、`node:rewritePrompt`、`node:refreshOutput` 十四个由节点自身注册（绑定工程、批量编辑、派工/取消；`node:readReferenceMap` 一次读全「镜 → 资产卡 → 画布节点 → {{ref N}} 位次」四段映射链并给出 `unconnectedCardIds` / `orphanSources`，不用自己拿 `readClips` + `assetIndex` + `getReferenceOrder` 三处缝合；`node:pauseBatch` 是软闸门——本镜结束后不再开始下一镜、不中断在跑镜头；`node:resumeBatch` 沿用同一批次号续跑剩余镜头；`node:retryClip` 只重派一镜、生成成功后作为新版本追加（旧视频保留、新视频成默认）；`node:rewritePrompt` 只调文本模型返回 `{ text, requiresReview }`、不改工程；刷新成片。派工/续跑/重试被拒时直接抛错并带原因，不返回成功快照），`node:getReferenceOrder`（读端口当前生效参考顺序与 `{{ref N}}` 文本，即画布 mention chip 文本）、`node:setReferenceOrder`（按给定 sources 顺序重写参考编号；只在手工接线、需要临时改位次时用——多轨工程的通用口径是界面「参考素材」从连线打勾）两个引用函数由 `useNodeReferences()` 自动注册；`dispatchGenerate` 是界面「生成选中段」的等价物、立即返回不等待。多轨工程真源读写以 `planOperator` 的 `mtrackRead`/`mtrackUpdate` 为准，`node:editProject` 为编辑器等价能力，同经 `updatedAt` CAS 对账；细节见 assetCard 技能 runbook 的「对话 Agent 直接操作画布多轨节点」节。多轨镜头提示词按官方六段写，参考标记统一用 `{{ref N}}`（`N` = 本镜参考位次）；引擎只补全片风格/全片约束前缀。导入资产与分镜节点（`remote-assetImportNode`）提供 `node:importScript`：从剧本/分镜正文抽取资产卡与分镜、结构校对、（可选）批量出资产图，并**独占写** `plan/assetIndex.json` 与 `plan/story.mtrack`（任一已存在即拒绝覆盖）——多轨链路的资产与工程默认由它落成，已有工程改用 `node:bindProject(mode:"open")`。
 
 文本节点写入的是可供下游读取的文本内容，不等同于触发节点内的语言模型。文字已由当前助手完成时直接写入，不需要再次生成。用 `getCanvasNodes` 的 `fields: ["data"], dataKeys: ["textPath"]` 读取正文文件位置，再读取实际文件核对；需要查看当前内存正文时用 `path: ["outputs", "text", "value"]` 分段读取。默认详情未包含正文不代表节点为空，也不要猜路径或直接改文件替代节点函数。
 
@@ -59,16 +59,16 @@
 先读取两端真实端口，再用 `connectNodes` 连接输出与兼容输入。端口 ID 和类型从最新节点信息获取。每条边都应回答“下游要使用上游的什么内容”。
 
 - 已连接的文字会作为上下文整段加入提示词，所以剧本和片段表不能当装饰线接入生成节点。助手先读完整剧本，再把本段原文和全部内部镜头转写到目标提示词中；剧本仍是内容来源。
-- 图像生成用于资产准备，视频直接接入已确认资产，以多参提示词描述整个片段；不能拿一张风格图代替小蝌蚪、青蛙或池塘资产，也不能把角色三视图变成视频里并排的三个角色。
+- 图像生成用于资产准备，视频直接接入已确认资产，以多参提示词描述整个片段；不能拿一张风格图代替小蝌蚪、青蛙或池塘资产，也不能把角色的四视图整版切成视频里并排的四个角色。
 - 风格图只用于已确认的配色、笔触或材质；角色图约束身份外观，场景图约束环境空间，道具图约束物件形制。视频、音频参考仅在当前任务需要且目标实际支持时加入，不机械连接全部资产。
 - 每项实际使用的媒体都在提示词中写 `{{ref N}}`、素材名称和具体用途，不能只连边，或写“若附带参考图”。多个角色分别说明谁做什么，不能让模型猜素材对应关系。多轨工程的镜头提示词也用 `{{ref N}}`（`N` = 本镜参考位次），见第 2 节的六段写法。
 - 普通参考图不天然等于首帧或尾帧。首尾约束需要支持该方式的实际配置和正确顺序，不能仅在提示词里写“作为首帧”便宣称设置完成。
 - 先接线，再用 `getCanvasEdges` 的 `nodeIds: [目标ID], direction: "incoming"` 分页读完整目标入边。用 `getCanvasNodes` 的 `fields: ["data"], dataKeys: ["referenceOrder"]` 读取目标排序，用 `fields: ["ports", "outputs"]` 分批读取源节点并核对引用编号，最后调用目标的 `node:setPrompt`。默认详情不返回这些字段；分页和字段截断都须按[画布读取规则](../SKILL.md#读取画布)补齐。文字和媒体共用编号，不能把第一张图片一律写成参考 1。编号无法确认时不猜、不触发生成；接线、删除或排序改变后重新核对。
 - 两个视频节点的前后排列不要求连边。只有下段实际使用上段视频作为参考、延续等输入且目标支持时才连；剪辑顺序写在名称、位置或说明中。
 
-当前内置节点按目标输入端口（通常为 `in`）收集有效入边。存在 `data.referenceOrder[端口ID]` 时，按其中的键排序，键为 `encodeURIComponent(JSON.stringify([source, sourceHandle]))`；未列入的项按入边顺序排在后面，没有排序配置时保持入边顺序。列表中第 N 项就是 `{{ref N}}`（多轨工程与直连视频节点同一口径）。这些是核对依据，不是让助手直接修改节点数据的接口。
+当前内置节点按目标输入端口（通常为 `in`）收集有效入边。存在 `data.referenceOrder[端口ID]` 时，按其中的键排序，键为 `encodeURIComponent(JSON.stringify([source, sourceHandle]))`；未列入的项按入边顺序排在后面，没有排序配置时保持入边顺序。列表中第 N 项就是 `{{ref N}}`（多轨工程与直连视频节点同一口径）。多轨工程的 `referenceIds` 由界面「参考素材」从 `in` 端口连线上的资产卡打勾产生（没连线的不给勾），agent 不预写、也不靠 `node:setReferenceOrder` 手工排。这些是核对依据，不是让助手直接修改节点数据的接口。
 
-提示词开头用真实 `{{ref N}}` 定义主体、场景、道具及稳定特征；之后按本段原镜号逐镜写动作与空间、单一主运镜、完整台词和声音，最后写已确认风格与必要约束。多轨工程把同一套内容写成官方 ref2va 六段：`subject_definitions` 定义 `<Subject N>` 及其来源 `{{ref N}}`，`summary` 写任务类型与主要参考关系，`retention_analysis` 写各参考被保留/迁移/复制的关系，`detailed_description` 写逐镜正文，`overall_soundscape` 与 `non_diegetic_music` 落同名两字段。写法和完整多镜示例见 [制作指南](../../script/references/productionGuide.md)。不能用一句“引用小蝌蚪和池塘，游向青蛙”替代整段剧情与镜头，也不能仅因有标记便宣称模型已准确遵循。
+提示词开头用真实 `{{ref N}}` 定义主体、场景、道具及稳定特征；之后按本段原镜号逐镜写动作与空间、单一主运镜、完整台词和声音，最后写已确认风格与必要约束。多轨工程把同一套内容写成官方 ref2va 六段：`subject_definitions` 定义 `<Subject N>` 及其来源 `{{ref N}}`，`summary` 写任务类型与主要参考关系，`retention_analysis` 写各参考被保留/迁移/复制的关系，`detailed_description` 写逐镜正文，`overall_soundscape` 与 `non_diegetic_music` 落同名两字段。写法与完整多镜示例见 [生成 SOP runbook §四](../../assetCard/references/generationRunbook.md)。不能用一句“引用小蝌蚪和池塘，游向青蛙”替代整段剧情与镜头，也不能仅因有标记便宣称模型已准确遵循。
 
 生成用到的上游内容必须准备好。可先搭好依赖并填写下游提示词，但空输出、尚未生成的图像不能作为已就绪参考启动下游。
 
@@ -101,7 +101,7 @@
 
 假设已确认的完整短剧本为“林宁推门进屋，发现桌上的信，拆开信封后停住”，无对白。模型实际容量能容纳这段连续事件；节点类型、ID 与端口仍从当前工具获取。
 
-1. 从剧本提取林宁、房间、信件，复用已有合格素材；缺项按资产图规范制作，展示角色参考板、无人物场景图和道具图并等待确认。
+1. 从剧本提取林宁、房间、信件，复用已有合格素材；缺项按资产图规范制作，展示角色四视图整版、无人物场景图和道具图并等待确认。
 2. 将该连续事件作为“场01·片段01”，内部安排三个镜头：中景跟拍进屋，特写发现信件，中近景固定观察拆信后的反应。三个镜头都保留在该片段的同一份视频提示词中。
 3. 只创建一个“场01·片段01·视频”节点，接入三个真实资产，核对引用顺序，按三段式写素材定义、三个镜头的完整动作/环境音和风格约束。剧本文本不直接连入节点，不额外制作开门、信件、反应三张分镜图。
 4. 核对节点实际模型、模式、时长、画幅与声音，展示片段计划、完整提示词、数量与费用，用户明确批准本次算力消耗方案后再调用一次生成；展示实际片段并询问调整。其他片段仅按已获准的算力消耗范围继续，不按每个内部镜头另发一次请求。
@@ -115,4 +115,4 @@
 
 ## 参考依据
 
-创作方法的公开来源见 [制作来源说明](../../script/references/sources.md)。操作时使用本手册、已安装的本地制作指南和实际工具返回值，无需访问外部资料。
+创作方法的公开来源不在本仓库内；跨技能 `script` 规范按 `available_skills` 中实际 `location` 定位。操作时使用本手册、已安装的本地制作指南和实际工具返回值，无需访问外部资料。

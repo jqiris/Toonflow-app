@@ -1,6 +1,6 @@
 # 多轨工程模板（`plan/story.mtrack`，JSON 内容，自定义扩展名 mtrack）
 
-> 权威依据：[docs/multitrackProductionPlan.md](../../../../docs/multitrackProductionPlan.md) §2（全量契约）、§2.5（参考顺序协议）、§3.4（保存与冲突）、§4.1/§4.6（生成调用序列与状态查询纪律）、§5（V11–V15）、§9（与 `segmentMap.json` 的关系）。
+> 权威依据：[docs/multitrackProductionPlan.md](../../../../docs/multitrackProductionPlan.md) §2（全量契约）、§2.5（参考顺序协议）、§3.4（保存与冲突）、§4.1/§4.6（生成调用序列与状态查询纪律）、§5（V11–V16）、§9（与 `segmentMap.json` 的关系）。
 > 资产侧编号与接线规则见 [参考接线解析规则](referenceResolution.md)；卡片写法见 [资产卡模板](assetCardTemplate.md)。
 > 本文件只描述**契约与写作文本纪律**，不描述编辑器实现（编辑器内核属于 `packages/nodeShared/src/mtrack/`，画布节点在 `packages/nodes/multitrackNode`）。
 
@@ -92,7 +92,7 @@
 | `prompt.nonDiegeticMusic` | string | ✅ | 可 `N/A`；**留空则不下发该段** | 配乐（只写内容，`non_diegetic_music:` 由引擎拼） |
 | `referenceIds` | string[] | ✅ | **图片 ≤9**（校验器 V8 的 `MAX_IMAGE_REFERENCES = 9`）、**音频 ≤1**（同属 V8 的 `MAX_AUDIO_REFERENCES = 1`）；**视频参考并入图片桶一起计数，V8 不校验视频**（卡体系没有 `video` 这个 `kind`，「视频 ≤1」只是供应商声明）；**多轨界面勾选上限只有 4**（`referencePicker.vue` 的 `toggle` 硬编码，4 来自供应商声明的 `imageReference:4`）——超 4 张是被界面挡下的，不是校验器挡下的；顺序是画布引用位次，`{{ref N}}` 的 `N` 就是这里的下标 +1（可混入 `kind: "sound"` 音频卡） | 资产卡编号，须存在于 `assetIndex.json` 且资产已出图（V13） |
 | `mode` | enum | 否 | `ref` / `image` / `text` | 任务模式：`ref` 多图参考、`image` 单图首帧、`text` 纯文。**缺省只能推断出 `text`（无 `referenceIds`）或 `ref`（有参考）；`image` 推断不出来，要单图首帧必须显式写**（`resolveClipMode`，`mtrackProject.ts:47-51`） |
-| `continuity` | enum | ✅ | `shot`（独立起拍/切镜）/ `context`（承接上一镜） | **首段必须 `shot`**；`context` 时参考素材合计 ≤3（图片/视频/音频同口径，V16 按 `referenceIds` 总数判）、时长 ≥10 秒；三种衔接到两态的判据见 §2.3 |
+| `continuity` | enum | ✅ | `shot`（独立起拍/切镜）/ `context`（承接上一镜） | **首段必须 `shot`**；`context` 时参考素材合计 ≤3（图片/视频/音频同口径，V16 按 `referenceIds` 总数判）、时长 ≥10 秒；**默认 `context`**，例外与判据见 §2.3 |
 | `status` | enum | ✅ | `pending`/`generating`/`generated`/`accepted`/`failed` | 状态机见 §三 |
 | `nodeId` | string\|null | ✅ | — | 视频节点 ID；**媒体任务通道的镜恒为 `null`**（该通道不建画布节点，`generated`/`accepted` 也不要求它，V13 对这类镜有例外），旧工程的画布节点版次才有值 |
 | `assetPath` | string\|null | ✅ | 工作区相对路径 | 产出视频；必须**真实可读**，否则该镜只能记 `failed`。也是**历史版本的身份**（见 §三）；`generated`/`accepted` 时不得为 `null`（V13） |
@@ -102,19 +102,22 @@
 
 > 字段名一律小驼峰（AGENTS.md）；`clips[]` 内允许的键以上表为限，不自行新增字段——新增字段会让旧版工具与编辑器直接校验失败。
 
-### 2.3 `continuity` 取值判据：三种衔接到两态
+### 2.3 `continuity` 取值判据：能承接就承接
 
-`shot` / `context` 只有两个取值，按「这一段真正需要什么上下文」判定，**不要按场景编号机械决定**：
+`shot` / `context` 只有两个取值。**默认是承接**：同一段落、同一空间，画面或动作要接上一镜，就写 `context`；只有下表这几种确实不该承接的情况才写 `shot`，并在标题或提示词里写清为什么不能承接：
 
 | 情况 | 用什么 | 判据 |
 | --- | --- | --- |
-| **动作续接**：同一动作继续，上一镜末帧就是本镜起点 | `context` | 上一镜已成功且 `attempts` 里有 `jobId`；本镜 ≥10 秒、参考合计 ≤3 |
-| **同场切镜**：同一空间换机位/景别，身份、服装、道具、环境状态连续 | `shot` | 保持 `referenceIds` 里的身份/场景/道具卡一致即可；**不因为场景编号相同就强制延续运动上下文** |
-| **换场或时间跳转** | `shot` | 只继承剧情需要的人物与物品状态 |
+| **默认：同段落、同空间，画面/动作接上一镜** | `context` | 上一镜已成功且 `attempts` 里有 `jobId`；本镜 ≥10 秒、参考合计 ≤3 |
+| **换场**：换到另一个空间 | `shot` | 环境不连续，硬接会把上一镜的空间带进来 |
+| **时间跳转**：明确的跨日、闪回、跳过一段时间 | `shot` | 上一镜末帧不是本镜起点 |
+| **需要重新构图 / 独立起拍**：新段落第一镜、要重新交代空间与机位 | `shot` | 承接会把上一镜的机位与运动带进来，等于重新交代失败 |
+| **本镜 `seconds` < 10 秒，或参考合计 > 3** | 改 `seconds` 到 ≥10 秒并减参考后承接，否则 `shot` | 引擎硬限制：续接段每条 ≥10 秒、参考素材合计 ≤3（图片/视频/音频同口径），做不到就不要承诺承接 |
+| **首镜** | `shot` | 没有上一镜可承接，V11 直接拒绝 |
 
-- **只有动作续接用 `context`**：同场切镜用 `context` 会强制延续上一镜的运动，多半得到一段拖沓的重复动作；真正的动作续接用 `shot` 则会丢掉起点的身体姿态与持物状态。
+- **多数镜头应当承接**：同一个空间里连续的动作、对话、反应镜头默认都是 `context`；一整片几乎全是 `shot` 通常是判错了。
+- 承接不是凑数：换场、时间跳转、重新起拍这几类强行 `context`，会把上一镜的机位与运动一起带进来，构图与场景建立白做。
 - `context` 拿不到上一镜可用的 `jobId` 时**直接报错，不静默降级成独立镜头**：要么先生成上一镜，要么显式改成 `shot`。
-- 少数镜用 `context` 属正常，全片都用通常是判错了。
 - **批量派工是串行的**：`node:dispatchGenerate` 对目标镜按 `clips` 顺序逐个执行（上一镜出结果才开始下一镜），不是并发下发。所以同一批次里可以混用两态——轮到某镜时上一镜已落盘、`attempts` 里的 `jobId` 已经能读到；不要为了「批量就不能续接」把承接镜改成 `shot`，也不要为了续接把独立镜改成 `context`。上一镜失败时下一镜的 `context` 会报「上一镜没有可用的生成任务号」并跳过（串行必然结果），修好上一镜后用 `node:resumeBatch` 续跑该镜（沿用同一 `batchId`）。
 
 ---
@@ -135,8 +138,8 @@ pending ──提交生成──> generating ──成功──> generated ─�
 | `accepted` | **只能由用户**在多轨界面单镜编辑器点「验收」写入（`packages/nodeShared/src/mtrack/components/shotEditorPane.vue:13-21`）；Agent 的 `mtrackUpdate` / `node:editProject` 写入枚举都不含它，代写会被校验拒绝 | 唯一进入合成清单的状态 | M4 按顺序 concat（generationRunbook §15.6） |
 | `failed` | 发起派工的一方写 | 含 `attempts[].error` | 修参数 → `pending` 重试 |
 
-- **重生成 = 追加版本，不覆盖旧产物**：每次成功生成都落一个新的产物文件（`assets/<clipId>/` 下带随机后缀），旧文件不覆盖；`clip.assetPath` 指向新版本，即新版本成为该镜默认，这条 `succeeded` 的 attempt 也带同样的 `assetPath`。版本列表 = `attempts` 里 `status === "succeeded"` 的记录按**产物路径**去重（`key = attempt.assetPath || attempt.nodeId`，旧记录回退用 nodeId，旧→新，末尾补 `clip.assetPath`），即 `mtrackProject.ts` 的 `clipVersions(clip)` 返回的 `ClipVersion[]`——对齐 LSC 的 `resultVersions`（按 `file.url` 去重），**不再依赖画布 nodeId**，所以服务端媒体任务通道（不建画布节点、`nodeId` 恒为 `null`）的成片**同样出现在历史版本里**；这类条目的产物直接按路径读，只有旧工程没有 `assetPath` 的条目才经画布桥反查节点产物。切回旧版本只改 `clip.nodeId`/`assetPath`（编辑器「设为默认」或 agent `node:editProject` 的 `patch`），**不改 `status`、不追加 `attempts`**——切换不是一次生成尝试；`accepted` 状态不受影响，合成仍按 `assetPath` 取当前默认版本（generationRunbook §15.9）。**注意**：generationRunbook §一 步 1.5 的 agent 逐镜编排（`planOperator dispatch` → `mtrackUpdate`）复用已有的 `nodeId`，那条路径不新增版本。
-- **版本可删除、可判待更新**：多轨编辑器提供单版本删除与整镜全部删除（`mtrackProject.ts` 的 `deleteClipVersion(clip, key)` / `deleteAllClipVersions(clip)`，删 `succeeded` 的 attempt 条目并按 `EditorFiles.remove?` 删物理文件），删除后当前默认回落到剩余版本里最新的一条；生成中的镜禁止删除。版本新鲜度由 `clipStates(project)` 派生 `stale`（参数签名 / 时间线位置 / 续接来源三条件，对齐 LSC 的 `signatures()` / `public()`）；`stale` 是派生值，**不落盘、不进本文件字段表**，agent 侧不做删除版本（`node:editProject` / `mtrackUpdate` 没有删除版本操作）。明细见 generationRunbook §15.9·5 与 §15.9·6。
+- **重生成 = 追加版本，不覆盖旧产物**：每次成功生成都落一个新的产物文件（`assets/<clipId>/` 下带随机后缀），旧文件不覆盖；`clip.assetPath` 指向新版本，即新版本成为该镜默认，这条 `succeeded` 的 attempt 也带同样的 `assetPath`。版本列表 = `attempts` 里 `versionKeyOf` 非空的条目（有产物路径的条目，或 `succeeded` 且有 `nodeId` 的旧画布条目）按**产物路径**去重（`key = attempt.assetPath || attempt.nodeId`，旧记录回退用 nodeId，旧→新，末尾补 `clip.assetPath`；`versionKeyOf` 是列表与删除共用的唯一谓词），即 `mtrackProject.ts` 的 `clipVersions(clip)` 返回的 `ClipVersion[]`——对齐 LSC 的 `resultVersions`（按 `file.url` 去重），**不再依赖画布 nodeId**，所以服务端媒体任务通道（不建画布节点、`nodeId` 恒为 `null`）的成片**同样出现在历史版本里**；这类条目的产物直接按路径读，只有旧工程没有 `assetPath` 的条目才经画布桥反查节点产物。切回旧版本只改 `clip.nodeId`/`assetPath`（编辑器「设为默认」或 agent `node:editProject` 的 `patch`），**不改 `status`、不追加 `attempts`**——切换不是一次生成尝试；`accepted` 状态不受影响，合成仍按 `assetPath` 取当前默认版本（generationRunbook §15.9）。**注意**：generationRunbook §一 步 1.5 的 agent 逐镜编排（`planOperator dispatch` → `mtrackUpdate`）复用已有的 `nodeId`，那条路径不新增版本。
+- **版本可删除、可判待更新**：多轨编辑器提供单版本删除与整镜全部删除（`mtrackProject.ts` 的 `deleteClipVersion(clip, key)` / `deleteAllClipVersions(clip)`，按与列表同一个 `versionKeyOf` 谓词删掉对应条目、只留没有产物的诊断记录，并按 `EditorFiles.remove?` 删物理文件），删除后当前默认回落到剩余版本里最新的一条；生成中的镜禁止删除。版本新鲜度由 `clipStates(project)` 派生 `stale`（参数签名 / 时间线位置 / 续接来源三条件，对齐 LSC 的 `signatures()` / `public()`）；`stale` 是派生值，**不落盘、不进本文件字段表**，agent 侧不做删除版本（`node:editProject` / `mtrackUpdate` 没有删除版本操作）。明细见 generationRunbook §15.9·5 与 §15.9·6。
 - **回写状态的硬门槛**（§4.6 纪律 3）：写 `generated` 前必须能读到真实产出文件；`assetPath` 指向不存在或不可读的文件时，只能写 `failed` + `error: "未找到产出"`。
 - `accepted` 是唯一进入合成的状态；合成清单（`plan/composite.json`）只含 `accepted` 镜，且顺序连续、无空洞（V14）。
 
@@ -217,7 +220,7 @@ non_diegetic_music: A low guzheng and xiao motif, sparse.
 
 - 没有参考的片段只写画面正文段（其余五段不出现），下发时仍是 `integrated_multimodal_description: <正文>`。
 - 画布参考区把资产插进镜头时，mention chip 写入的也是 `{{ref N}}`（N = 参考位次），与手写同一套口径，画布链路不需要额外处理。
-- 用途取值 `character` / `scene` / `prop` / `composition`，与 `assetIndex.json` 的 `kind` 一致。
+- `subject_definitions` 里的「用途：」跟卡类别走：`character` / `scene` / `prop` / `sound`——`plan/assetIndex.json` 的 `kind` 只认这四个值（`packages/nodes/assetImportNode/src/assetImport.ts:15` 的 `AssetKind`）；`KF` 构图卡不进 `assetIndex`，用途可写 `composition`，但**它不是 `kind` 的取值**，写进索引会被当非法。
 - 每改一次 `referenceIds` 或连线，都要重新核对正文里的 `{{ref N}}` 位次并重新 `setPrompt`（R9：编号漂移）。
 
 ### 参考形貌规则
@@ -243,7 +246,7 @@ non_diegetic_music: A low guzheng and xiao motif, sparse.
 | **保存时机** | 字段失焦即 `files.writeJson` 落盘，并显示「已保存 · <时间>」；存在未保存改动时标题加 `*` |
 | **`updatedAt` 冲突** | 每次保存前重新读一次磁盘上的 `updatedAt`，与本次编辑前读到的不一致 → 中止写入，提示「文件已被其他操作修改，请重新加载」，**不静默覆盖** |
 | **快照提示** | 编辑器与生成界面固定展示：「生成任务按提交时的快照运行，此处修改只影响下次生成。」 |
-| **空值与追加** | `assetPath` 在生成成功/失败时落值，也是历史版本的身份；`nodeId` 只有画布节点通道的镜才有值，媒体任务通道恒为 `null`；**两个例外**：切换默认版本（编辑器把 `nodeId`/`assetPath` 指向某个历史 `succeeded` 版本，不改 `status`、不追加 `attempts`）与**删除版本**（编辑器 `deleteClipVersion` / `deleteAllClipVersions` 删掉对应的 `succeeded` attempt 条目并删物理文件，删默认版本后 `assetPath` 回落到剩余最新一条、删空则置 `null`）。除这两种情形外，`attempts` 只追加、不改写已有历史项——删除是**整条删除**，不就地改写 |
+| **空值与追加** | `assetPath` 在生成成功/失败时落值，也是历史版本的身份；`nodeId` 只有画布节点通道的镜才有值，媒体任务通道恒为 `null`；**两个例外**：切换默认版本（编辑器把 `nodeId`/`assetPath` 指向某个历史 `succeeded` 版本，不改 `status`、不追加 `attempts`）与**删除版本**（编辑器 `deleteClipVersion` / `deleteAllClipVersions` 按 `versionKeyOf` 删掉对应条目并删物理文件，删默认版本后 `assetPath` 回落到剩余最新一条、删空则置 `null`）。除这两种情形外，`attempts` 只追加、不改写已有历史项——删除是**整条删除**，不就地改写 |
 | **Agent 边界** | Agent 不直接写该文件（不手改 JSON）：改状态只走两条通道——界面按钮/`node:dispatchGenerate` 由编辑器写，会话内逐镜由 `planOperator mtrackUpdate` 写；不在多轨生成中改文件，改完必须重新提交该镜 |
 
 ---
@@ -265,7 +268,8 @@ non_diegetic_music: A low guzheng and xiao motif, sparse.
 | `referenceIds` 存在于 `assetIndex.json` 且资产已出图；`generated`/`accepted` 的 `nodeId`/`assetPath` 必须存在 | V13 |
 | 合成清单只含 `accepted` 镜，顺序连续无空洞 | V14 |
 | `referenceIds` 顺序与画布实际 `referenceOrder` + 入边顺序逐一一致 | V15 |
-| 参考标记 `{{ref N}}` 的编号**只查越界**（`N` 必须在 `1..referenceIds.length` 内），**不查重号**、缺席某个编号不报错 | V7 |
+| 参考标记 `{{ref N}}` 的编号**只查越界**（`N` 必须在 `1..referenceIds.length` 内），**不查重号**、缺席某个编号不报错；正文出现 `<Picture N>`/`<Video N>`/`<Audio N>` 尖括号一律 error | V7 |
 | 参考数超过节点实际匹配模式上限 | V8 / V10 |
+| 续接镜（`context`）参考合计 ≤3、时长 ≥10 秒（引擎限制） | V16 |
 
 `validate` 对工程文件**零写入**；只有 `build` 落盘派生文件。

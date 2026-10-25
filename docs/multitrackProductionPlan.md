@@ -44,6 +44,8 @@ assets/assetCards.md → plan/storyboard.md → plan/story.mtrack → 每镜一�
 | 5 逐分镜生成 | 每个 clip 的 `nodeId` / `assetPath` / `status` | **每次生成前**确认算力 | 单镜重生成，不动其他镜 |
 | 6 验收与合成 | `plan/composite.json` + 成片 | 用户验收成片 | 重新合成 |
 
+> **现状更新（2026-10-25）**：阶段 2→4 由画布「导入资产与分镜」节点（`packages/nodes/assetImportNode`）承接——接入剧本文本后抽取资产卡与分镜、批量出资产图并建图片节点、写 `plan/assetIndex.json` 与 `plan/story.mtrack`；随后把资产节点连到多轨节点 `in` 端口，在多轨「参考素材」里只从连线上打勾（位次即 `{{ref N}}`）。下文 `planOperator assemble` 的「资产接入三步」只用于已有工程补接，不再是新项目主入口。
+
 **关口铁律**（继承 LSC 与 Toonflow 既有纪律）：
 - 确认简报 ≠ 确认剧本；确认资产 ≠ 验收生成结果；一个小样 ≠ 授权整批。
 - 生成前展示：模型、数量、时长、分辨率、参考、费用（FreeVideo 显示「免费 · 本机 GPU」），等明确同意。
@@ -151,8 +153,10 @@ referenceIds: ["C01", "C03", "C05", "SC02"]   ← 全是图片时位次恰好等
         <Picture 1> <Picture 2> <Picture 3> <Picture 4>
 ```
 
+> **现状更新（2026-10-25）**：上图是换算结果，不是写作者写法——正文写 `{{ref N}}`，`<Picture N>` 由 wire 层按 `dataType` 生成（`directDispatch.ts:95-102`、`mediaDispatch.ts:110-121`）。
+
 - Toonflow 侧实际顺序由 `data.referenceOrder`（键 `encodeURIComponent(JSON.stringify([source,sourceHandle]))`）+ 入边顺序决定，**必须逐一核对**；
-- **六段由写作者直接写**：接了参考图就按 MiniMax H3 官方 ref2va 六段书写（`subject_definitions:` / `summary:` / `retention_analysis:` / `detailed_description:`），引擎只拼「全片风格 / 全片约束」前缀、正文原样透传，不代写任何一段，也**不再自动追加段尾「本段参考顺序」声明行**（该写法已取消；旧工程遗留的 `{{ref N}}` 只作兼容，由节点 wire 层按 `dataType` 换算成官方标记）；
+- **六段由写作者直接写**：接了参考图就按 MiniMax H3 官方 ref2va 六段书写（`subject_definitions:` / `summary:` / `retention_analysis:` / `detailed_description:`），引擎只拼「全片风格 / 全片约束」前缀、正文原样透传，不代写任何一段，也**不再自动追加段尾「本段参考顺序」声明行**（该写法已取消；写作者直接写 `{{ref N}}`，N = `referenceIds` 位次，节点 wire 层按 `dataType` 换算成官方标记；写 `<Picture N>` 会被 V7 判 error，见 `planValidator.ts:239-245`）；
 - **参考形貌必写**：官方 `ref-en.txt` §0/§5.3 要求 detailed_description 尽可能详细，被引用资产首次出现处要写「被引用特征 + 画面位置 + 当前动作」（旧版「写了引用就不描述外貌」的素材排他说法已废弃）。
 
 ---
@@ -226,7 +230,7 @@ packages/ext/multitrack/
 5) node:getConfig  → 确认可用 mode 与 duration
 6) node:setConfig({ providerId:"freevideo", modelId:"MiniMax-H3",
                     duration:<seconds>, resolution:<768P|2K>, ratio, generateAudio, mode })
-7) node:setPrompt({ prompt: <写作者已写好的官方六段 + <Picture N>；引擎只拼全片风格/全片约束前缀、正文原样透传> })
+7) node:setPrompt({ prompt: <写作者已写好的官方六段，参考写 {{ref N}}；引擎只拼全片风格/全片约束前缀、正文原样透传> })
 8) 展示生成方案并等待用户批准
 9) node:generateVideo({})
 10) 同一轮内用 node:getGenerationStatus 查终态；**跨轮/换会话前必须先用 getCanvasNodes 读该节点 outputs 确认已产出**，不能凭状态字段判断（见 §4.6）

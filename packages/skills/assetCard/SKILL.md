@@ -1,6 +1,6 @@
 ---
 name: assetCard
-description: LocalStoryCanvas 资产卡与多轨制作约定。把角色/场景/道具/关键帧固定为带编号的资产卡、把分镜稿统一接入多轨工程文件，供 FreeVideo（MiniMax-H3）逐分镜生成与确定性校验使用。用户要求复用 LSC 制作流程、前期统一确定资产与分镜、接入多轨或批量生成分镜时使用；只做画布节点操作、只改单张提示词或只做剧本创作时不使用本技能。
+description: Toonflow 资产卡与多轨制作约定（自有核心流程技能，四视图资产卡与多轨契约的唯一真源）。把角色/场景/道具/关键帧固定为带编号的资产卡，由画布「导入资产与分镜」节点写入 plan/assetIndex.json 与 plan/story.mtrack，供 FreeVideo（MiniMax-H3）逐分镜生成与确定性校验使用。用户要求前期统一确定资产与分镜、接入多轨或批量生成分镜时使用；只做画布节点操作、只改单张提示词或只做剧本创作时不使用本技能。
 metadata:
   version: "1.0.1"
   displayName: 资产卡与多轨制作约定
@@ -35,13 +35,14 @@ metadata:
 | 整理本镜提示词（模型整理草稿 + 人工核对采用） | [逐分镜生成 SOP](references/generationRunbook.md) §15.8 |
 | 生成前出校验报告 | 使用 `planOperator` 工具的 `validate` |
 
-## 核心约定（五条）
+## 核心约定（六条）
 
 1. **编号唯一**：资产卡 ID 全工作区唯一，重复即拒收，不静默合并。编号是资产的稳定身份，不随节点改名、移动、画布切换而改变。
 2. **参考必须显式**：接线由卡片上的显式字段决定，Agent 不自行猜测；没有声明就不接线。
 3. **多轨是唯一真源**：分镜与生成状态只写 `plan/story.mtrack`；画布节点只是执行载体，`canvas` JSON 不存业务语义。
 4. **生成前必须校验**：任何生成动作前先用 `planOperator` 的 `validate`；有 error 级发现就停下修契约，不带着错误生成。
 5. **定稿即基线**：用户给的剧情、事实、台词及其标点默认锁定——新增只补必要的可见动作，不加人物、不加事件、不加对白；需要实质改编时先给可选择的修改建议。资产卡定稿后改卡编号或画幅、分镜定稿后改 `clipId` 或顺序，都等于换基线，下游（参考接线、已生成镜头）必须重新对账，不能默认旧产物还成立；局部修改只同步**受影响**的动作、时间、引用与后续状态，**不覆盖无关的已验收镜头**。
+6. **角色卡只有四视图整版**：`C` 卡固定 **16:9 + 2K**，横向四栏 ①半身像（正面、腰部以上、头顶贴齐栏顶、按上半身放大、面部结构清晰）②正面全身 ③90° 侧面全身 ④背面全身；②③④ 共用同一全身比例尺、按脚底线对齐、头顶自然等高，① **不参与**这套比例尺、**不按肩线或脚底线**去对齐别人，也不许被拉成全身；「三视图」「单视图」「特写＋完整三视图」一律作废，不许为了省尺寸降级成单张。改栏序或画幅同样等于换基线（见第 5 条）。细则见 [资产设计维度 §3.1](references/assetDesign.md) 与 [图片提示词 §5.1](references/imagePrompt.md)。
 
 ## 产物与位置
 
@@ -51,7 +52,7 @@ metadata:
 ├── plan/
 │   ├── script.md                 # 剧本（本次范围）
 │   ├── storyboard.md             # 分镜稿
-│   ├── assetIndex.json           # 资产索引（由 planOperator build 产出）
+│   ├── assetIndex.json           # 资产索引（画布「导入资产与分镜」节点独占写入；planOperator 也会写同名文件）
 │   ├── story.mtrack              # ★ 多轨工程，唯一真源（JSON 内容，自定义扩展名）
 │   └── assetReport.json          # 校验报告（只读产物）
 └── assets/<nodeId>/              # 节点生成落点，协议不写这里
@@ -61,19 +62,22 @@ Agent 侧阶段门与逐镜操作顺序见 `freevideoMultitrack` 技能；数据
 
 ## 生成闭环（简版）
 
-1. 资产卡定稿 → 编号、参考关系、画幅全部锁定；
+1. 资产卡定稿 → 编号、参考关系、画幅全部锁定（`C` 卡一律 16:9 四视图整版，见核心约定 6）；
 2. 分镜定稿 → 每段按 MiniMax H3 官方 ref2va 六段写清提示词（参考标记写 `{{ref N}}`，`N` 是本镜参考位次）与参考编号；
-3. 导入多轨 → 生成/更新 `story.mtrack`；
-4. 校验 → `planOperator validate`，error 清零才继续；
-5. 逐分镜生成 → 二选一（同一批镜头绝不同时执行，见 [runbook §十五·五](references/generationRunbook.md)）：会话内按 §十三 SOP 逐镜（即每段一个视频节点、展示方案并等待用户批准算力消耗后 `node:generateVideo`），或 `node:dispatchGenerate` 后台派工（立即返回 batchId，进度看 `node:getStatus` / `mtrackRead`）；
-6. 回写状态 → `generated` 不等于交付完成，用户验收后才 `accepted`；
-7. 合成 → `planOperator composite` 只拼接 `accepted` 段，顺序连续无空洞（V14），写 `plan/composite.json`；`execute=true` 才真正执行 concat（需要宿主 ffmpeg，输出默认 `plan/composite.mp4`，不覆盖已存在文件）。执行前会逐段 ffprobe 实测尺寸/帧率/像素格式/音轨参数，与首段不一致直接报错——concat 滤镜要求全段一致，帧率或音轨不一致时 ffmpeg 会静默产出错乱成片。
+3. **导入资产与分镜** → 画布「导入资产与分镜」节点（`packages/nodes/assetImportNode`，agent 侧 `node:importScript`）按卡片抽取，**独占写** `plan/assetIndex.json` 与 `plan/story.mtrack`。导入时**代码确定性报错的只有三类**：编号重复与抽取结构不合契约（`assetImport.ts` 的 `parseExtraction`）；正文为空或超 20 万字符（`extractAssets` 开头）；`plan/assetIndex.json` 与 `plan/story.mtrack` 任一已存在（`requireNewPlanFiles`，在出图之前就探测，不会先烧模型）。`clips` 覆盖里的 `clipId` 不在本次分镜里、`prompt` 为空、引用了不存在或仅文字的资产，也直接报错（`resolveClipOverrides`）。**静默修正（只记 `warnings`，不中断）**：`seconds` 夹到 2–15（`sanitizeSeconds`/`secondsWarning`，落盘在 `writePlanFiles` 的逐镜循环）；分镜引用不是本次卡片、或引用仅文字卡，直接从 `referenceIds` 掐掉（`parseExtraction` 的 shot 归一 + `writePlanFiles` 的 `visual`/`usable` 过滤）；出图失败的卡自动移出参考清单（同 `usable` 过滤，失败清单来自 `generateAssetImages`）；图片参考超 9 个只留前 9 个（`writePlanFiles` 里 `maxImageReferences` 判断）；`context` 却不足 10 秒只告警不拦（`writePlanFiles` 的逐镜循环）。原文里已写好的六段提示词会被**整段原样保留**（抽取提示词 `extractionSystemPrompt` 的要求 2 与 6：照抄段名、顺序与换行），要改写单镜就传 `clips`。「场景卡空镜无人 / 道具卡无手」只是内置抽取提示词里的要求（`extractionSystemPrompt` 的编号规则段），**不是落盘校验**，出图后要人眼核。`KF` 卡不抽（人工补）。`path` 指**剧本文本**（传 `assets/assetCards.md` 会把卡片当正文再抽一遍），`path` 与 `text` 二选一；`model` 传 `JSON.stringify([providerId, modelId])`；中途想看跑到第几张用 `node:importStatus`，单次 `node:importScript` 超时 30 分钟（面板按钮直调不受 120 秒限制）；
+4. 批量生成资产图 → 每张 `C` 卡出图即四视图整版（横向四栏），节点 label 必须保持 `<代号> <名称>`，否则派工侧认不出资产卡；
+5. **绑定工程** → 导入只落了磁盘上的两个文件，多轨节点 `node.data.projectPath` 仍是空的：必须 `node:bindProject({ mode: "open", path: "plan/story.mtrack" })` 之后才读得到 `clips` 与「参考素材」（不绑或绑错文件时，下游 `readClips` / `readReferenceMap` 看到的是空工程）；
+6. 接线并勾选参考 → 资产节点连到多轨节点 `in` 端口后，由用户在编辑器「参考素材」网格里打勾，勾选直接写 `clip.referenceIds`、**位次即 `{{ref N}}` 的 `N`**；Agent 不预写 `referenceIds`，只在用户明确要求批量改写时才动它；
+7. 校验 → `planOperator validate`，error 清零才继续；
+8. 逐分镜生成 → 二选一（同一批镜头绝不同时执行，见 [runbook §十五·五](references/generationRunbook.md)）：会话内按 §十三 SOP 逐镜（即每段一个视频节点、展示方案并等待用户批准算力消耗后 `node:generateVideo`），或 `node:dispatchGenerate` 后台派工（立即返回 batchId，进度看 `node:getStatus` / `mtrackRead`）；
+9. 回写状态 → `generated` 不等于交付完成，用户验收后才 `accepted`；
+10. 合成 → `planOperator composite` 只拼接 `accepted` 段，顺序连续无空洞（V14），写 `plan/composite.json`；`execute=true` 才真正执行 concat（需要宿主 ffmpeg，输出默认 `plan/composite.mp4`，不覆盖已存在文件）。执行前会逐段 ffprobe 实测尺寸/帧率/像素格式/音轨参数，与首段不一致直接报错——concat 滤镜要求全段一致，帧率或音轨不一致时 ffmpeg 会静默产出错乱成片。
 
-> **衔接与时长（写稿与派工共用）**：`continuity` 只有**动作续接**（同一动作继续、上一镜末帧就是本镜起点）写 `context`，需上一镜已成功、`attempts` 里有 `jobId`，本镜 ≥10 秒、参考合计 ≤3；**同场切镜**（同空间换机位/景别）与**换场/时间跳转**都写 `shot`，不因场景编号相同就强制延续运动上下文。`context` 拿不到上一镜 `jobId` 时直接报错，不静默降级；批量派工按 `clips` 顺序串行执行，所以同一批次里可以混用两态（判据见 [多轨工程模板 §2.3](references/multitrackTemplate.md)）。时长先按自然口语把原句念一遍估，语气停顿与**并行**动作算进去（能同时发生的不重复累加，必须先后发生的不重叠凑时长），预留约 0.5–1 秒收尾；台词过长在**自然语意节点**拆成两镜，不加速、不吞字、不改台词标点。声明值会被供应商吸附到帧档（freevideo 实测 17n+5：6s→6.583s、10s→10.125s），成片总长以实测为准。
+> **衔接与时长（写稿与派工共用）**：`continuity` **默认承接**——同一段落、同一空间、画面或动作要接上一镜就写 `context`（需上一镜已成功、`attempts` 里有 `jobId`，本镜 ≥10 秒、参考合计 ≤3）；只有换场、时间跳转（跨日/闪回）、需要重新构图或独立起拍（新段落第一镜）、本镜 <10 秒或参考合计 >3、以及首镜这几种情况才写 `shot`，并写清原因。`context` 拿不到上一镜 `jobId` 时直接报错，不静默降级；批量派工按 `clips` 顺序串行执行，所以同一批次里可以混用两态（判据见 [多轨工程模板 §2.3](references/multitrackTemplate.md)）。时长先按自然口语把原句念一遍估，语气停顿与**并行**动作算进去（能同时发生的不重复累加，必须先后发生的不重叠凑时长），预留约 0.5–1 秒收尾；台词过长在**自然语意节点**拆成两镜，不加速、不吞字、不改台词标点。声明值会被供应商吸附到帧档（freevideo 实测 17n+5：6s→6.583s、10s→10.125s），成片总长以实测为准。
 
 ### 三条生成路径对照（同一批镜头只走一条）
 
-第 5 步的「二选一」实际有三条路径（界面按钮、`node:dispatchGenerate`、`planOperator dispatch` + §十三），执行者只有两个：编辑器自己，或对话 Agent。认清入口再动手：
+第 8 步的「二选一」实际有三条路径（界面按钮、`node:dispatchGenerate`、`planOperator dispatch` + §十三），执行者只有两个：编辑器自己，或对话 Agent。认清入口再动手：
 
 | 入口 | 谁执行 | 返回 / 进度怎么看 | 互斥规则 |
 |---|---|---|---|
@@ -104,4 +108,4 @@ Agent 侧阶段门与逐镜操作顺序见 `freevideoMultitrack` 技能；数据
 | 调度器 / LoRA / 二采 denoise | ❌ 不可控 | 不提供 |
 | 时间线设置（`timeline-settings`：本机 LoRA 目录 + 内置规则文本） | ❌ 无等价物，也**不需要** | 我们走供应商 HTTP，没有「本机 LoRA 目录」这回事，LSC 那份设置页对我们不适用；整理规则按次传入 `rewriteShot.rules`（留空用内置），不做全片持久设置 |
 
-降级项由本表列出；`validate` 当前**不**输出 `capabilityDegraded` 字段（返回只有 `errors`/`warnings`/`findings`，见 `packages/tools/planOperator/src/index.ts:208-218`），所以这些边界必须由本节主动告知用户。
+降级项由本表列出；`validate` 当前**不**输出 `capabilityDegraded` 字段（返回只有 `errors`/`warnings`/`findings`，见 `packages/tools/planOperator/src/index.ts` 的 `buildFindings`，按函数名 grep 定位），所以这些边界必须由本节主动告知用户。

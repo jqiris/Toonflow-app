@@ -1,7 +1,7 @@
 # 参考接线解析规则
 
 > 权威依据：[docs/assetCardWorkflowPlan.md](../../../../docs/assetCardWorkflowPlan.md) §1.2、§1.3、§2 K2；[docs/assetCardWorkflowPlanReview.md](../../../../docs/assetCardWorkflowPlanReview.md) A4；[docs/localStoryCanvasStudy.md](../../../../docs/localStoryCanvasStudy.md) §2（LSC 原实现的降级来源）。
-> 卡片本身的写法见 [资产卡模板](assetCardTemplate.md)。解析结果写进工作区 `plan/assetIndex.json`，由 `planOperator` 的 `resolve` / `build` 产出（P2 之前由 Agent 按本规则手写）。
+> 卡片本身的写法见 [资产卡模板](assetCardTemplate.md)。解析结果写进工作区 `plan/assetIndex.json`：常规路径由画布「导入资产与分镜」节点（`packages/nodes/assetImportNode`）独占写入；`planOperator` 里只有 `build` 会写它（`packages/tools/planOperator/src/index.ts:293`、报告在 `:300`），`resolve` 只把索引结构返回给调用方、**零写入**（`:229-244`）。（P2 之前由 Agent 按本规则手写。）
 > 编号在资产卡里可宽口径书写，但**索引里一律规范化**；本节的编号示例均为规范化后的形态。
 
 ---

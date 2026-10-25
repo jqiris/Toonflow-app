@@ -3,27 +3,29 @@
 > 状态：**冻结**。本文是 `packages/tools/planOperator` 对多轨工程（`plan/story.mtrack`）读写与派工能力的可执行规格。下游实现按本文逐条落地，本文不含实现代码（z schema 与 rule 表为契约形状，非实现）。
 >
 > 冻结范围：`docs/requirementPlanOperatorMultitrack.md`。禁止改动 `packages/`、`apps/`。
+>
+> **现状更新（2026-10-25）**：本文 §0 表与 §7.1 原先断言的 V7「现行实现」（`<Picture N>` 尖括号是唯一写作者写法、旧 `{{ref N}}` 只报迁移 warning）**已被反转**：现行口径是写作者统一写 `{{ref N}}`（`N` = 本镜 `referenceIds` 位次，越界判 error，不查重号、不要求每个编号出现），正文出现尖括号标记一律判 error，模型侧标记由 wire 层在下发前按 `dataType` 换算；参考上限分层为校验器图 ≤9/音频 ≤1（V8，不校验视频）、供应商与界面勾选 ≤4、续接合计 ≤3（V16）。§7.1、§0 第 19/20 行与 §6.5 已按现行口径改写；其余契约条目仍为冻结记录。
 
 ## 0. 现状盘点（契约的约束来源）
 
-> 行号注记：下表「位置」列取自本稿冻结时的 `planOperator` 代码，行号已随后续功能演进漂移；所列语义仍成立（action 枚举、`promptGuidelines`「不连接画布节点」、`executionMode: "sequential"`、`mtrackSchema` 窄于编辑器写入形状），引用时以当前文件为准——`action` 枚举见 `packages/tools/planOperator/src/index.ts:126`，`promptGuidelines` 见 `:183`，`executionMode` 见 `:191`。V7 现状与现行实现见 §7。
+> 行号注记：下表「位置」列取自本稿冻结时的 `planOperator` 代码，行号已随后续功能演进漂移；所列语义除 `mtrackSchema` 外仍成立（action 枚举、`promptGuidelines`「不连接画布节点」、`executionMode: "sequential"`），引用时以当前文件为准——`action` 枚举见 `packages/tools/planOperator/src/index.ts:139`，`promptGuidelines` 见 `:213`，`executionMode` 见 `:218`，`mtrackSchema` 见 `:56`。V7 现状与现行实现见 §7。
 
 | 现状 | 位置 | 对契约的约束 |
 |---|---|---|
 | `action: z.enum(["parse","resolve","validate","build"])` | `packages/tools/planOperator/src/index.ts:66` | 新增 4 个 action 并入同一枚举 |
 | `requestSchema` 为 `.strict()` | `index.ts:75` | 新增字段只能「可选追加」，不能改变既有字段语义 |
-| `mtrackSchema` 是 `.strict()` 且只含 `global{ratio,resolution}` + `clips`（clipSchema 缺 `title/sourceRange/attempts/notes`，global 缺 `style/systemPrompt/model`，顶层缺 `version/projectId/updatedAt`） | `index.ts:12-33` | 真实编辑器写出的 `story.mtrack` 会被现有 `mtrackSchema` 拒绝；新 action 必须改用 `mtrackProject.ts` 的全量容错归一，见 §3 |
+| `mtrackSchema` 是 `.strict()` 且只含 `global{ratio,resolution}` + `clips`（clipSchema 缺 `title/sourceRange/attempts/notes`，global 缺 `style/systemPrompt/model`，顶层缺 `version/projectId/updatedAt`） | `index.ts:12-33` | 真实编辑器写出的 `story.mtrack` 会被现有 `mtrackSchema` 拒绝；新 action 必须改用 `mtrackProject.ts` 的全量容错归一，见 §3。**历史快照（已过时）**：现行 `mtrackSchema` 为覆盖编辑器写入形状的 `z.looseObject`（`index.ts:56`），已直接接受真实 `story.mtrack` |
 | `indexStore.writeText` 用 `files.writeFile`（**非原子**） | `packages/tools/planOperator/src/indexStore.ts:20-22` | `mtrackUpdate` 必须新增 `writeAtomic` 写入路径，不得复用 `writeText` |
-| `promptGuidelines` 明写「本工具…不连接画布节点、不调用供应商」 | `index.ts:106` | `assemble` 因此定为「产出计划、由 agent 执行」，见 §6 |
-| `executionMode: "sequential"` | `index.ts:109` | 工具内同步循环必然超时，`dispatch` 只出清单不执行生成，见 §5 |
-| 校验器只实现 V1/V2/V4/V8/V9/V11/V12/V13/V14/V15，**全文无任何 `{{ref` 匹配** | `packages/tools/planOperator/src/planValidator.ts`（当时全文 242 行） | **历史快照（已过时）**：V7 已实现，现行口径见 §7；现行文件 295 行，V7 位于 `:198-249` |
-| readme 把 V7 标为「—（`{{ref N}}` 在 1..refs 范围内且每个 N 至少出现一次，由画布快照核对）」 | 当时 `packages/tools/planOperator/readme.md:43` | **历史快照（已过时）**：readme 现为 `:74`，V7 标为 `error / warning`，按官方 `<Picture N>`/`<Video N>`/`<Audio N>` 只查越界、不查重号，旧 `{{ref N}}` 只报迁移 warning |
+| `promptGuidelines` 明写「本工具…不连接画布节点、不调用供应商」 | `index.ts:213` | `assemble` 因此定为「产出计划、由 agent 执行」，见 §6 |
+| `executionMode: "sequential"` | `index.ts:218` | 工具内同步循环必然超时，`dispatch` 只出清单不执行生成，见 §5 |
+| 校验器只实现 V1/V2/V4/V8/V9/V11/V12/V13/V14/V15，**全文无任何 `{{ref` 匹配** | `packages/tools/planOperator/src/planValidator.ts`（当时全文 242 行） | **历史快照（已过时）**：V7 与 V16 已实现，现行口径见 §7；现行文件 313 行，V7 位于 `:225-260`（按 `remapPromptReferences` 同款正则锚定检索） |
+| readme 把 V7 标为「—（`{{ref N}}` 在 1..refs 范围内且每个 N 至少出现一次，由画布快照核对）」 | 当时 `packages/tools/planOperator/readme.md:43` | **历史快照（已过时）**：readme 现为 `:74`，V7 标为 `error`：写作者统一写 `{{ref N}}`（只查越界、不查重号、不要求每个编号出现），正文出现 `<Picture N>`/`<Video N>`/`<Audio N>` 尖括号标记一律 error，无 warning 路径 |
 | 多轨字段与枚举全量定义 | `packages/ext/multitrack/src/mtrackProject.ts` | 所有字段名、枚举值以该文件为准 |
-| 首镜实跑 738.5s（15s 单块 / RTX 3090 / quality light） | `packages/skills/assetCard/references/generationRunbook.md:186` | `dispatch` 只出清单的硬事实依据 |
+| 首镜实跑 738.5s（15s 单块 / RTX 3090 / quality light） | `packages/skills/assetCard/references/generationRunbook.md:226` | `dispatch` 只出清单的硬事实依据 |
 
 ## 1. 总原则（为什么这样切）
 
-1. **planOperator 只做「算」与「派生文件/工程回写」，不做「生成」与「画布落盘」**。生成归画布 `nodeTools`（`node:generateVideo`），画布节点增删归画布工具（`addNodes/connectNodes`）。planOperator 的边界来自 `index.ts:106` 的既有约束，不打破。
+1. **planOperator 只做「算」与「派生文件/工程回写」，不做「生成」与「画布落盘」**。生成归画布 `nodeTools`（`node:generateVideo`），画布节点增删归画布工具（`addNodes/connectNodes`）。planOperator 的边界来自 `index.ts:213` 的既有约束，不打破。
 2. **读要容错，写要严格**：读（`mtrackRead/dispatch/assemble`）用 `mtrackProject.ts:130 normalizeProject` 的容错口径，真实文件缺字段也能读；写（`mtrackUpdate`）只允许补丁四个生成回写字段，其余字段「逐字保留」，不允许经过会丢字段的 schema 重序列化。
 3. **单一写入者 + 乐观并发**：`story.mtrack` 的真源字段归多轨编辑器/对话所有；planOperator 只回写生成侧四个字段，且用 `updatedAt` 做 compare-and-swap（CAS），避免与编辑器互覆。规则见 §4.3。
 4. **新 action 命名不缩写、语义单一**：`mtrackRead`（读）/ `mtrackUpdate`（原子回写）/ `dispatch`（出派工清单）/ `assemble`（出装配计划）。「读」与「派工」分开，因为读是范围查询、派工是逐镜展开成可执行清单。
@@ -37,7 +39,7 @@ action: z.enum(["parse","resolve","validate","build","mtrackRead","mtrackUpdate"
 - `mtrackRead` / `dispatch` / `assemble`：只读，不受 `allowBuild` 限制。
 - `mtrackUpdate`：写入工程文件，受 `allowBuild` 限制；`allowBuild=false` 时报错「mtrackUpdate 不可用：allowBuild 已关闭」。
 
-`requestSchema` 保持 `.strict()`，新增字段全部 `optional`（既有 parse/resolve/validate/build 调用不传新字段仍通过；`.strict()` 只拒绝未知键，不拒绝缺失键）。各 action 的必填性由运行时显式校验（与现状 `index.ts:118` 的 `parse 需要 markdown` 同风格），错误文案见各节。
+`requestSchema` 保持 `.strict()`，新增字段全部 `optional`（既有 parse/resolve/validate/build 调用不传新字段仍通过；`.strict()` 只拒绝未知键，不拒绝缺失键）。各 action 的必填性由运行时显式校验（与现状 `index.ts:227` 的 `parse 需要 markdown` 同风格），错误文案见各节。
 
 ---
 
@@ -132,7 +134,7 @@ action: z.enum(["parse","resolve","validate","build","mtrackRead","mtrackUpdate"
 
 ### 4.3 原子性与并发规则（谁赢）
 
-**原子性**：写入必须走 `writeAtomic` 语义（覆盖保存完整工程 JSON，符合 AGENTS.md「覆盖保存 JSON…显式使用 `writeAtomic`」）。现状 `indexStore.ts:20-22` 的 `files.writeFile` 是裸写，`mtrackUpdate` **不得复用**，须新增经 `@toonflow/file` 的 `writeAtomic` 路径。
+**原子性**：写入必须走 `writeAtomic` 语义（覆盖保存完整工程 JSON，符合 AGENTS.md「覆盖保存 JSON…显式使用 `writeAtomic`」）。**已实现**：`indexStore.ts:27` 的 `writeAtomic`（临时文件 + rename）是唯一覆盖写路径，`mtrackUpdate`（`index.ts:370`）已走该路径，不复用裸写。
 
 **并发事实（两套写路径）**：
 
@@ -213,10 +215,10 @@ action: z.enum(["parse","resolve","validate","build","mtrackRead","mtrackUpdate"
       mode:       "待 node:getConfig 读 matchingModes 决定（不得写死）"
     },
     promptEssentials: [         // 提示词要点
-      "integratedMultimodalDescription 为画面主体（含官方 <Picture N> 引用位；旧工程 {{ref N}} 仅作兼容）",
+      "integratedMultimodalDescription 为画面主体（含 {{ref N}} 引用位）",
       "overallSoundscape 为环境声",
       "nonDiegeticMusic 为配乐",
-      "接参考图时按 MiniMax H3 官方六段由写作者直接书写；引擎不代写任何段，也不再追加段尾参考顺序声明行（已取消）"
+      "段尾须附参考顺序声明（与 referenceIds 顺序一致）"
     ],
     currentState: {
       status, nodeId, assetPath,
@@ -228,8 +230,8 @@ action: z.enum(["parse","resolve","validate","build","mtrackRead","mtrackUpdate"
 
 ### 5.3 只出清单、不执行生成（硬理由）
 
-- **实跑证明同步循环必然超时**：`generationRunbook.md:186` 记录首镜实跑提交时长 **738.5s（12.3 min）**（15s 单块 / RTX 3090 / quality light）。而 planOperator 是 `executionMode: "sequential"`（`index.ts:109`）的同步工具，若在工具内逐镜 `node:generateVideo` 同步等终态，1 镜即超时，2 镜必然失败。
-- 且 `index.ts:106` 已明写「不执行任何生成」。`dispatch` 维持该边界：**只算清单、不写文件、不触发生成**。真正的生成由 agent 逐镜走画布 `nodeTools`（`node:setPrompt` → `node:setConfig` → `node:generateVideo` → `node:getGenerationStatus`），状态回写走 `mtrackUpdate`。
+- **实跑证明同步循环必然超时**：`generationRunbook.md:226` 记录首镜实跑提交时长 **738.5s（12.3 min）**（15s 单块 / RTX 3090 / quality light）。而 planOperator 是 `executionMode: "sequential"`（`index.ts:218`）的同步工具，若在工具内逐镜 `node:generateVideo` 同步等终态，1 镜即超时，2 镜必然失败。
+- 且 `index.ts:213` 已明写「不执行任何生成」。`dispatch` 维持该边界：**只算清单、不写文件、不触发生成**。真正的生成由 agent 逐镜走画布 `nodeTools`（`node:setPrompt` → `node:setConfig` → `node:generateVideo` → `node:getGenerationStatus`），状态回写走 `mtrackUpdate`。
 
 ### 5.4 错误触发条件与文案要点
 
@@ -259,7 +261,7 @@ action: z.enum(["parse","resolve","validate","build","mtrackRead","mtrackUpdate"
 
 ### 6.2 决策：`assemble` 产出**计划**，不直接操作画布（理由）
 
-1. `index.ts:106` 明写「本工具…不连接画布节点」。打破它必须有压倒性收益，而这里没有：装配计划的真正执行方是画布工具（`addNodes/connectNodes`）+ 节点 `nodeTools`，planOperator 即便拿到画布句柄也只是「转发」，白白把纯函数工具变成有副作用工具。
+1. `index.ts:213` 明写「本工具…不连接画布节点」。打破它必须有压倒性收益，而这里没有：装配计划的真正执行方是画布工具（`addNodes/connectNodes`）+ 节点 `nodeTools`，planOperator 即便拿到画布句柄也只是「转发」，白白把纯函数工具变成有副作用工具。
 2. `ToolContext.canvas` 是**可选字段**（`packages/toolScaffold/src/runtime.ts:201`）。planOperator 在无画布上下文的会话（MCP/API/换会话）中运行时拿不到画布句柄，不能把「操作画布」写进 action 语义——否则该 action 在部分会话里必然空转。
 3. 维持单一职责与可测试性：解析/结算/校验/计划全在 planOperator（纯算，可离线验证），画布落盘在 `nodeTools`（`generationRunbook.md` 的 SOP 路径）。装配计划的 node 类型映射与 `data` 字段由本文定死，agent 照单执行即可，无需 planOperator 感知画布运行时。
 
@@ -314,7 +316,7 @@ action: z.enum(["parse","resolve","validate","build","mtrackRead","mtrackUpdate"
 | `audioGenerationNode` | `label`=name、`prompt`=AssetCard.prompt（textOnly 卡以 `text` 承载文本） | 同上 | `model` |
 | `videoGenerationNode` | `label`=clipId、`duration`=seconds、`resolution`、`ratio`、`generateAudio` | `mtrackProject.ts:23-39` | `model`、`mode`（必须 `node:getConfig` 读 `matchingModes` 后定，**不得写死「4 图就是多参考」**） |
 
-连线顺序：卡内按 `card.refs` 顺序、clip 内按 `clip.referenceIds` 顺序；**提示词里写的是官方标记 `<Picture N>`/`<Audio N>`/`<Video N>`，按类型各自从 1 编号**（`Picture` 只数非 sound 参考，`Audio` 只数 sound 参考），不是「第 N 个 referenceIds」的全局序号；旧工程遗留的 `{{ref N}}` 才按全局序号理解。V15 核对 `referenceIds` 顺序与画布位次（`planValidator.ts:274-284`），V7 只核对标记编号是否越界（见 §7）。装配计划本身不写盘（纯算内联返回）；如需落盘由 agent 决定，路径建议 `plan/assemblePlan.json`，但不属于本 action 职责。
+连线顺序：卡内按 `card.refs` 顺序、clip 内按 `clip.referenceIds` 顺序；**提示词正文里写 `{{ref N}}`，`N` 是「第 N 个 referenceIds」的全局序号**（图片/音频/视频按同一份列表连续编号）；`<Picture N>`/`<Audio N>`/`<Video N>` 是 wire 层在下发前按参考 `dataType` 换算出的模型侧标记（按类型各自从 1 编号），**不是写作者写法，写进正文会被 V7 判 error**（2026-10-25 现状更新：本节旧文曾把尖括号断言为唯一写法，口径已反转，见 §7.1）。V15 核对 `referenceIds` 顺序与画布位次（`planValidator.ts` 的 V15 分支），V7 核对 `{{ref N}}` 是否越界（见 §7）。装配计划本身不写盘（纯算内联返回）；如需落盘由 agent 决定，路径建议 `plan/assemblePlan.json`，但不属于本 action 职责。
 
 ### 6.6 错误触发条件与文案要点
 
@@ -329,37 +331,30 @@ action: z.enum(["parse","resolve","validate","build","mtrackRead","mtrackUpdate"
 
 ## 7. V7 参考标记校验（现行实现）
 
-> 版本注记：本节原为「V7 未实现，按本节语义补齐」的设计契约，基于旧 `{{ref N}}` 全局序号，要求「每个编号至少出现一次」。该口径**已随 MiniMax H3 官方 ref2va 六段格式迁移废除**，下面 7.1 是现行实现（`planValidator.ts:198-249`），7.2 保留旧口径供追溯，不得据此实现。
+> 版本注记：本节原为「V7 未实现，按本节语义补齐」的设计契约。该语义两度变更：先被改写为「官方 `<Picture N>` 六段是唯一写法、旧 `{{ref N}}` 只报迁移 warning」，随后**再次反转为现行口径**——写作者统一写 `{{ref N}}`，尖括号标记判 error。下面 7.1 是现行实现（`planValidator.ts` 的 V7 分支，按 `---- V7` 注释锚定，现位于 `:225-260`），7.2 保留两轮旧口径供追溯，不得据此实现。
 
 ### 7.1 现行实现（以代码为准）
 
-`packages/tools/planOperator/src/planValidator.ts:198-249` 已实现 V7，扫描 `MtrackClip.prompt` 三字段文本：`integratedMultimodalDescription` / `overallSoundscape` / `nonDiegeticMusic`（`:204-208`），三字段各自独立判断，不做跨字段合并比较。
+`packages/tools/planOperator/src/planValidator.ts` 的 V7 分支扫描 `MtrackClip.prompt` 三字段文本：`integratedMultimodalDescription` / `overallSoundscape` / `nonDiegeticMusic`，三字段各自独立判断，不做跨字段合并比较。
 
-**官方标记（唯一写法）**：`<Picture N>` / `<Video N>` / `<Audio N>`，正则 `/<\s*(picture|video|audio)\s*(\d+)\s*>/gi`（`:237`，大小写与内部空白均容忍：`<Picture 1>`、`< picture 1 >`、`<PICTURE  1>` 都命中）。
+**写作者唯一写法**：`{{ref N}}`，`N` 是本镜 `referenceIds` 的位次（全局序号，从 1 起，图片/音频/视频按同一份列表连续编号）。正则 `/\{\{\s*ref\s*(\d+)\s*\}\}/gi`（`ref` 两侧空白均可省略：`{{ref1}}`、`{{ ref 1 }}`、`{{ REF 1 }}` 都命中）。越界（`N < 1` 或 `N > referenceIds.length`）报 `error`：「片段 {clipId} 的 {field} 含越界参考标记 {{ref N}}：本镜参考编号范围为 1..{refs.length}」。
 
-**编号上限按类型计**（`:209-222` 的 `boundOf`）：
+**尖括号标记一律 error**：正文出现 `<Picture N>` / `<Video N>` / `<Audio N>`（正则 `/<\s*(picture|video|audio)\s*(\d+)\s*>/gi`，大小写与内部空白均容忍）判 `error`：「参考标记统一写 {{ref N}}，N 为参考顺序里的序号」。尖括号是 wire 层在下发前按参考 `dataType` 换算出来的**模型侧标记**（`mediaDispatch.ts` 的 `referenceTags`），不是写作者写法，写进正文会被当普通文本透传。两条分支都没有 warning 路径。
 
-| 标记 | 上限 | 依据 |
-| --- | --- | --- |
-| `<Audio N>` | 本镜 `kind === "sound"` 的参考数 | 官方标记按类型各自从 1 编号，生成侧由 `packages/nodes/videoGenerationNode/src/index.vue:212-224` 的 `referenceTags` 逐项换算 |
-| `<Picture N>` | 本镜非 sound 参考数（character/scene/prop/keyframe 都算画面） | 同上 |
-| `<Video N>` | 参考总数（资产卡没有独立的视频类型，`keyframe` 与图片同属 picture，拿不到类型时退回总数） | 保守兜底，宁可漏报也不误判合法工程 |
-
-- 越界（`N < 1` 或 `N > 上限`）报 `error`：`片段 {clipId} 提示词含越界标记 <Picture 3>，本镜画面参考编号范围为 1..4`（`:241-246`）；上限为 0 时范围为「空（本镜没有该类型参考）」。
-- **不查重号**（`:200` 注释）：同一编号在正文里反复复述（如「同前述画面中的男人」）是正常写法。
-- **不要求每个编号至少出现一次**（`:199` 注释）：官方格式允许某张参考图只出现在 `subject_definitions` / `retention_analysis` 里。
-- **旧工程兼容**：`{{ref N}}`（正则 `/\{\{\s*ref\s*(\d+)\s*\}\}/gi`，`:227`）只报 `warning`：「片段 {clipId} 的 {field} 仍含旧格式参考标记 …：旧格式，建议迁移为 MiniMax H3 官方标记 <Picture N>/<Video N>/<Audio N>」（`:228-235`），不阻断生成。
+- **不查重号**：同一编号在正文里反复复述（如「同前述画面中的男人」）是正常写法。
+- **不要求每个编号至少出现一次**：某张参考本镜用不上，正文可以完全不出它的标记。
+- **参考上限分层（不在 V7，与标记口径配套记在这里）**：校验器 V8 独立镜图片 ≤9（`MAX_IMAGE_REFERENCES`，视频参考并入图片桶计数、V8 不单独校验视频）/ 音频 ≤1；供应商 freevideo 单请求参考 ≤4（`freevideo.ts` 的 `maxImageReferences = 4`，多轨界面勾选上限同源）；续接镜（`context`）合计 ≤3 且 ≥10 秒（V16 / `mediaDispatch.ts` 双重拦截）。
 
 ### 7.2 历史设计口径（已废除，供追溯）
 
-原契约基于旧 `{{ref N}}` 全局序号，与现行实现全面冲突，**均已变更**：
+原契约与两轮旧口径均已变更：
 
 | 旧规范 | 现行实现 |
 | --- | --- |
-| 匹配 `/\{\{\s*ref\s+(\d+)\s*\}\}/gi`（`ref` 后须有空格） | 匹配官方 `/<\s*(picture|video|audio)\s*(\d+)\s*>/gi`；旧 `{{ref N}}` 只报迁移 warning |
-| 上界 = `referenceIds.length`（全局序号） | 上界按标记类型计（画面/音频/视频分别计数，缺 `kind` 退回总数） |
+| 匹配 `/\{\{\s*ref\s+(\d+)\s*\}\}/gi`（`ref` 后须有空格） | 匹配放宽为 `/\{\{\s*ref\s*(\d+)\s*\}\}/gi`（两侧空白可省略）；`{{ref N}}` 即现行唯一写法，越界 error |
+| 上界 = `referenceIds.length`（全局序号） | 保持一致：上界仍是 `referenceIds.length` 全局序号；「按标记类型分别计上界」（一度按官方标记实施的 `boundOf` 口径）已废除 |
 | 「每个 N 至少出现一次」缺失即 `error` | 已废除：不要求每个编号出现 |
-| 越界文案「含越界引用 `{{ref {N}}}`，参考范围为 1..{refs.length}」 | 「含越界标记 `<Picture {N}>`，本镜画面参考编号范围为 1..{bound}」 |
-| 同一 N 可重复（不查重号） | 保持一致：仍不查重号（但理由变为「官方格式允许自然复述」，而非旧口径推断） |
-| `referenceOrder` 不参与定上界，只承担画布位次核对（由 V15 负责） | 保持一致：V15 现位于 `planValidator.ts:274-284`，仍是「`referenceIds` 顺序与画布参考顺序一致」的唯一规则点 |
+| 官方 `<Picture N>` 是唯一写法、旧 `{{ref N}}` 只报迁移 warning（2026-10 中旬一度口径，本节 7.1 旧版正文即此） | **已反转**：`{{ref N}}` 为写作者写法，尖括号一律 error，无 warning 路径；尖括号只存在于 wire 层换算结果 |
+| 同一 N 可重复（不查重号） | 保持一致：仍不查重号 |
+| `referenceOrder` 不参与定上界，只承担画布位次核对（由 V15 负责） | 保持一致：V15 仍在 `planValidator.ts`（按 `---- V15` 注释锚定，现位于 `:291-303`），仍是「`referenceIds` 顺序与画布参考顺序一致」的唯一规则点 |
 

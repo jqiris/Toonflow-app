@@ -34,7 +34,7 @@ metadata:
 
 视频生成先判工程形态：
 
-一、**多轨主路径（默认）**：工作区 `plan/` 下存在 `story.mtrack`（或任意 `.mtrack` 工程），或本次任务属于分镜批量、跨镜连续性、需要状态回写与验收合成 → 走 assetCard 技能链路：资产卡定稿 → 分镜接入多轨工程（多轨编辑器绑定，或按 assetCard 多轨模板建立）→ `planOperator` validate 清零 → 逐镜生成，二选一：会话内按 runbook §十三 逐镜 SOP（`planOperator` dispatch 出清单，逐镜按 §一 11 步执行），或画布多轨节点 `node:dispatchGenerate` 后台派工（立即返回 batchId，进度看 `node:getStatus` / `mtrackRead`）。**同一批镜头两者绝不同时执行。**
+一、**多轨主路径（默认）**：工作区 `plan/` 下存在 `story.mtrack`（或任意 `.mtrack` 工程），或本次任务属于分镜批量、跨镜连续性、需要状态回写与验收合成（新项目同样走本路径，工程由导入节点创建）→ 走 assetCard 技能链路：资产卡与分镜稿定稿 → 画布「导入资产与分镜」节点（`packages/nodes/assetImportNode`：抽取资产卡与分镜、批量出资产图、写 `plan/assetIndex.json` 与 `plan/story.mtrack`）→ 资产节点连到多轨节点 `in` 端口，多轨「参考素材」只从连线上打勾（位次即 `{{ref N}}`）→ `planOperator` validate 清零 → 逐镜生成，二选一：会话内按 runbook §十三 逐镜 SOP（`planOperator` dispatch 出清单，逐镜按 §一 11 步执行），或画布多轨节点 `node:dispatchGenerate` 后台派工（立即返回 batchId，进度看 `node:getStatus` / `mtrackRead`）。**同一批镜头两者绝不同时执行。**
 
 二、**直连例外**：工作区没有多轨工程，且用户点名只要一条视频（单段、无分镜表、无资产卡体系、不要求跨镜连续性的灵感短片），或对既有单视频节点的局部重生成/参数修正 → 按 [canvasExecution](references/canvasExecution.md) 单节点链路 `node:getConfig` → `node:setConfig` → `node:setPrompt` → `node:generateVideo` → `node:getGenerationStatus` 直调；仍须逐项展示方案并取得消耗算力授权；产物不回填 mtrack。
 
@@ -224,7 +224,7 @@ metadata:
 **情况二补充 · 无参考库但需要锁定身份时（Seedance 2.5）**
 
 当目标模型为 2.5、用户既没有标签库也没有参考图，但本段需要锁定角色 / 场景 / 道具身份时：
-- 允许先按 Toonflow 资产方法（角色四视图参考板 / 场景主视图 / 道具 2×2 板）生成参考图，再进入 A1.2.1 / A9.2 的 Reference binding；
+- 允许先按 Toonflow 资产方法（角色四视图整版 / 场景主视图 / 道具 2×2 板）生成参考图，再进入 A1.2.1 / A9.2 的 Reference binding；
 - 生成的参考图只锁「用户指定或可明确判断」的维度：角色脸 / 发型 / 年龄感 / 体型 / 服装，场景结构与材质，道具主色 / 形态 / 开合结构；
 - 参考图不越权控制站位、光线、镜头或额外剧情（同 A1.2.1 的参考图角色分类与冲突处理）；
 - 仍遵循 A0.1 剧情保真：生成的外观一律视为「设计提案」，不冒充原文事实；不得因此新增剧情事件、道具来源、角色关系或世界规则；参考图中出现原文未提及的人物 / 道具 / 文字，不得自动带入剧情。
