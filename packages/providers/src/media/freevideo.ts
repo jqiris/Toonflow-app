@@ -20,8 +20,8 @@ const rules = [
 
 const version = "1.1.1";
 const agentSuffix = "/freevideo/agent/v1";
-/** 图像生成路径（freevideo-image）参考图上限（Toonflow 产品口径）；视频镜声明另按引擎能力取 imageReference:9，两个数不同口径。 */
-const maxImageReferences = 4;
+/** 参考图上限统一按 9 张（与视频 imageReference:9 声明同口径）。引擎图像任务文档未写显式上限，超限时由引擎 422 报错。 */
+const maxImageReferences = 9;
 
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("FreeVideo 响应格式错误");
@@ -284,7 +284,7 @@ export default {
     // ACT: 单次图像生成最多等待 10 分钟。
     const signal = AbortSignal.any([AbortSignal.timeout(10 * 60_000), ...(this.signal ? [this.signal] : [])]);
 
-    // ACT: 原先把参考图全上传再拦 >4——拦截报错误后已上传的文件成了引擎侧孤儿；改为上传前按提交数拦截。
+    // ACT: 拦截放在上传前，避免报错后已上传文件成为引擎侧孤儿；上限改动只动 maxImageReferences 一处。
     const submittedImages = request.images ?? [];
     if (submittedImages.length > maxImageReferences) throw new Error(`这类模型最多支持${maxImageReferences}张参考图，当前提交了${submittedImages.length}张`);
     const images: string[] = [];
