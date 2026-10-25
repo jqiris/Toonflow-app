@@ -67,8 +67,9 @@
                       <el-input-number v-model="bulkAddCount" size="small" :min="1" :max="100" :step="1" :stepStrictly="true" />
                     </label>
                     <el-button size="small" @click="bulkAdd(bulkAddCount)">批量添加</el-button>
+                    <el-button size="small" @click="acceptAllGenerated">一键验收</el-button>
                   </div>
-                  <p class="bulkHint">新镜头默认 5 秒；统一时长按工程契约限制在 2–60 秒整数内。页签上 Ctrl/⌘ 或 Shift 多选保留给批量调整入口，并作为逐镜面板的预填范围。</p>
+                  <p class="bulkHint">新镜头默认 5 秒；统一时长按工程契约限制在 2–60 秒整数内。页签上 Ctrl/⌘ 或 Shift 多选保留给批量调整入口，并作为逐镜面板的预填范围。一键验收只翻已有成片、状态为「已生成」的镜头，生成中与失败镜跳过。</p>
                 </div>
               </details>
               <el-button size="small" @click="addClip">＋ 添加镜头</el-button>
@@ -1364,6 +1365,35 @@ function toggleClipAccept(clipId: string) {
   const clip = clips.value[index];
   if (clip.status === "generated") clips.value[index] = { ...clip, status: "accepted" };
   else if (clip.status === "accepted") clips.value[index] = { ...clip, status: "generated" };
+}
+
+/** 一键验收：把全部「已生成且有成片」的镜头整批翻成 accepted，与浮窗勾选同一条写盘链；生成中与无成片跳过。 */
+async function acceptAllGenerated() {
+  const targets = clips.value.filter(clip => clip.status === "generated" && clip.assetPath);
+  if (!targets.length) {
+    ElMessage.warning("没有可验收的镜头：只验收已生成且有成片的镜头");
+    return;
+  }
+  try {
+    await ElMessageBox.confirm(
+      `把 ${targets.length} 个已生成且有成片的镜头整批验收（accepted）？验收后即可用于合并；画面质量不再逐条确认。`,
+      "一键验收",
+      { confirmButtonText: "全部验收", cancelButtonText: "取消", type: "warning" }
+    );
+  } catch {
+    return;
+  }
+  // ACT: 确认框打开期间派工可能写回 clips——按 clipId 重新定位并复查条件，避免把状态翻到已被替换的对象上。
+  let done = 0;
+  for (const target of targets) {
+    const index = clips.value.findIndex(clip => clip.clipId === target.clipId);
+    if (index < 0) continue;
+    const clip = clips.value[index];
+    if (clip.status !== "generated" || !clip.assetPath) continue;
+    clips.value[index] = { ...clip, status: "accepted" };
+    done += 1;
+  }
+  ElMessage.success(done ? `已验收 ${done} 个镜头` : "镜头状态已变化，本次没有验收任何镜头");
 }
 
 /** 删版本文件：宿主不提供删除能力时只清记录、不报文件失败；缺失文件不算失败。 */
