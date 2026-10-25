@@ -39,24 +39,33 @@
       :contextWindow="contextWindow"
       @submit="submitMessage"
       @stop="stopMessage" />
-    <el-dialog v-model="questionDialogVisible" :title="currentQuestion?.title || ''" width="520" @update:model-value="handleQuestionDialogUpdate">
-      <div>
-        <div v-if="currentQuestion?.question" style="margin-bottom:16px; font-size:14px; color:var(--el-text-color-primary); white-space:pre-wrap;">{{ currentQuestion.question }}</div>
-        <div v-if="!currentQuestion?.fields?.length" style="margin-bottom:16px;">
-          <el-input type="textarea" v-model="questionAnswer" :rows="4" placeholder="请输入回答" />
-        </div>
-        <el-form-item v-for="field in currentQuestion?.fields || []" :key="field.field" :label="field.title" :prop="field.field" :required="field.required">
+    <!-- ACT: appendToBody 会让弹窗脱离被 v-show 隐藏的会话容器（后台会话的问题会盖到当前界面）；
+         用 modalClass 隐藏遮罩层而不是 v-if/v-show，组件保持挂载，切回会话即可继续回答。 -->
+    <el-dialog
+      v-model="questionDialogVisible"
+      class="questionDialog"
+      :modalClass="active ? '' : 'questionDialogOverlayHidden'"
+      :title="currentQuestion?.title || ''"
+      width="min(520px, calc(100vw - 32px))"
+      alignCenter
+      appendToBody
+      @update:model-value="handleQuestionDialogUpdate">
+      <div class="questionBody">
+        <div v-if="currentQuestion?.question" class="questionText">{{ currentQuestion.question }}</div>
+        <el-input v-if="!currentQuestion?.fields?.length" v-model="questionAnswer" type="textarea" :autosize="{ minRows: 4, maxRows: 10 }" placeholder="请输入回答" />
+        <el-form-item v-for="field in currentQuestion?.fields || []" :key="field.field" :label="field.title" :prop="field.field" :required="field.required" labelPosition="top">
           <el-input v-if="field.type === 'input'" v-model="questionForm[field.field]" />
+          <el-input v-else-if="field.type === 'textarea'" v-model="questionForm[field.field]" type="textarea" :autosize="{ minRows: 2, maxRows: 6 }" />
           <el-input v-else-if="field.type === 'inputNumber'" type="number" v-model.number="questionForm[field.field]" />
           <el-switch v-else-if="field.type === 'switch'" v-model="questionForm[field.field]" />
           <el-radio-group v-else-if="field.type === 'radio'" v-model="questionForm[field.field]">
-            <el-radio v-for="opt in field.options || []" :key="opt" :label="opt">{{ opt }}</el-radio>
+            <el-radio v-for="opt in field.options || []" :key="opt" :value="opt">{{ opt }}</el-radio>
           </el-radio-group>
           <el-select v-else-if="field.type === 'select'" v-model="questionForm[field.field]" placeholder="请选择">
             <el-option v-for="opt in field.options || []" :key="opt" :label="opt" :value="opt" />
           </el-select>
           <el-checkbox-group v-else-if="field.type === 'checkbox'" v-model="questionForm[field.field]">
-            <el-checkbox v-for="opt in field.options || []" :key="opt" :label="opt">{{ opt }}</el-checkbox>
+            <el-checkbox v-for="opt in field.options || []" :key="opt" :value="opt">{{ opt }}</el-checkbox>
           </el-checkbox-group>
         </el-form-item>
       </div>
@@ -108,6 +117,26 @@ const questionDialogVisible = ref(false);
 const questionForm = reactive<Record<string, any>>({});
 const questionAnswer = ref("");
 let questionResolve: (() => void) | null = null;
+/** ACT: Object.assign(obj, {}) 不会删除键；复用同一个 reactive 对象时必须显式 delete，否则上一轮的字段会一直留在提交体里。 */
+function resetQuestionForm() {
+  for (const field of Object.keys(questionForm)) delete questionForm[field];
+}
+/**
+ * ACT: 等待回答的 Promise 必须能被 abort 唤醒——否则弹窗开着时点「停止生成」，
+ * 收流循环卡在这个 await 上，busy 永远不落，输入框和发送按钮都会锁死。
+ */
+function waitForQuestion(signal: AbortSignal) {
+  return new Promise<void>(resolve => {
+    const finish = () => {
+      signal.removeEventListener("abort", finish);
+      questionResolve = null;
+      resolve();
+    };
+    questionResolve = finish;
+    if (signal.aborted) finish();
+    else signal.addEventListener("abort", finish, { once: true });
+  });
+}
 const voiceActive = ref(false);
 const locked = computed(() => props.disabled || busy.value || deletingId.value !== undefined || restoringAttachment.value || voiceActive.value);
 const editingId = ref<string>();
@@ -320,12 +349,15 @@ async function runMessageSend(source?: AgentMessage, text?: string) {
         toolEvent = toolEvent.event;
       }
       if (toolEvent.type === "question") {
+        // 新提问打开前先清空上一轮的残留，避免旧字段混进本次提交体。
+        resetQuestionForm();
+        questionAnswer.value = "";
         currentQuestion.value = toolEvent;
         questionDialogVisible.value = true;
-        await new Promise<void>((resolve) => { questionResolve = resolve; });
+        await waitForQuestion(requestController.signal);
         questionDialogVisible.value = false;
         currentQuestion.value = undefined;
-        Object.assign(questionForm, {});
+        resetQuestionForm();
         questionAnswer.value = "";
         pendingQuestions.delete(`${scope}${toolEvent.toolCallId}`);
       }
@@ -392,6 +424,7 @@ async function runMessageSend(source?: AgentMessage, text?: string) {
     questionDialogVisible.value = false;
     currentQuestion.value = undefined;
     questionResolve = null;
+    resetQuestionForm();
     for (const file of activeChildFiles) emit("event", { type: "subAgentEvent", file, event: { type: "error", message: "委派连接已结束，请重新打开子会话查看结果" } });
     // ACT: Bun 的流断开事件可能不触发；主动结束仍在等待的提问，不依赖断开通知。
     for (const callId of pendingQuestions.values()) {
@@ -413,8 +446,23 @@ async function handleQuestionSubmit() {
   try {
     const body: Record<string, unknown> = { directory, callId: q.callId };
     if (q.fields?.length) {
-      body.values = questionForm;
+      // 只提交本次提问声明过的字段：服务端用 strictObject 校验，残留字段会整体报「请按要求填写表单」。
+      const values = Object.fromEntries(q.fields.map((field: any) => [field.field, questionForm[field.field]]));
+      // 与服务端一致：字符串按 trim 后判空，避免纯空格漏过去再被 400 打回。
+      const isEmpty = (value: unknown) => typeof value === "string"
+        ? !value.trim()
+        : value === undefined || value === null || (Array.isArray(value) && !value.length);
+      const missing = q.fields.filter((field: any) => field.required && isEmpty(values[field.field]));
+      if (missing.length) {
+        ElMessage.warning(`请填写${missing.map((field: any) => field.title).join("、")}`);
+        return;
+      }
+      body.values = values;
     } else {
+      if (!questionAnswer.value.trim()) {
+        ElMessage.warning("请输入回答");
+        return;
+      }
       body.answer = questionAnswer.value;
     }
     const response = await fetch("/api/agent/answer", {
@@ -429,7 +477,7 @@ async function handleQuestionSubmit() {
     }
     questionDialogVisible.value = false;
     currentQuestion.value = undefined;
-    Object.assign(questionForm, {});
+    resetQuestionForm();
     questionAnswer.value = "";
     questionResolve?.();
     questionResolve = null;
@@ -449,7 +497,7 @@ function handleQuestionCancel() {
   }).catch(() => {});
   questionDialogVisible.value = false;
   currentQuestion.value = undefined;
-  Object.assign(questionForm, {});
+  resetQuestionForm();
   questionAnswer.value = "";
   questionResolve?.();
   questionResolve = null;
@@ -468,7 +516,7 @@ function handleQuestionDialogUpdate(val: boolean) {
     }
     questionDialogVisible.value = false;
     currentQuestion.value = undefined;
-    Object.assign(questionForm, {});
+    resetQuestionForm();
     questionAnswer.value = "";
     questionResolve?.();
     questionResolve = null;
@@ -517,6 +565,71 @@ onBeforeUnmount(() => controller?.abort());
     margin: 0 12px 8px;
     color: var(--el-text-color-secondary);
     font-size: 12px;
+  }
+}
+
+/* 后台会话的提问弹窗：保持挂载但不能出现在当前界面上（切回该会话后自动恢复可见）。 */
+.el-overlay.questionDialogOverlayHidden {
+  display: none;
+}
+
+.el-dialog.questionDialog {
+  display: flex;
+  max-height: calc(100dvh - 32px);
+  flex-direction: column;
+  overflow: hidden;
+
+  .el-dialog__header {
+    flex-shrink: 0;
+  }
+
+  .el-dialog__body {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+
+  .el-dialog__footer {
+    flex-shrink: 0;
+  }
+
+  .questionBody {
+    .questionText {
+      margin-bottom: 16px;
+      color: var(--el-text-color-primary);
+      font-size: 14px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .el-form-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .el-radio-group,
+    .el-checkbox-group {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 4px;
+    }
+
+    .el-radio,
+    .el-checkbox {
+      height: auto;
+      margin: 0;
+      padding: 4px 6px;
+      white-space: normal;
+    }
+
+    .el-radio__label,
+    .el-checkbox__label {
+      line-height: 1.5;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
   }
 }
 </style>
