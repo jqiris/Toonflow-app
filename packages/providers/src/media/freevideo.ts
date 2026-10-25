@@ -20,7 +20,7 @@ const rules = [
 
 const version = "1.1.1";
 const agentSuffix = "/freevideo/agent/v1";
-/** 参考图张数上限（Toonflow 产品口径）：与模型 mode 声明和下发前拦截共用一个数。 */
+/** 图像生成路径（freevideo-image）参考图上限（Toonflow 产品口径）；视频镜声明另按引擎能力取 imageReference:9，两个数不同口径。 */
 const maxImageReferences = 4;
 
 function object(value: unknown): Record<string, unknown> {
@@ -258,9 +258,9 @@ export default {
       id: "MiniMax-H3",
       label: "MiniMax-H3（本地 FreeVideo）",
       type: "video",
-      // ACT: 供应商文件 models 段被 provider.ts 字面量校验器限制，只能写死数字；上限改动须同步 maxImageReferences 常量（运行时拦截 generateImage 用它）。
-      // ACT: 引擎单块默认支持到 9 张参考，≥30s 自动分块时实限 3（422），供应商不预拦（维持裁决）。
-      mode: ["text", "startFrameOptional", ["imageReference:4", "videoReference:1", "audioReference:1"]],
+      // ACT: models 段受 provider.ts 字面量校验限制，数字只能写死；9 = 引擎单块参考图能力，视频镜供应商侧不预拦（维持裁决），上限改动直接改这里的字面量。
+      // ACT: ≥30s 自动分块时引擎实限 3（超限由引擎 422 报错）；承接镜合计 ≤3 由 V16 + 派工组装 + generateVideo 续接拦截兜底。
+      mode: ["text", "startFrameOptional", ["imageReference:9", "videoReference:1", "audioReference:1"]],
       audio: "optional",
       durationResolutionMap: [{ duration: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60], resolution: ["768P", "2K"] }],
     },
