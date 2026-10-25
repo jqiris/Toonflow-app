@@ -1,5 +1,8 @@
 <template>
   <component v-if="renderer" :is="renderer" :tool="tool" :directory="directory" :toolSessionId="toolSessionId" @copy="emit('copy', $event)" />
+  <div v-if="tool.name === 'subAgent' && tool.question?.callId && tool.status !== 'success' && tool.status !== 'error'" class="subAgentWaiting">
+    等待您补充：{{ tool.question.question }}
+  </div>
   <el-text v-if="rendererError" type="danger">工具界面加载失败，请停止后重试：{{ rendererError }}</el-text>
   <chat-reasoning v-model:collapsed="collapsed" class="messageReasoning toolCall" expandIconPlacement="left">
     <template #expandIcon><component :is="collapsed ? IconChevronRight : IconChevronDown" :size="14" aria-hidden="true" /></template>
@@ -78,6 +81,19 @@ function formatToolData(value: unknown) {
 </script>
 
 <style scoped lang="scss">
+.subAgentWaiting {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  margin: 8px 0;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  background: var(--el-fill-color-light);
+  border: 1px dashed var(--el-border-color-light);
+  border-radius: var(--ui-radius);
+}
+
 .toolCall {
   min-width: 0;
   :deep(.t-collapse-panel__icon) { color: var(--el-text-color-secondary); }

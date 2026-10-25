@@ -39,6 +39,32 @@
       :contextWindow="contextWindow"
       @submit="submitMessage"
       @stop="stopMessage" />
+    <el-dialog v-model="questionDialogVisible" :title="currentQuestion?.title || ''" width="520" @update:model-value="handleQuestionDialogUpdate">
+      <div>
+        <div v-if="currentQuestion?.question" style="margin-bottom:16px; font-size:14px; color:var(--el-text-color-primary); white-space:pre-wrap;">{{ currentQuestion.question }}</div>
+        <div v-if="!currentQuestion?.fields?.length" style="margin-bottom:16px;">
+          <el-input type="textarea" v-model="questionAnswer" :rows="4" placeholder="请输入回答" />
+        </div>
+        <el-form-item v-for="field in currentQuestion?.fields || []" :key="field.field" :label="field.title" :prop="field.field" :required="field.required">
+          <el-input v-if="field.type === 'input'" v-model="questionForm[field.field]" />
+          <el-input v-else-if="field.type === 'inputNumber'" type="number" v-model.number="questionForm[field.field]" />
+          <el-switch v-else-if="field.type === 'switch'" v-model="questionForm[field.field]" />
+          <el-radio-group v-else-if="field.type === 'radio'" v-model="questionForm[field.field]">
+            <el-radio v-for="opt in field.options || []" :key="opt" :label="opt">{{ opt }}</el-radio>
+          </el-radio-group>
+          <el-select v-else-if="field.type === 'select'" v-model="questionForm[field.field]" placeholder="请选择">
+            <el-option v-for="opt in field.options || []" :key="opt" :label="opt" :value="opt" />
+          </el-select>
+          <el-checkbox-group v-else-if="field.type === 'checkbox'" v-model="questionForm[field.field]">
+            <el-checkbox v-for="opt in field.options || []" :key="opt" :label="opt">{{ opt }}</el-checkbox>
+          </el-checkbox-group>
+        </el-form-item>
+      </div>
+      <template #footer>
+        <el-button @click="handleQuestionCancel">取消</el-button>
+        <el-button type="primary" @click="handleQuestionSubmit">提交</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -47,7 +73,7 @@ import { locale, translate } from "@toonflow/i18n/vue";
 import { computed, inject, onBeforeUnmount, reactive, ref, watch } from "vue";
 import axios from "axios";
 import { IconLoader2 } from "@tabler/icons-vue";
-import { ElMessage } from "element-plus";
+import { ElButton, ElCheckbox, ElCheckboxGroup, ElDialog, ElFormItem, ElInput, ElMessage, ElOption, ElRadio, ElRadioGroup, ElSelect, ElSwitch } from "element-plus";
 import { getReadableFileExtension, getReadableFileMimeType } from "@toonflow/server/documentFormats";
 import useWorkspaceFiles from "@/lib/workspaceFiles";
 import { writeClipboardText } from "@/lib/clipboard";
@@ -77,6 +103,11 @@ const compacting = ref(false);
 const deletingId = ref<string>();
 const restoringAttachment = ref(false);
 const input = ref<InstanceType<typeof messageInput>>();
+const currentQuestion = ref<any>(null);
+const questionDialogVisible = ref(false);
+const questionForm = reactive<Record<string, any>>({});
+const questionAnswer = ref("");
+let questionResolve: (() => void) | null = null;
 const voiceActive = ref(false);
 const locked = computed(() => props.disabled || busy.value || deletingId.value !== undefined || restoringAttachment.value || voiceActive.value);
 const editingId = ref<string>();
@@ -288,7 +319,16 @@ async function runMessageSend(source?: AgentMessage, text?: string) {
         scope += `${toolEvent.file}/`;
         toolEvent = toolEvent.event;
       }
-      if (toolEvent.type === "question") pendingQuestions.set(`${scope}${toolEvent.toolCallId}`, toolEvent.callId);
+      if (toolEvent.type === "question") {
+        currentQuestion.value = toolEvent;
+        questionDialogVisible.value = true;
+        await new Promise<void>((resolve) => { questionResolve = resolve; });
+        questionDialogVisible.value = false;
+        currentQuestion.value = undefined;
+        Object.assign(questionForm, {});
+        questionAnswer.value = "";
+        pendingQuestions.delete(`${scope}${toolEvent.toolCallId}`);
+      }
       if (toolEvent.type === "tool" && toolEvent.tool.status !== "running") pendingQuestions.delete(`${scope}${toolEvent.tool.id}`);
       if (toolEvent.type === "canvasCall") {
         if (handledCanvasCalls.has(toolEvent.callId)) throw new Error("收到重复的画布调用");
@@ -343,6 +383,15 @@ async function runMessageSend(source?: AgentMessage, text?: string) {
       emit("event", { type: "subAgentEvent", file: props.sessionFile, event: { type: "error", message } });
     }
   } finally {
+    if (currentQuestion.value) {
+      void fetch("/api/agent/answer", {
+        method: "POST", headers: { "Accept-Language": locale.value, "Content-Type": "application/json", "x-toonflow-workspace": "1" },
+        body: JSON.stringify({ directory, callId: currentQuestion.value.callId, cancelled: true }), keepalive: true,
+      }).catch(() => {});
+    }
+    questionDialogVisible.value = false;
+    currentQuestion.value = undefined;
+    questionResolve = null;
     for (const file of activeChildFiles) emit("event", { type: "subAgentEvent", file, event: { type: "error", message: "委派连接已结束，请重新打开子会话查看结果" } });
     // ACT: Bun 的流断开事件可能不触发；主动结束仍在等待的提问，不依赖断开通知。
     for (const callId of pendingQuestions.values()) {
@@ -358,7 +407,73 @@ async function runMessageSend(source?: AgentMessage, text?: string) {
   }
 }
 
-// 回合结束（busy 下降）：通知宿主补发排队的批次通知——宿主的 flush watch 只盯会话列表，看不见这里的忙闲变化。
+async function handleQuestionSubmit() {
+  const q = currentQuestion.value;
+  if (!q) return;
+  try {
+    const body: Record<string, unknown> = { directory, callId: q.callId };
+    if (q.fields?.length) {
+      body.values = questionForm;
+    } else {
+      body.answer = questionAnswer.value;
+    }
+    const response = await fetch("/api/agent/answer", {
+      method: "POST",
+      headers: { "Accept-Language": locale.value, "Content-Type": "application/json", "x-toonflow-workspace": "1" },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => null);
+      ElMessage.error(error?.message || "答复提交失败");
+      return;
+    }
+    questionDialogVisible.value = false;
+    currentQuestion.value = undefined;
+    Object.assign(questionForm, {});
+    questionAnswer.value = "";
+    questionResolve?.();
+    questionResolve = null;
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : "答复提交失败");
+  }
+}
+
+function handleQuestionCancel() {
+  const q = currentQuestion.value;
+  if (!q) return;
+  void fetch("/api/agent/answer", {
+    method: "POST",
+    headers: { "Accept-Language": locale.value, "Content-Type": "application/json", "x-toonflow-workspace": "1" },
+    body: JSON.stringify({ directory, callId: q.callId, cancelled: true }),
+    keepalive: true,
+  }).catch(() => {});
+  questionDialogVisible.value = false;
+  currentQuestion.value = undefined;
+  Object.assign(questionForm, {});
+  questionAnswer.value = "";
+  questionResolve?.();
+  questionResolve = null;
+}
+
+function handleQuestionDialogUpdate(val: boolean) {
+  if (!val && questionResolve) {
+    const q = currentQuestion.value;
+    if (q) {
+      void fetch("/api/agent/answer", {
+        method: "POST",
+        headers: { "Accept-Language": locale.value, "Content-Type": "application/json", "x-toonflow-workspace": "1" },
+        body: JSON.stringify({ directory, callId: q.callId, cancelled: true }),
+        keepalive: true,
+      }).catch(() => {});
+    }
+    questionDialogVisible.value = false;
+    currentQuestion.value = undefined;
+    Object.assign(questionForm, {});
+    questionAnswer.value = "";
+    questionResolve?.();
+    questionResolve = null;
+  }
+}
 watch(busy, running => { if (!running) emit("idle"); });
 
 /**
