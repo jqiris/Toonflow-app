@@ -22,6 +22,10 @@
           <h2>项目与成片</h2>
           <p class="overlaySubtitle">{{ projectName || "未命名项目" }}</p>
         </div>
+        <span v-if="currentClipText" class="headerNowPlaying" :title="currentClipText">
+          <span class="headerNowPlayingLabel">当前片段</span>
+          <span class="headerNowPlayingValue">{{ currentClipText }}</span>
+        </span>
         <span class="overlayCount">{{ completedClips.length }} / {{ clips.length }} 镜头</span>
         <button type="button" class="headerButton" @click.stop="emit('focusEditor')">镜头编辑</button>
         <button type="button" class="headerButton" :aria-expanded="!geo.collapsed" @click.stop="toggleCollapsed">
@@ -93,6 +97,7 @@
             v-for="(clip, index) in completedClips"
             :key="clip.clipId"
             :label="completedClipLabel(index, clip)"
+            :previewing="clip.clipId === previewClipId"
             :versions="versionsOf(clip)"
             :stale="states?.[clip.clipId]?.stale ?? false"
             :mergeable="clip.status === 'generated' || clip.status === 'accepted'"
@@ -445,6 +450,19 @@ const videoRef = ref<HTMLVideoElement>();
 const continuousPlay = ref(true);
 const playHint = ref("");
 
+/**
+ * 顶部「当前片段」：大预览锁定的那一段（不是播放进度，也不代表正在出声）。
+ * 用 completedClips 的序号（与下方轨迹、下拉框同一口径），并带上版本号，多版本时也能分清。
+ */
+const currentClipText = computed(() => {
+  const clip = previewClip.value;
+  if (!clip) return "";
+  const position = `${previewIndex.value + 1} / ${completedClips.value.length}`;
+  const version = previewVersions.value.find(item => item.watching)?.number;
+  const title = clip.title || "未命名";
+  return version ? `${position} · ${title} · 版本 ${version}` : `${position} · ${title}`;
+});
+
 /** 当前在连播序列中的位置：提示优先，否则显示序号与标题（同 LSC data-result-position）。 */
 const playbackPosition = computed(() => {
   if (playHint.value) return playHint.value;
@@ -656,6 +674,39 @@ function onPreviewError(event: Event) {
   overflow: hidden;
   color: var(--el-text-color-secondary, #9aa5a1);
   font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 当前片段：主色徽标 + 序号/标题，标题过长省略但保留 title 全文。
+   ACT: 类名带 header 前缀——scoped 样式会把本组件的作用域 id 一并打到子组件（versionMenu）根元素上，
+   若与子组件根节点的类同名，逐镜卡片的宽度/内边距/边框会被这枚徽标连带命中。 */
+.headerNowPlaying {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 320px;
+  overflow: hidden;
+  padding: 4px 8px;
+  border: 1px solid var(--el-color-primary-light-5, #79bbff);
+  border-radius: 6px;
+  background: var(--el-color-primary-light-9, #ecf5ff);
+  color: var(--el-color-primary, #409eff);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.headerNowPlayingLabel {
+  flex: none;
+  font-weight: 600;
+}
+
+.headerNowPlayingValue {
+  min-width: 0;
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

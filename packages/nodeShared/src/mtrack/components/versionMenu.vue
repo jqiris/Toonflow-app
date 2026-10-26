@@ -1,5 +1,5 @@
 <template>
-  <details class="versionMenu">
+  <details class="versionMenu" :class="{ previewing: previewing }">
     <summary class="versionSummary">
       <input
         v-if="mergeable"
@@ -12,6 +12,7 @@
         @click.stop
         @change="emit('toggleAccept')" />
       <span class="versionTitle">{{ label }}</span>
+      <span v-if="previewing" class="previewingBadge">当前</span>
       <span v-if="stale" class="staleBadge">待更新</span>
       <button
         type="button"
@@ -77,7 +78,9 @@ const props = withDefaults(defineProps<{
   disabled?: boolean;
   /** 本组版本所属镜头已落后于当前设置（对齐 LSC 的 stale）。 */
   stale?: boolean;
-}>(), { mergeable: false, accepted: false, disabled: false, stale: false });
+  /** 本组所属镜头正是大预览当前锁定的那一段（轨迹上的位置标识，不代表正在出声播放）。 */
+  previewing?: boolean;
+}>(), { mergeable: false, accepted: false, disabled: false, stale: false, previewing: false });
 
 const emit = defineEmits<{
   (event: "watch", version: string): void;
@@ -230,6 +233,23 @@ const rows = computed(() => props.versions.map(item => ({
 .versionSetDefault:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+/* 当前：左侧主色条 + 组头高亮，对应顶部「当前片段」；与「待更新」并存时各占一枚徽标。 */
+.versionMenu.previewing {
+  border-color: var(--el-color-primary, #409eff);
+  box-shadow: inset 3px 0 0 var(--el-color-primary, #409eff);
+}
+
+.previewingBadge {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--el-color-primary-light-9, #ecf5ff);
+  color: var(--el-color-primary, #409eff);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .staleBadge {
