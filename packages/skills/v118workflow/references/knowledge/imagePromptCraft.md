@@ -2,7 +2,7 @@
 
 用于首帧路线或用户确认需要分镜图的制作单元。输入是确认分镜及已采用资产图；这是把同一画面转成模型可执行描述，不是第二次创作剧情。先读本文件，涉及风格时只读 [视觉风格](visualStyles.md) 中已确认条目；角色/场景资产设计缺项回 [资产设计](assetDesign.md) 及资产阶段。
 
-权威提示词格式与参考标记口径：现行视频生成仅支持 MiniMax-H3（H3 官方六段格式 subject_definitions / summary / retention_analysis / detailed_description / overall_soundscape / non_diegetic_music，参考标记 <Picture N> / <Video N> / <Audio N> 各媒质独立编号），权威口径见 docs/h3PromptAlignment.md；本文件保留 v1.1.8 时代的画面→单帧转换方法学，示例中的参考占位一律改写为 H3 现行口径。
+权威提示词格式与参考标记口径：现行视频生成仅支持 MiniMax-H3（H3 官方六段格式 subject_definitions / summary / retention_analysis / detailed_description / overall_soundscape / non_diegetic_music，参考标记 <Picture N> / <Video N> / <Audio N> 各媒质独立编号），权威口径见 docs/h3PromptAlignment.md；本文件保留 v1.1.8 时代的画面→单帧转换方法学，示例中的参考占位一律采用 H3 现行口径。
 
 ## 输入与模型边界
 

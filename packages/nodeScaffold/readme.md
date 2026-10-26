@@ -176,7 +176,7 @@ await ai.generate({
 - `ai.getModels(signal?)`：读取设置中已配置的模型，返回 `providerId`、`providerLabel`、`modelId`、`label`、`protocol` 和可选的上下文、输出长度；`protocol` 为 `openai-completions`、`openai-responses` 或 `anthropic-messages`，不返回密钥或接口地址。
 - `ai.generate(input)`：始终返回 `{ text, reasoning? }`。`input` 包含 `providerId`、`modelId`、`prompt`，可选 `systemPrompt`、`references`、`directory`、`tools`、`onEvent` 和 `signal`。
 - `onEvent` 接收正文或思考增量 `{ type: "text" | "reasoning", delta }`，以及工具开始 `{ type: "toolStart", id, name, args }`、工具完成 `{ type: "toolEnd", id, name, result, isError }`。不传回调也使用相同执行流程，等待最终结果即可。
-- `references` 按列表顺序传入 `STRING`、`IMAGE`、`VIDEO` 的 `{ dataType, value }`，对应 `{{ref 1}}` 等编号；文本携带原文，媒体携带工作区相对路径与 MIME 类型，后端校验目录并读取为附件。媒体参考必须传入工作区绝对路径 `directory`。节点不预判模型附件能力，接口错误原样回传；视频使用 Chat Completions 的 `video_url`，Responses/Anthropic 按文件提交，是否接受取决于供应商。
+- `references` 按列表顺序传入 `STRING`、`IMAGE`、`VIDEO` 的 `{ dataType, value }`，对应提示词内参考标记 <Picture 1> / <Video 1> / <Audio 1> 等编号（各媒质独立编号，权威口径见 docs/h3PromptAlignment.md）；文本携带原文，媒体携带工作区相对路径与 MIME 类型，后端校验目录并读取为附件。媒体参考必须传入工作区绝对路径 `directory`。节点不预判模型附件能力，接口错误原样回传；视频使用 Chat Completions 的 `video_url`，Responses/Anthropic 按文件提交，是否接受取决于供应商。
 - 组件卸载会中止浏览器请求；Bun 1.3.14 在部分静默 SSE 场景下不能及时感知断连，上游生成可能继续到结束。需要提前中止时传入 `signal: controller.signal`。HTTP 错误、流内错误和缺少完成事件的断流都会抛错，调用方负责显示错误；客户端不自动重试。
 - 文本节点保留上次输出，直到收到新文本；流中断时保留已生成部分。
 
