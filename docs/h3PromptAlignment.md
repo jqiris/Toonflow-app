@@ -12,7 +12,7 @@
 
 ## 1. 总则：两条不可变约束
 
-[HISTORICAL] 1. **无向后兼容，无转换层**。严禁引入任何「双花括号 ref 占位符（`{{ref N}}`）→ `<Picture N>`」的自动转换层。旧占位符不再是合法输入，不解析、不换算、不降级提示；出现即报 error 并要求改写。
+[HISTORICAL] 1. **无向后兼容，无转换层**。严禁引入任何「旧双花括号 ref 占位符 → `<Picture N>`」的自动转换层。旧占位符不再是合法输入，不解析、不换算、不降级提示；出现即报 error 并要求改写。
 2. **参考标记由写作者直接书写**，形态为 `<Picture N>` / `<Video N>` / `<Audio N>`。这是最终下发给引擎的原文，不再由任何 wire 层生成。
 
 ## 2. ClipPrompt 六段字段（有参考 · 权威结构）
@@ -100,10 +100,10 @@ N/A
 参考标记是**合法且唯一**的写法，因此：
 
 1. `<Picture N>` / `<Video N>` / `<Audio N>` 出现 → **合法**，不再报 error。（现行实现把它当非法报 error，必须翻转。）
-[HISTORICAL] 2. `{{ref N}}` 出现 → **报 error**，提示改用 `<Picture N>` / `<Video N>` / `<Audio N>`。不提供任何换算、降级或透传通道。
+[HISTORICAL] 2. 旧双花括号 ref 占位符出现 → **报 error**，提示改用 `<Picture N>` / `<Video N>` / `<Audio N>`。不提供任何换算、降级或透传通道。
 3. 编号合法性：某媒质内出现 `N` 时，本镜该媒质的参考素材必须至少有 `N` 个；超出即报 error（越界）。
 4. 不查重号、不要求每个编号都出现（与官方一致：正文用不上某张参考可以不引用它，但它仍留在参考集合里送进引擎）。
-[HISTORICAL] 5. 编号基准是 `referenceIds` 中**同媒质的过滤位次**：图片按 `referenceIds` 里图片卡的位次连续编号 → `<Picture 1>`…`<Picture k>`；音频卡位次 → `<Audio 1>`…；视频卡位次 → `<Video 1>`…。这与现行 `mediaDispatch.referenceTags` 的分桶计数逻辑同形，只需去掉 `{{ref N}}` 的中间层。
+[HISTORICAL] 5. 编号基准是 `referenceIds` 中**同媒质的过滤位次**：图片按 `referenceIds` 里图片卡的位次连续编号 → `<Picture 1>`…`<Picture k>`；音频卡位次 → `<Audio 1>`…；视频卡位次 → `<Video 1>`…。这与现行 `mediaDispatch.referenceTags` 的分桶计数逻辑同形，只需去掉旧双花括号占位符的中间层。
 
 ## 4. 首帧模式：首行指令原文
 
@@ -145,10 +145,10 @@ overall_soundscape: ...
 non_diegetic_music: ...
 ```
 
-**关键决定：退化时主字段用 `detailed_description`，不是 `integrated_multimodal_description`。**
+**关键决定：退化时主字段用 `detailed_description`，不是 T2VA 老指南沿用下来的 integrated 多模态描述字段名。**
 
-- `base-en.txt` L39 的字面写法是 `integrated_multimodal_description: [Shot 1] ...`，但那是官方老指南沿用 T2VA 的命名。
-- 本套一律以 H3 的 `detailed_description` 为主字段：ref-en.txt L229 明确记载两种模式的主字段对比为「T2VA `integrated_multimodal_description` ↔ Full-reference mode `detailed_description`」；`integrated_multimodal_description` 属于旧体系，见 §6 处置。
+- `base-en.txt` L39 的字面写法是 integrated 多模态描述段名（T2VA 命名）+ `: [Shot 1] ...`，但那是官方老指南沿用 T2VA 的命名。
+- 本套一律以 H3 的 `detailed_description` 为主字段：ref-en.txt L229 明确记载两种模式的主字段对比为「T2VA integrated 多模态描述段名 ↔ Full-reference mode `detailed_description`」；该 integrated 段名属于旧体系，见 §6 处置。
 - 退化时省略 `subject_definitions` / `summary` / `retention_analysis` 三段（无参考则无参考对象可定义、无关系可总结、无保留度可分析）。
 - 三段之间的空行与冒号空格形态与六段完全一致。
 - `overall_soundscape` 与 `non_diegetic_music` 的写法、`N/A` 占位规则在两种模式下完全相同（base-en.txt §4.6 / §4.7；ref-en.txt §6）。
@@ -159,34 +159,34 @@ non_diegetic_music: ...
 
 | 旧项 | 处置 |
 |---|---|
-[HISTORICAL] | `integratedMultimodalDescription`（JS 驼峰） | **直接忽略**：不再作为 `ClipPrompt` 的字段，不读取、不序列化、不做映射。 |
-| `integrated_multimodal_description`（老提示词段名） | **直接忽略**：不再作为合法段名，不下发、不校验、不兼容。 |
-[HISTORICAL] | `{{ref N}}` / `{{refN}}` / `{{ ref N }}` 占位符 | **直接忽略**：不解析、不换算、不降级提示；出现即报 error。 |
+[HISTORICAL] | integrated 多模态描述字段（JS 驼峰，旧 ClipPrompt 字段） | **直接忽略**：不再作为 `ClipPrompt` 的字段，不读取、不序列化、不做映射。 |
+| integrated 多模态描述老提示词段名 | **直接忽略**：不再作为合法段名，不下发、不校验、不兼容。 |
+[HISTORICAL] | 旧双花括号 ref 占位符（含各种空白变体） | **直接忽略**：不解析、不换算、不降级提示；出现即报 error。 |
 | `formatFamily` / 多供应商提示词形状开关 | **直接忽略**：提示词只有 H3 一种形状，无兼容分支。 |
 | 老 `.mtrack` 工程里的旧字段 | **不做迁移**：无向后兼容层。 |
 
 **忽略的实现含义**：
 
-[HISTORICAL] - `readPrompt` 不再产出 `integratedMultimodalDescription`；旧工程读盘时该字段随未知键被丢弃（不报错、不提示、不写回）。
+[HISTORICAL] - `readPrompt` 不再产出 integrated 多模态描述旧字段；旧工程读盘时该字段随未知键被丢弃（不报错、不提示、不写回）。
 - 不建立任何「读老字段 → 写新字段」的迁移函数。
 - 不建立任何「老占位符 → 新标记」的转换函数。
 
 ## 7. V7 翻转规则（现行 → 目标）
 
-[HISTORICAL] 现行 V7（`packages/tools/planOperator/src/planValidator.ts:224–259`）是「`{{ref N}}` 合法、尖括号非法」，与本契约**完全相反**。翻转后：
+[HISTORICAL] 现行 V7（`packages/tools/planOperator/src/planValidator.ts:224–259`）是「旧双花括号 ref 占位符合法、尖括号非法」，与本契约**完全相反**。翻转后：
 
 | 现行（作废） | 目标（本契约） |
 |---|---|
-[HISTORICAL] | `{{ref N}}` 是合法写法，只查越界（N ∈ `1..referenceIds.length`），不查重号 | `{{ref N}}` 一律报 error，提示改用 `<Picture N>` / `<Video N>` / `<Audio N>` |
+[HISTORICAL] | 旧双花括号 ref 占位符是合法写法，只查越界（N ∈ `1..referenceIds.length`），不查重号 | 旧占位符一律报 error，提示改用 `<Picture N>` / `<Video N>` / `<Audio N>` |
 | 正文出现 `<Picture N>` / `<Video N>` / `<Audio N>` 判 error | 尖括号标记为唯一合法写法 |
 | 编号基准：`referenceIds` 的整体位次（图/音/视混排连续编号） | 编号基准：`referenceIds` 中**同媒质过滤后**的位次（各媒质独立编号） |
-[HISTORICAL] | 提示语：`参考标记统一写 {{ref N}}，N 为参考顺序里的序号` | 提示语：参考标记写 `<Picture N>` / `<Video N>` / `<Audio N>`，各媒质独立编号 |
-[HISTORICAL] | 字段枚举：`integratedMultimodalDescription` / `overallSoundscape` / `nonDiegeticMusic` | 字段枚举：六段新字段名 |
+[HISTORICAL] | 提示语：`参考标记统一写旧双花括号 ref 占位符，N 为参考顺序里的序号` | 提示语：参考标记写 `<Picture N>` / `<Video N>` / `<Audio N>`，各媒质独立编号 |
+[HISTORICAL] | 字段枚举：integrated 多模态描述旧字段 / `overallSoundscape` / `nonDiegeticMusic` | 字段枚举：六段新字段名 |
 
 **V7 目标语义（逐条）**：
 
 1. 扫描本镜提示词全字段（六段 / 退化的三段）文本。
-[HISTORICAL] 2. 命中 `{{\s*ref\s*(\d+)\s*}}` → `error`，message 指明「参考标记已改为 `<Picture N>` / `<Video N>` / `<Audio N>`，本镜已不使用 `{{ref N}}`」。
+[HISTORICAL] 2. 命中旧双花括号 ref 占位符的正则 → `error`，message 指明「参考标记已改为 `<Picture N>` / `<Video N>` / `<Audio N>`，本镜已不使用旧双花括号占位符」。
 3. 命中 `<\s*(Picture|Video|Audio)\s+(\d+)\s*>` → 校验该媒质编号不超过本镜该媒质参考数；越界报 `error`。
 4. 不查重号、不要求编号全覆盖。
 5. 不因为旧占位符而做静默替换、静默删除或降级。
@@ -220,10 +220,10 @@ non_diegetic_music: ...
 | `detailed_description` | ✅ L20 | ✅ L229（作为 full-reference 主字段对照） | 同 | 逐字一致，且为无参考退化主字段 |
 | `overall_soundscape` | ✅ L21 | ✅ L41、L152 | 同 | 逐字一致 |
 | `non_diegetic_music` | ✅ L22 | ✅ L43、L162 | 同 | 逐字一致 |
-| `integrated_multimodal_description` | L229（标记为 T2VA 老主字段） | ✅ L39（老指南主字段） | **不采用** | 属旧体系，直接忽略 |
+| integrated 多模态描述段名 | L229（标记为 T2VA 老主字段） | ✅ L39（老指南主字段） | **不采用** | 属旧体系，直接忽略 |
 | 首帧指令 | — | ✅ L19 | 逐字照抄 | 逐字一致 |
 
-结论：**六段字段名与顺序、首帧指令原文、退化三段结构均与官方指南逐字一致**；唯一有意的偏离是退化时主字段用 `detailed_description` 而非 `integrated_multimodal_description`，这是本套「只用 H3、不留老格式」的决定，依据是 ref-en.txt L229 自身把后者归为 T2VA 旧主字段。
+结论：**六段字段名与顺序、首帧指令原文、退化三段结构均与官方指南逐字一致**；唯一有意的偏离是退化时主字段用 `detailed_description` 而非 integrated 多模态描述旧段名，这是本套「只用 H3、不留老格式」的决定，依据是 ref-en.txt L229 自身把后者归为 T2VA 旧主字段。
 
 ## 10. 改动覆盖范围（文件与模块清单）
 
@@ -235,7 +235,7 @@ non_diegetic_music: ...
 |---|---|
 | `packages/nodeShared/src/mtrack/mtrackProject.ts` | `ClipPrompt` 接口改为六段新字段；`readPrompt`、`createClip`、`promptToText`、`textToPrompt`、`hasPrompt` 全部改口径；`soundscapeHeading`/`musicHeading` 段名常量保留；新增 `subject_definitions` / `summary` / `retention_analysis` 三个段名常量 |
 | `packages/nodeShared/src/mtrack/mtrackEdit.ts` | `validateClip` 的提示词相关校验随字段改名；参考上限文案保持 V8 = 9 / 续接 3 的口径 |
-[HISTORICAL] | `packages/nodeShared/src/mtrack/mediaDispatch.ts` | `buildPromptText` 改为六段拼装 + 无参考退化 + 首帧首行指令注入；`composeClipRequest` **删除** `{{ref N}}` → `<Picture N>` 换算层（L190–L204）；`referenceTags` 只保留「同媒质过滤位次」计数供提示词书写参考 |
+[HISTORICAL] | `packages/nodeShared/src/mtrack/mediaDispatch.ts` | `buildPromptText` 改为六段拼装 + 无参考退化 + 首帧首行指令注入；`composeClipRequest` **删除** 旧双花括号占位符 → `<Picture N>` 换算层（L190–L204）；`referenceTags` 只保留「同媒质过滤位次」计数供提示词书写参考 |
 | `packages/nodeShared/src/mtrack/directDispatch.ts` | 派工链路按新标记口径检查；与 `mediaDispatch` 同桶计数一致（`:148`） |
 | `packages/nodeShared/src/mtrack/components/shotEditorPane.vue` | 提示词编辑框：六段合成/拆分、段名提示、校验提示语 |
 | `packages/nodeShared/src/mtrack/components/referencePicker.vue` | 勾选网格显示编号口径改为「按媒质独立编号」；`N/4` 摘要与上限拦截保持 |
@@ -245,7 +245,7 @@ non_diegetic_music: ...
 
 | 文件 | 影响点 |
 |---|---|
-[HISTORICAL] | `packages/tools/planOperator/src/planValidator.ts` | V7 翻转（L224–259）：字段枚举改六段；`{{ref N}}` 改判 error；尖括号标记改判合法 + 同媒质越界检查 |
+[HISTORICAL] | `packages/tools/planOperator/src/planValidator.ts` | V7 翻转（L224–259）：字段枚举改六段；旧双花括号占位符改判 error；尖括号标记改判合法 + 同媒质越界检查 |
 | `packages/tools/planOperator/src/mtrackProject.ts` | 与 nodeShared 类型同口径；`ClipPrompt` 相关读写 |
 | `packages/tools/planOperator/src/index.ts` | 工具描述与示例文案去旧占位符 |
 | `packages/tools/planOperator/src/planValidator.ts` | V8 阈值常量不变；V7 之外的规则不动 |
@@ -255,7 +255,7 @@ non_diegetic_music: ...
 
 | 文件 | 影响点 |
 |---|---|
-[HISTORICAL] | `apps/server/src/routes/mtrack/rewriteShot.ts` | `promptSchema`（L10–L14）改六段；`refine`（L23–L24）字段名同步；`hardDiscipline`（L38–L42）第 2 条由「禁尖括号、只保留 `{{ref N}}`」翻转为「写 `<Picture N>` / `<Video N>` / `<Audio N>`」；`sections`（L82–L87）段名与参考位次提示改写；`referenceIds` `.max(4)` 口径保持 |
+[HISTORICAL] | `apps/server/src/routes/mtrack/rewriteShot.ts` | `promptSchema`（L10–L14）改六段；`refine`（L23–L24）字段名同步；`hardDiscipline`（L38–L42）第 2 条由「禁尖括号、只保留旧双花括号占位符」翻转为「写 `<Picture N>` / `<Video N>` / `<Audio N>`」；`sections`（L82–L87）段名与参考位次提示改写；`referenceIds` `.max(4)` 口径保持 |
 | `apps/server/src/routes/mtrack/composite.ts` | 无提示词格式依赖，仅确认引用链无旧字段 |
 | `apps/server/src/routes/ai/media/generate.ts` | 若含提示词透传校验，按新字段名核对 |
 | `apps/server/src/agent/runtime/prompt.ts` | Agent 提示词注入处若引用旧段名需同步 |
@@ -266,7 +266,7 @@ non_diegetic_music: ...
 |---|---|
 | `packages/nodes/multitrackNode/src/index.vue` | 编辑器接线：提示词读写、校验提示 |
 | `packages/nodes/multitrackNode/readme.md` | 说明文档 |
-[HISTORICAL] | `packages/nodes/videoGenerationNode/src/index.vue` | `videoGenerationNode:241` / `:264–265` / `:355–358` 处的 `{{ref N}}` → 标记换算逻辑删除；`configRules` 上限声明（图 4 / 视频 1 / 音频 1）按 §8 第 3 层写清 |
+[HISTORICAL] | `packages/nodes/videoGenerationNode/src/index.vue` | `videoGenerationNode:241` / `:264–265` / `:355–358` 处的 旧双花括号占位符 → 尖括号标记换算逻辑删除；`configRules` 上限声明（图 4 / 视频 1 / 音频 1）按 §8 第 3 层写清 |
 | `packages/nodes/assetImportNode/src/assetImport.ts` | `maxImageReferences = 9`（`:82`）、`maxContextReferences = 3`（`:84`）保持；导入抽取提示词如含旧段名需同步 |
 | `packages/nodes/assetImportNode/readme.md` | 说明文档 |
 
@@ -280,14 +280,14 @@ non_diegetic_music: ...
 | `packages/skills/assetCard/references/referenceResolution.md` | 参考顺序对账口径 |
 | `packages/skills/assetCard/references/imagePrompt.md` | 图片侧引用上限表述 |
 | `packages/skills/assetCard/references/assetDesign.md` | 「参考图 ≤4（界面口径）」表述 |
-[HISTORICAL] | `packages/skills/freevideoMultitrack/SKILL.md` | 参考上限三层、V7 表述、`{{ref N}}` 口径 |
+[HISTORICAL] | `packages/skills/freevideoMultitrack/SKILL.md` | 参考上限三层、V7 表述、旧双花括号占位符口径 |
 | `packages/skills/workflow/SKILL.md` | 提示词形状引用 |
 | `packages/skills/workflow/references/assets.md`、`canvasExecution.md` | 提示词与派工说明 |
 | `packages/skills/canvas/SKILL.md`、`packages/skills/canvas/references/videoProduction.md` | 画布技能里的提示词写法 |
 | `packages/skills/v118workflow/SKILL.md`、`references/videoProduction.md`、`references/knowledge/videoPromptCraft.md`、`references/knowledge/imagePromptCraft.md` | 工作流技能里的提示词段落 |
 | `packages/mcp/skills/toonflow/SKILL.md` | MCP 对外技能说明 |
 
-[HISTORICAL] | `docs/assetCardWorkflowPlan.md`、`docs/assetCardWorkflowPlanReview.md`、`docs/multitrackProductionPlan.md`、`docs/multitrackQualityReview.md`、`docs/multitrackGapAudit.md`、`docs/mtrackWorkbenchContract.md`、`docs/mtrackLscAlignment.md`、`docs/requirementPlanOperatorMultitrack.md`、`docs/requirementMultitrackAgentBridge.md`、`docs/requirementRevisionNodeMultitrack.md`、`docs/assetToMtrackAudit.md`、`docs/agentGuideAudit.md`、`docs/localStoryCanvasStudy.md`、`docs/localStoryCanvasMultitrackStudy.md` | 各文档中的「参考顺序即编号」「`{{ref N}}` 是写作者唯一写法」等已反转口径段落，需按本契约改写并标注旧口径作废 |
+[HISTORICAL] | `docs/assetCardWorkflowPlan.md`、`docs/assetCardWorkflowPlanReview.md`、`docs/multitrackProductionPlan.md`、`docs/multitrackQualityReview.md`、`docs/multitrackGapAudit.md`、`docs/mtrackWorkbenchContract.md`、`docs/mtrackLscAlignment.md`、`docs/requirementPlanOperatorMultitrack.md`、`docs/requirementMultitrackAgentBridge.md`、`docs/requirementRevisionNodeMultitrack.md`、`docs/assetToMtrackAudit.md`、`docs/agentGuideAudit.md`、`docs/localStoryCanvasStudy.md`、`docs/localStoryCanvasMultitrackStudy.md` | 各文档中的「参考顺序即编号」「旧双花括号占位符是写作者唯一写法」等已反转口径段落，需按本契约改写并标注旧口径作废 |
 | `docs/h3PromptAlignment.md` | 本文件，权威契约 |
 
 ### 10.6 供应商与 provider 声明（packages/providers）
@@ -309,8 +309,8 @@ non_diegetic_music: ...
 2. 参考标记正则 `<\s*(Picture|Video|Audio)\s+(\d+)\s*>` 各媒质独立编号。
 3. 首帧模式首行逐字：`For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.`
 4. 无参考退化：`detailed_description` / `overall_soundscape` / `non_diegetic_music` 三段，主字段是 `detailed_description`。
-[HISTORICAL] 5. `integratedMultimodalDescription` 直接忽略，无任何迁移。
-[HISTORICAL] 6. V7 翻转：`{{ref N}}` 报 error，尖括号标记合法。
+[HISTORICAL] 5. integrated 多模态描述旧字段直接忽略，无任何迁移。
+[HISTORICAL] 6. V7 翻转：旧双花括号 ref 占位符报 error，尖括号标记合法。
 7. 参考上限四层写清：V8 = 9 图 / 1 音（视频并入图片桶）；续接 ≤3 且 ≥10 秒；供应商 ≤4；界面勾选 4（续接 3）。
-[HISTORICAL] 8. 全仓无 `{{ref N}}` 占位符与 `integratedMultimodalDescription` 残留（除历史文档中明确标注「作废」的记录）。
+[HISTORICAL] 8. 全仓无旧双花括号 ref 占位符与 integrated 旧多模态描述字段残留（除历史文档中明确标注「作废」的记录）。
 9. 工作区只有 `.mtrack-official` 被改动。
