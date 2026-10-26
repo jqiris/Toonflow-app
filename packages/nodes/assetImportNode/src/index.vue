@@ -106,7 +106,7 @@ nodeTools.register({
 
 nodeTools.register({
   name: "importStatus",
-  description: "查看本节点导入的进度与最近一次结果：running/extracting、phase 与 done/total、摘要、出图失败的卡片清单、没有中断导入的警告清单（参考超上限/参考未出图被移除/承接镜不足 10 秒），取消或失败时报 aborted 与本次已建的资产图节点 id（这些节点留在画布上，要手工删）；本节点没有别的状态入口，跑没跑、跑到第几张都看它",
+  description: "查看本节点导入的进度与最近一次结果：running/extracting、phase 与 done/total、摘要、出图失败的卡片清单、没有中断导入的警告清单（参考超上限/参考未出图被移除/承接镜不足 10 秒），取消或失败时报 aborted 与本次已建的资产图节点 id（这些节点留在画布上，可用画布工具 deleteNodes 清理）；本节点没有别的状态入口，跑没跑、跑到第几张都看它",
   parameters: z.strictObject({}),
   async execute() {
     const target = panel.value;

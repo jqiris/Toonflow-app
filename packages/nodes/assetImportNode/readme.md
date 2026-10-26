@@ -53,7 +53,7 @@
 | `failed` | 本次出图失败的卡 `[{ id, reason }]` |
 | `aborted` | 本次是否被取消/超时打断（`running=false` + `aborted=true` 表示这一轮是中断结束） |
 | `warnings` | 本次没有中断导入、但已被截断或不合引擎口径的提醒 `string[]` |
-| `placedNodeIds` | 本次运行已建的资产图节点 id；取消/失败时这些节点与 `assets/<nodeId>/` 会留在画布上，需要手工删除（画布没有删节点的 API） |
+| `placedNodeIds` | 本次运行已建的资产图节点 id；取消/失败时这些节点与 `assets/<nodeId>/` 会留在画布上，Agent 可用画布工具 `deleteNodes`（单次最多 64 个，连带删边）直接清掉 |
 | `savedSummary` | 节点 `data.summary`（随画布 JSON 落盘，重开工程也看得到上一次跑出了什么） |
 
 ## 已知边界
@@ -62,10 +62,10 @@
 - 媒体通道没有负面提示词字段，资产卡的 `negativePrompt` 并进正向提示（`避免出现：…`）。
 - 资产图按 3 列网格排在本节点右侧，不做重叠检测。
 - 生成/导入进行中再点一次会被拒绝（同一节点串行），占用标记在第一个 `await` 之前同步置位，同一轮并行发两个 `node:importScript` 也拦得住；画布拖节点不会中断在跑的导入。
-- 取消/超时：写盘前会再复查一次中止状态，不会把已取消的工程落成磁盘状态；但已经建好的资产图节点与 `assets/<nodeId>/` 不回收，靠 `node:importStatus` 的 `placedNodeIds` 手工清理。
+- 取消/超时：写盘前会再复查一次中止状态，不会把已取消的工程落成磁盘状态；但已经建好的资产图节点与 `assets/<nodeId>/` 不回收——节点用画布工具 `deleteNodes` 清（`node:importStatus` 的 `placedNodeIds` 给出清单），`assets/<nodeId>/` 的文件由用户在文件树里删（Agent 没有删工作区文件的工具）。
 - 分镜参考在落盘前按引擎上限收口：单镜图片参考 ≤9（超出截断并记 warning）、出图失败的卡一律剔掉；承接镜（`context`）的图片参考 ≤3（显式写了 `context` 也截，截断记 warning，与 ≤9 同一口径）；承接镜「≥10 秒」是引擎硬限制但导入只告警、不擅自改模型给的时长。
 - 秒数只收 2–15 的整数秒（引擎校验 V12 实际允许 2–60）：抽取结果与 `clips` 的 `seconds` 都清洗，取整或收进档位都会改落盘值并记一条 `warnings`，需要更长请导入后在多轨工程里改。
 - 首镜的 `continuity` 由 `normalizeProject` 强制回落成 `shot`（`@toonflow/node-shared/mtrack/mtrackProject.ts:268`）：给首镜写 `context` 不生效，导入会在 `warnings` 里说明；导入路径不会调用多轨编辑器的首镜提示（`firstClipContinuityFindings`）。
 - 资产卡的画幅按类别标准化（人物/场景 `16:9`、道具 `1:1`）：模型给了非标准档位会被归一，卡片编号与名称照原样落盘。
 - 大量资产在一次导入里逐张串行出图，没有批次与断点续跑；但**单张失败不再中断整条导入**——已出的图与已建节点保留，失败卡的 `nodeId` 留 `null`，失败清单经 `node:importStatus` 的 `failed[]` 与返回摘要带出，人工补一张即可，不必整批重来。
-- 重跑会被独占写挡下：`importAssets` 入口先探测 `plan/story.mtrack` 与 `plan/assetIndex.json`，任一已存在立刻报「已存在，未覆盖」，不会先烧文本模型与图片模型；想重来只能手动改名/清理，或在原工程上 `node:bindProject(mode:"open")` 继续。
+- 重跑会被独占写挡下：`importAssets` 入口先探测 `plan/story.mtrack` 与 `plan/assetIndex.json`，任一已存在立刻报「已存在，未覆盖」，不会先烧文本模型与图片模型；想重来只能先清这两个文件（会话 Agent 没有删工作区文件的工具，请用户从文件树删除或改名；经 MCP `workspaceFiles` 通道接入时可用 rename/remove），或在原工程上 `node:bindProject(mode:"open")` 继续。

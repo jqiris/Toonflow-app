@@ -177,7 +177,7 @@ const lastWarnings = ref<string[]>([]);
 let controller: AbortController | undefined;
 let unmounted = false;
 let placed = 0;
-/** 本次运行已建的资产图节点 id：取消/失败时它们留在画布上（没有删画布节点的 API），只能在 importStatus 里报出来。 */
+/** 本次运行已建的资产图节点 id：取消/失败时它们留在画布上，Agent 侧可用画布工具 deleteNodes 清理（单次 ≤64，连带删边）。 */
 let placedIds: string[] = [];
 let aborted = false;
 

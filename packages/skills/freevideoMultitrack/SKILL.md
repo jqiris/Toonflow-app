@@ -68,7 +68,7 @@ description: 把分镜稿与资产稿接成多轨工程、逐镜生成并合成�
 | 工具 | 用途 |
 | --- | --- |
 | `node:importScript` | 从剧本/分镜正文（`path` 指**工作区内的剧本文本**，或 `text` 直接给正文，二选一；别传 `assets/assetCards.md`，会把卡片当正文再抽一遍）抽取资产卡与分镜 → 结构校对 →（`generateImages: true` 时）逐张走媒体通道出资产图并新建图片节点 → **独占写** `plan/assetIndex.json` 与 `plan/story.mtrack`（先索引后工程，工程失败删索引）。可选 `model`（抽取用文本模型，取 `node:importModels` 的 `text` 清单，传 `JSON.stringify([providerId, modelId])`；需要抽正文时必传，清单外直接报错、不回落面板默认）、可选 `imageModel`（出资产图的图片模型，取 `image` 清单）、可选 `extraction`（**定稿直读**：`{ style, systemPrompt, assets[], shots[] }` 整批结构化结果——会话里已抽好/已写好的卡片与分镜走这条，节点一次模型都不调、纯校验落盘，`path`/`text`/`model` 全不需要）、`ratio`/`style`/`systemPrompt`（三个定调值，写进新工程 `global`）、`clips`（按 `clipId` 整段覆盖抽取出来的分镜：`{ clipId, prompt, seconds?, referenceIds?, continuity? }` 数组，原文已写好六段时用它原样落盘）。返回 `{ cards, shots, images, failed, warnings, indexPath, projectPath }`：`failed: [{ id, reason }]` 是出图失败的卡（单张失败不中断整条导入，失败卡在索引里 `nodeId` 为 `null`，补一张即可）；`warnings: string[]` 是没中断导入、但工程已不满足引擎口径的地方（图片参考超 9 只留前 9、参考未出图被移除、承接镜不足 10 秒等），要逐条核对。两个 plan 文件任一已存在即拒绝覆盖——占用探测在入口做，重跑立刻被拒、不会先烧模型；**Agent 侧单次调用上限是画布桥与宿主的 120 秒**（节点里 `timeoutMs: 30 * 60 * 1000` 只对面板按钮生效），整篇抽取 + 逐张出图多半撞顶，撞顶后图片节点与 `assets/<nodeId>/` 不回收——定稿走 `extraction` 是秒级落盘；已有工程改用 `node:bindProject(mode:"open")` |
-| `node:importStatus` | 无参数，读本节点进度与上次结果：`{ running, extracting, aborted, phase, done, total, summary, error, failed[], warnings[], placedNodeIds[], savedSummary }`。`running`/`extracting` 区分「在出图」与「在抽取」，`done`/`total` 是出图张数进度，`warnings`/`placedNodeIds` 与返回汇总同源（取消或失败时 `placedNodeIds` 是本次已建、需手工删的资产图节点），`savedSummary` 来自节点 `data.summary`（随画布 JSON 落盘，重开工程也看得到）。长任务中途查进度、事后追失败卡都用它，别反复重跑导入 |
+| `node:importStatus` | 无参数，读本节点进度与上次结果：`{ running, extracting, aborted, phase, done, total, summary, error, failed[], warnings[], placedNodeIds[], savedSummary }`。`running`/`extracting` 区分「在出图」与「在抽取」，`done`/`total` 是出图张数进度，`warnings`/`placedNodeIds` 与返回汇总同源（取消或失败时 `placedNodeIds` 是本次已建的资产图节点，Agent 可用画布工具 `deleteNodes` 清理），`savedSummary` 来自节点 `data.summary`（随画布 JSON 落盘，重开工程也看得到）。长任务中途查进度、事后追失败卡都用它，别反复重跑导入 |
 
 通用节点工具（不是多轨专属，也不是 nodeScaffold 直接提供：nodeScaffold 只管 `nodeTools` 注册表，`getReferenceOrder` / `setReferenceOrder` 由 `packages/nodeShared/src/useNodeReferences.ts` 的 `useNodeReferences` 注册，所以只出现在调用了它的节点上——audio / video / image / director3d / text / multitrack）：`node:getReferenceOrder` / `node:setReferenceOrder` 取/设某节点 in 端口的参考顺序，手工接线时用；`assemble` 与派工链内部也调它。
 
@@ -206,6 +206,14 @@ description: 把分镜稿与资产稿接成多轨工程、逐镜生成并合成�
 **通过判据**：`plan/assetIndex.json` 与 `plan/story.mtrack` 存在；每张要用的卡都有 `nodeId`；**每镜六个驼峰字段仍各含官方段首**（被抽取覆盖成一句描述的镜必须补回，或用 `clips` 覆盖）；**并且人眼确认资产图合格**。
 
 > **导入完还要绑工程**：导入只落盘，多轨节点 `node.data.projectPath` 仍是空的——不跑 `node:bindProject({ mode: "open", path: "plan/story.mtrack" })` 就读不到 `clips` 与「参考素材」（下一门第 2 步就是它，漏掉会表现为「工程是空的」）。出图有失败卡时先看 `node:importStatus` 的 `failed[]`，补图后再往下走；长任务中途查进度也用它（别反复重跑，重跑会被独占写拦下）。**卡片与分镜在会话里已经定稿成结构化数据时，用 `node:importScript` 的 `extraction` 整批落盘**——抽取本来就该由会话 Agent 用它确认可用的模型完成，节点只负责契约校验与写盘，Agent 侧调模型受 120 秒硬顶限制。
+
+> **导入后发现问题的纠错回路（不必也不该整体回滚重导）**：`plan/` 两文件被独占写锁死，重导要先清文件且会话 Agent 没有删工作区文件的工具——所以「发现不对」的第一反应不是推倒重来，而是就地修：
+> - **分镜内容错**（提示词/时长/衔接/顺序/缺镜多镜）→ `node:editProject` 的 `patch`/`add`/`remove`/`move`/`duplicate`/`setGlobal`（整批原子、CAS 防覆盖），或 `planOperator mtrackUpdate`；改完回 `validate` 清零。
+> - **单张资产图不满意** → 直接在资产图片节点上 `node:setPrompt` + `node:generateImage` 重出；出图失败的卡补一张即可——派工按 label 兜底找节点（`findCardNodeIds` 认「`<卡号> <名称>`」前缀），不要求回填索引 `nodeId`。
+> - **label 漂了**（派工认不出卡）→ `renameNodes` 改回 `<卡号> <名称>` 或 `node:editProject patch` 修 clip，不必重导。
+> - **卡片正文/关联错** → 改 `assets/assetCards.md`（卡片稿，Agent 可写）并用 `node:setPrompt` 同步对应节点；`refs` 关联缺漏用 `connectNodes` 补基卡→本卡线、`deleteEdges` 拆错线。
+> - **残留/多余节点**（取消导入后半截建好的图节点）→ `node:importStatus` 的 `placedNodeIds` 给清单，画布工具 `deleteNodes` 直接清（单次 ≤64，连带删边）。
+> - **整条工程作废**（口径全错才走到这一步）→ 请用户从文件树删除/改名 `plan/story.mtrack` 与 `plan/assetIndex.json`（经 MCP `workspaceFiles` 接入的可 rename/remove），连带清 `assets/<导入节点 id>/` 里要弃的图与画布节点，再重新导入。删节点是画布操作、Agent 可代做；删工作区文件是用户动作——这条边界别弄反。
 
 ### 阶段 4 资产连线 → 创建/绑定多轨工程 → 从连线打勾
 
