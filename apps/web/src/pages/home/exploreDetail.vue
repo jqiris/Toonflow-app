@@ -15,7 +15,7 @@
           <span>视频加载失败，请重试</span>
           <el-button @click="videoFailed = false">重试</el-button>
         </div>
-        <videoPlayer v-else-if="detail?.videoUrl" :key="detail.videoUrl" class="detailPlayer" :src="detail.videoUrl" :label="detail.title" autoplay muted :active="!processVisible" @error="videoFailed = true" />
+        <videoPlayer v-else-if="detail?.videoUrl" :key="detail.videoUrl" class="detailPlayer" :src="detail.videoUrl" :label="detail.title" muted :active="!processVisible" @error="videoFailed = true" />
         <div v-else-if="detail" class="detailLoading" role="status">该作品暂未提供可播放的视频</div>
       </div>
       <div v-if="detail" class="detailContent">
