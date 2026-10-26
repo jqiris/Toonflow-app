@@ -220,17 +220,24 @@ export function normalizeExtraction(parsed: unknown): AssetExtraction {
     if (ids.has(asset.id)) throw new Error(`重复资产编号 ${asset.id}`);
     ids.add(asset.id);
   }
-  // ACT: 基卡引用归一——去重去自引用；没声明 refs 的后缀卡（C01-A）回落到同前缀基卡（与参考接线解析规则 §四同口径）。
-  // ACT: 不校验 ref 是否在本次资产里——基卡未勾选（面板按勾选裁剪后才进这里）或写错的编号要留到出图环节点名告警，静默丢掉等于假装关联不存在。
+  // ACT: 基卡引用归一——去重去自引用；后缀卡未声明时回落：同前缀基卡优先，基卡不在本批时取最早的同基后缀兄弟
+  // （与参考接线解析规则 §四同口径）。不校验 ref 是否在资产里——缺席编号留到出图环节点名告警，静默丢关联更难查。
   // 声明顺序不做 backwards-only 硬拦：出图前 orderByRefs 按 refs 依赖重排，基卡列在衍生卡之后也能先出基卡再拿成图作参考。
-  const baseOf = (id: string) => {
-    const matched = /^(.*\d)-[A-Z]$/.exec(id);
-    return matched ? matched[1] : undefined;
+  const assetIndex = new Map(result.data.assets.map((asset, index) => [asset.id, index]));
+  const suffixBaseOf = (id: string) => {
+    const matched = /^(SC|KF|C|P|S)\d+/.exec(id);
+    return matched && /-[A-Z]$/.test(id) ? matched[0] : undefined;
   };
   const assets = result.data.assets.map(asset => {
     const declared = [...new Set(asset.refs.filter(ref => ref !== asset.id))];
-    const fallback = !declared.length ? baseOf(asset.id) : undefined;
-    return { ...asset, textOnly: isTextOnlyAsset(asset), refs: fallback ? [fallback] : declared };
+    if (declared.length) return { ...asset, textOnly: isTextOnlyAsset(asset), refs: declared };
+    const base = suffixBaseOf(asset.id);
+    if (!base) return { ...asset, textOnly: isTextOnlyAsset(asset), refs: [] };
+    if (assetIndex.has(base)) return { ...asset, textOnly: isTextOnlyAsset(asset), refs: [base] };
+    const sibling = result.data.assets
+      .filter(item => item.id !== asset.id && suffixBaseOf(item.id) === base && assetIndex.get(item.id)! < assetIndex.get(asset.id)!)
+      .sort((left, right) => assetIndex.get(left.id)! - assetIndex.get(right.id)!)[0];
+    return { ...asset, textOnly: isTextOnlyAsset(asset), refs: sibling ? [sibling.id] : [] };
   });
   return {
     style: result.data.style,
@@ -319,6 +326,9 @@ export async function generateAssetImages(options: {
     // ACT: 基卡关联——refs 声明的基卡若本次已出图，成图作参考图 + 画布连线（衍生卡基于基础卡出图链路的真实实现）；
     // 基卡出图失败/成环时不接线不传参考，按无参考出图并点名，与「宁可漏接、不可误接」同口径。
     const baseRefs: { id: string; nodeId: string; path: string; mimeType: string }[] = [];
+    if (!(asset.refs?.length) && /-[A-Z]$/.test(asset.id)) {
+      warnings.push(`${asset.id} 是状态后缀卡却结算不到基卡（基卡不在本次出图清单里），按无参考出图——跨镜身份一致性会退化，补上基卡或显式声明 refs 再重出`);
+    }
     for (const ref of asset.refs ?? []) {
       const producedImage = produced.get(ref);
       const refNodeId = nodeIds.get(ref);
