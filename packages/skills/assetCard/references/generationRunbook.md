@@ -110,7 +110,7 @@
 - **写法**：每段字段首行必须写官方段名（如 `subject_definitions:`），段间空一行；六个字段各自承载一段，段名不再由引擎代拼。六段的完整可照抄示例与编号规则见 [多轨工程模板](multitrackTemplate.md) §四。
 - **参考形貌必写**：挂了参考的资产，正文仍要在首次出现处写清「被引用的特征 + 画面位置 + 当前动作」，环境与光照照常写。MiniMax H3 官方 full-reference 规范（`references/ref-en.txt` §0 Description detail、§5.3）明确要求 detailed_description 尽可能详细，官方完整示例里同一场景的特征在 `subject_definitions`、`retention_analysis`、`detailed_description` 三处都写了一遍。正文只写一个 `<Picture 1>` 而不写特征，模型只能靠一张图去猜，画面更容易跑偏。
 - **编号按参考位次**：参考标记统一写官方 `<Picture N>` / `<Video N>` / `<Audio N>`，每类独立从 1 起、位次取自该类型资产在 `referenceIds` 中的先后（同类型去重后按出现顺序）。例如 `referenceIds: ["C01(IMAGE)", "A01(AUDIO)", "C03(IMAGE)"]` 对应 `<Picture 1>` / `<Audio 1>` / `<Picture 2>`。V7（`packages/tools/planOperator/src/planValidator.ts`）按媒质分组**各自独立查越界**：每类内的 `N` 必须落在 `1..同类型参考张数` 内；`composeClipRequest` 同时拦截旧「双花括号 ref 占位符」并直接报错。不查重号，也不要求每个位次都出现。
-- 对白保持 `<d>[Chinese]…</d>`；说话人 ID 全片唯一。
+- 对白保持 `<d>[Chinese]…</d>`；说话人 ID 全片唯一（`(S1)`/`(S2)`，与资产稿 `S` 音色卡的对应关系写进全片约束）。每个说话人（含旁白）的音色描述句取自其 `S` 卡并**逐字复用**——这是文本软约束，没有真实音频绑定时跨切镜音色仍可能飘，不向用户承诺强一致。
 - 每改一次 `referenceIds` 或连线，都要重新核对正文里的 `<Picture N>` / `<Video N>` / `<Audio N>` 位次并重新 `setPrompt`（R9：编号漂移）。
 
 ---
@@ -272,6 +272,8 @@
 2. **参考结算存在**：`plan/assetIndex.json` 必须已存在——常规路径由画布「导入资产与分镜」节点（`packages/nodes/assetImportNode`）独占写入；`planOperator` 里只有 `build` 会写它（`packages/tools/planOperator/src/index.ts:293` 写索引、`:300` 写报告，走导入节点就别再跑 `build`，两边都是独占写、会互相挡），`resolve` 只返回索引结构、**零写入**（`:229-244`）。缺它时 `dispatch` 仍返回清单，但每镜的 `referencePlan[].kind` 变成 `"未知"`、`nodeId` 为 `null`，并在文本尾追加 `参考结算缺 <refId>（建议先跑 resolve/build）`（告警在同一分支 `packages/tools/planOperator/src/index.ts:392`，文本拼接在 `:442-443`）。
 3. **定批次号**：`batch:<uuid>`，全批次唯一。多轨界面发起时由界面生成（`packages/nodeShared/src/mtrack/multitrackEditor.vue` 的 `launchDispatch` 内 `crypto.randomUUID()`），会话内发起时自建；`node:dispatchGenerate` 派发的批次号由编辑器生成并在返回里给出（§十五·五）。
 4. **确认 `allowBuild` 没被关**：`mtrackUpdate` 受它限制，关闭时报「mtrackUpdate 不可用：allowBuild 已关闭」（`packages/tools/planOperator/src/index.ts:16` 的默认值 `true`、`packages/tools/planOperator/src/index.ts:302` 的门禁）。`mtrackRead`/`dispatch`/`assemble` 是只读，不受影响——但批量生成要靠 `mtrackUpdate` 回写，关了就只能出清单一轮游。
+
+> 批次里含复杂转场或动作镜头（转场设计、多人动作调度、连续运镜/连续多机位）时，先交项目内 3D 导演台预演定好机位与动线再派工，避免视频生成反复抽卡：发现 `remote-director3dNode` → `addNode` → `node:generateScene` 搭景定机位 → `node:exportKeyframe` 导出关键帧作对应镜头参考。简单正反打、单镜头场景不必预演；同场景仅换角度时优先全景派生（见 [imagePrompt.md](imagePrompt.md) §5.2）。
 
 ### 13.1 出清单
 

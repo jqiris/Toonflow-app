@@ -170,6 +170,7 @@ FreeVideo 没有图片任务，也没有图片的段式定义；本项目同样�
 - **层次必须写三层**（前景/中景/背景）并说明遮挡关系。视频里人物要走进这个空间，深度含糊会让每段的分寸都不一样。
 - 固定光照时段要写成**可执行的物理描述**（光源方向、色温、投影落点），不写「氛围神秘」「光线优美」。
 - 场景卡不要写「有个人站在树下」；人只有在分镜格里出现（[资产卡模板](assetCardTemplate.md) §六 角色分离）。
+- **同场景跨镜多角度**：先生成全景图，再截取对应角度的场景图作该镜参考，不逐角度独立重画。链路：基础场景卡节点 `node:createPanorama({ mode })`（sphere 720° / cylinder 360°）→ `node:generateImage` 出全景图 → `node:capturePanorama({ count, layout })` 按机位截取并自动建角度图节点连线。注意 freevideo-image 合法比例只有 1:1 / 16:9 / 9:16 / 4:3 / 3:4，而全景链路内部用 2:1（sphere）/ 4:1（cylinder），该供应商下可能失败——失败时降级 `node:generateMultiAngle` 预设机位（front/back/left/right/high/low 等）或导演台导出关键帧作角度参考。角度图逐字沿用基卡的空间锚点与固定光照时段，是本集中间件、不入 assetCards.md。
 
 ### 5.3 道具设定图 `P`
 

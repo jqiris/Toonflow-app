@@ -62,7 +62,7 @@ metadata:
 | 8 | [衍生资产分析](references/deriveAssets.md) | 资产画布：本集衍生清单与父资产；确认全部、部分、调整或跳过 |
 | 9 | [资产图片制作](references/generateAssets.md) | 资产画布：已选衍生图片；无衍生需求时明确记录跳过 |
 | 10 | [分镜表](references/storyboardTable.md) | 当前集画布：场→片段→镜头、真实资产映射及检查结果 |
-| 10a | [3D 预演（导演台）](references/preVisualization.md) | 当前集画布：可选环节，复杂运镜/连续多机位先搭 3D 场景定机位，导出关键帧与运镜预演作为分镜图与视频输入；记录方案与成果节点 |
+| 10a | [3D 预演（导演台）](references/preVisualization.md) | 当前集画布：可选环节，复杂转场或动作、复杂运镜/连续多机位先搭 3D 场景定机位与动线，避免视频生成反复抽卡；导出关键帧与运镜预演作为分镜图与视频输入；记录方案与成果节点 |
 | 11 | [分镜面板落点](references/storyboardPanel.md) | 当前集画布：按实际模式建立文本、参考、图像/视频节点；确认数量、时长与连线 |
 | 12 | [分镜图片](references/storyboardImages.md) | 当前集画布：首帧模式的分镜图；纯文本多参模式可跳过，须记录原因 |
 | 13 | [视频与交付](references/videoProduction.md) | 当前集画布：视频提示词/配置 → 生成结果 → 选用与交付，三个独立确认关口 |

@@ -41,7 +41,7 @@
 | 发起并追踪生成 | 图片 `node:generateImage`、视频 `node:generateVideo`，状态 `node:getGenerationStatus`；只在该节点实际提供时调用 |
 | 3D 场景与运镜预演 | 导演台 `node:generateScene` 发起搭景/改景，状态 `node:getGenerationStatus`、取消 `node:cancelGeneration`，审查 `node:getState`/`node:selectPlan`，导出 `node:exportKeyframe`/`node:exportVideo`；只在该节点实际提供时调用 |
 | 全景图派生 | 图片节点 `node:createPanorama`：以当前图片为基础生成 720°/360° 全景图节点并连线，参数 `mode?: sphere | cylinder` |
-| 全景按机位截取 | 图片节点 `node:capturePanorama`：在全景预览中按机位截取角度图，自动建图片节点并连线，参数 `mode?`, `yaw?`, `pitch?`, `fov?`, `count?: 1 | 4 | 12`, `layout?: grid | separate` |
+| 全景按机位截取 | 图片节点 `node:capturePanorama`：在全景预览中按机位截取角度图，自动建图片节点并连线，参数 `mode?`, `yaw?`, `pitch?`, `fov?`, `count?: 1 | 4 | 12`, `layout?: combined | separate` |
 | 多角度视角图 | 图片节点 `node:generateMultiAngle`：按预设或自定义机位生成多角度视角图节点并自动启动生成，参数 `preset?` 或 `azimuth?`/`elevation?`/`distance?`/`lens?`，可选 `providerId?`+`modelId?` |
 
 原生文本函数参数为 `{ text: "完整正文" }`，提示词函数为 `{ prompt: "专用提示词" }`。`node:setText` 回执不含文件路径；需定位正文文件时再读实际 `data.textPath`。可用的 `listMediaModels({})` 可在创建生成节点前查询模型能力；生成时仍须核对目标节点的实际配置。配置中的 `providerId/modelId` 成对设置，`mode`、时长和分辨率使用实时回执支持的值，不自己拼模式名称。
