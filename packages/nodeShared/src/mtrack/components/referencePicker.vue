@@ -26,7 +26,7 @@
             :checked="pickedSet.has(item.cardId)"
             @change="toggle(item.cardId, ($event.target as HTMLInputElement).checked)"
           />
-          <span v-if="item.cardId && pickedSet.has(item.cardId)" class="refTag" :title="'提示词中写作 <Picture ' + (orderOf(item.cardId) + 1) + '>'"><Picture {{ orderOf(item.cardId) + 1 }}></span>
+          <span v-if="item.cardId && pickedSet.has(item.cardId)" class="refTag" :title="refTagTitle(item.cardId)"><span class="refTagText">&lt;Picture {{ orderOf(item.cardId) + 1 }}&gt;</span></span>
           <span v-else class="refBadge">非资产卡</span>
           <span class="refName">{{ item.name }}</span>
         </label>
@@ -99,6 +99,10 @@ const pickedCount = computed(() => props.referenceIds.filter(id => !detached.val
 
 /** 网格里有条目、但没有一条带 cardId：连线节点全都对不上资产卡（索引缺失或过期），提示条要给下一步。 */
 const cardlessSources = computed(() => props.items.length > 0 && !props.items.some(item => item.cardId));
+
+function refTagTitle(cardId: string): string {
+  return "提示词中写作 <Picture " + (orderOf(cardId) + 1) + ">";
+}
 
 function orderOf(cardId: string): number {
   return props.referenceIds.indexOf(cardId);
