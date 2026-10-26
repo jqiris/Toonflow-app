@@ -50,7 +50,7 @@ nodeTools.register({
   name: "importScript",
   description: "把资产卡与分镜写进 plan/assetIndex.json 与 plan/story.mtrack（任一文件已存在时立刻拒绝，不会先烧模型），可选逐张生成资产图并放进画布。两条入口，按调用方手上有什么选：① 定稿直读——资产卡与分镜已经是结构化数据（会话里已抽好/已写好，或从 assets/assetCards.md 整理出来的）就整批传 extraction，本节点一次模型都不调、纯确定性校验落盘，不需要 model；② 抽正文——只有散文/剧本要抽时才传 path 或 text 加 model。中途想看跑到第几张用 node:importStatus。只有走②才需要文本模型，也才可能长时间等模型：会话 Agent 的单次调用受画布桥与宿主各 120 秒硬顶（节点里的 timeoutMs 只对面板按钮生效），要抽整篇长文请先在会话里分批处理好再走①",
   parameters: z.strictObject({
-    extraction: extractionSchema.optional().describe("定稿直读：已抽取好的资产卡与分镜整批完整定稿（资产稿与分镜稿都定稿了再整批传）。代码只硬拦编号重复/结构不合/clips 覆盖的非法引用；正文 shots 引用不存在的卡会被静默掐掉，分镜缺段不报错——半套稿会静默落成工程且重跑被独占写拦下，请调用前自查完整性。传了就不再调文本模型。字段名以本参数给的 schema 为准，契约外的多余字段会被忽略而不是报错；assets 至少一张；shots 仅「先导纯资产、之后用 editProject add 补分镜」的确认场景可为空"),
+    extraction: extractionSchema.optional().describe("定稿直读：已抽取好的资产卡与分镜整批完整定稿（资产稿与分镜稿都定稿了再整批传）。对稿件内容只硬拦编号重复/结构不合/clips 覆盖的非法引用；正文 shots 引用不存在的卡会被静默掐掉，分镜缺段不报错——半套稿会静默落成工程且重跑被独占写拦下，请调用前自查完整性。传了就不再调文本模型。字段名以本参数给的 schema 为准，契约外的多余字段会被忽略而不是报错；assets 至少一张；shots 仅「先导纯资产、之后用 editProject add 补分镜」的确认场景可为空"),
     path: z.string().optional().describe("工作区内的剧本文本路径，与 text 二选一；只在没有 extraction、需要节点抽取正文时用"),
     text: z.string().optional().describe("直接给出的剧本/小说正文，与 path 二选一；只在没有 extraction、需要节点抽取正文时用"),
     model: z.string().optional().describe("抽取用文本模型，JSON.stringify([providerId, modelId])，编号必须来自 node:importModels 的 text 清单；需要抽正文时必填（不传不再静默用面板默认，选了不可用的模型会一路挂到超时），传了 extraction 则不需要"),
