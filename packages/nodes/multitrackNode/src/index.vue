@@ -72,6 +72,7 @@ import { resolveCanvasBridge, resolveReferenceSources, type CanvasCall } from "@
 import videoPlayer from "@toonflow/node-video/videoPlayer";
 import { assetIndexPath, normalizeResultsUi } from "@toonflow/node-shared/mtrack/mtrackProject";
 import type { AssetIndex, AssetIndexCard, EditorFiles, ResultsUiGeometry } from "@toonflow/node-shared/mtrack/mtrackProject";
+import type { EditOp } from "@toonflow/node-shared/mtrack/mtrackEdit";
 
 defineOptions({
   inheritAttrs: false,
@@ -357,13 +358,18 @@ const clipPatchSchema = z.strictObject({
   ratio: z.string().optional(),
   resolution: z.string().optional(),
   generateAudio: z.boolean().optional(),
-  prompt: z.strictObject({
-    subjectDefinitions: z.string(),
-    summary: z.string(),
-    retentionAnalysis: z.string(),
-    detailedDescription: z.string(),
-    overallSoundscape: z.string(),
-    nonDiegeticMusic: z.string(),
+  // ACT: prompt 六字段全部可省——与 mergePatch 的字段级浅合并（mtrackEdit.ts:35-36）对齐，
+  // agent 补写单段时只带一段即可，其余由原 clip 保留，不必「读-改-写」整组；
+  // 显式传空串视为「清空这一段」（区别于省略键=不改），与 UI「留空则该段不下发」同口径。
+  // 全片级约束（有参考时三分析段非空、detailedDescription 非空）由下游 V11（planValidator）拦下，
+  // 放开 schema 只解锁「逐段编辑」，不会让空提示词通过。运行时 zod 输出与 Partial<ClipPrompt> 同型。
+  prompt: z.looseObject({
+    subjectDefinitions: z.string().optional(),
+    summary: z.string().optional(),
+    retentionAnalysis: z.string().optional(),
+    detailedDescription: z.string().optional(),
+    overallSoundscape: z.string().optional(),
+    nonDiegeticMusic: z.string().optional(),
   }).optional(),
   referenceIds: z.array(z.string()).optional(),
   continuity: z.enum(["shot", "context"]).optional(),
@@ -585,7 +591,12 @@ nodeTools.register({
   }),
   execute({ operations, save }, { signal }) {
     signal?.throwIfAborted();
-    return requireEditor().applyOperations(operations, save);
+    // ACT: editOpSchema 的 prompt 允许部分字段（六字段全部可省，用于「只补一段」），
+    // 而 applyOperations 的 EditOp 签名是整值覆盖（Prompt 六字段必填）。
+    // 运行时由下游 mergePatch（mtrackEdit.ts:35-36）做字段级浅合并把省略键从原 clip 补齐，
+    // 且全片级约束（有参考时三分析段非空、detailedDescription 非空）由 V11 兜底——
+    // schema 侧放宽只解锁「逐段编辑」，不改变运行时正确性。
+    return requireEditor().applyOperations(operations as unknown as EditOp[], save);
   },
 });
 

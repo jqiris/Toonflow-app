@@ -71,7 +71,7 @@ description: 通过 Toonflow MCP 操作工作区、实时画布、节点、文�
 12. `node:resumeBatch`：`{ clips: [1..200], includeFinished? }`，等价 UI「继续生成」。沿用同一 `batchId` 续跑 `clips` 里的镜头（取 `node:getStatus.batchClipIds` 中尚未完成的那些），`attempts` 标记与批次行都不变；`includeFinished=false` 默认只跑 pending/failed。已有派工操作在跑时被拒。
 13. `node:retryClip`：`{ clipId }`，等价 UI「单镜重试/重新生成本镜」。只派这一镜，生成成功后作为新版本追加（旧视频与画布节点保留、新视频自动成为该镜默认），不连带同批其他镜头；`dispatching` 或 `batchRunning` 为真时被拒，先 `node:pauseBatch` 等当前镜结束或 `node:cancelBatch`。
 
-- `node:rewritePrompt`：`{ clipId?, rules? }`，等价 UI「整理提示词」。只调文本模型整理单镜提示词，返回 `{ text, requiresReview }`；**不改工程、不写编辑器的待采用区块**。结果需用户确认后，由你用 `node:editProject` 的 `patch` 把整理稿按官方六段拆分写回该镜六个驼峰字段（`prompt` 六字段整组提交）。生成中调用会返回服务端 409 原文，错误原样抛出、不重试。
+- `node:rewritePrompt`：`{ clipId?, rules? }`，等价 UI「整理提示词」。只调文本模型整理单镜提示词，返回 `{ text, requiresReview }`；**不改工程、不写编辑器的待采用区块**。结果需用户确认后，由你用 `node:editProject` 的 `patch` 把整理稿按官方六段拆分写回该镜六个驼峰字段（`prompt` 六字段全部可省，服务端按段首标签拆分后按字段回填；只补某段时省略其余字段即可）。生成中调用会返回服务端 409 原文，错误原样抛出、不重试。
 
 - 重新生成的口径（`node:retryClip`、`node:dispatchGenerate`、`node:resumeBatch` 带 `includeFinished`）：这是**追加版本**，不覆盖旧视频。版本的身份是**产物文件路径**，不是画布节点：`node:readClips` 返回的 `attempts` 里 `status` 为 `succeeded` 的记录按 `assetPath`（旧工程回退 `nodeId`）去重就是该镜的版本列表（旧→新），新视频完成自动写回 `clip.nodeId`/`assetPath` 成为该镜默认版本。`clipVersions()` 就是这套口径的实现。服务端媒体任务通道不建画布节点，这条链路的 `nodeId` 恒为 `null`；只有画布视频节点通道才有值。
 - 切换默认版本：agent 可以代写，不属于硬纪律二的人工验收。用 `node:editProject` 的 `patch` 把该镜 `nodeId` 与 `assetPath` 一起写到目标版本——`assetPath` 直接取该版本记录里的值（版本身份就是它，工作区相对路径、落盘名带随机后缀，不能按 `nodeId` 拼）；只有该版本记录没有 `assetPath`（旧画布节点工程）时才用画布桥 `getCanvasNodes` 反查该节点 `outputs.video.value.url`。镜头生成中不切默认；切完仍需 `planOperator validate`（`accepted` 镜要求产物当前可读；媒体任务通道的镜 `nodeId` 为 `null` 是合法状态），合成 composite 只认 accepted 镜的**当前默认** `assetPath`。
