@@ -741,6 +741,31 @@ function cloneProject(source: MtrackProject): MtrackProject {
   return { ...source, global: { ...source.global }, clips: cloneClips(source.clips) };
 }
 
+/**
+ * 两个工程除 updatedAt 外内容是否一致（用于判定「这次冲突有没有需要落盘的真实改动」）。
+ * updatedAt 是写盘动作本身的产物，不参与比较，否则每次写盘都会被判成一次新改动。
+ * ACT: 递归按 key 排序后再序列化，不用裸 JSON.stringify——mergeProjects 以内存对象为底，
+ * 键顺序可能沿用内存而非磁盘，裸比较会把「内容相同、键序不同」误判成有改动，乒乓于是切不断。
+ */
+function sameProjectContent(left: MtrackProject, right: MtrackProject): boolean {
+  return stableJson({ ...left, updatedAt: "" }) === stableJson({ ...right, updatedAt: "" });
+}
+
+/** 键顺序无关的 JSON 序列化：对象按键名排序，数组保持原序（数组顺序是有语义的）。 */
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  // 非普通对象（Date/Map 等）交给 JSON.stringify 走原生语义，避免被当成空对象而误判为「无改动」。
+  if (value && typeof value === "object") {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return JSON.stringify(value);
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, item]) => item !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
 async function reloadProject() {
   await readProject();
   // ACT: 重载不只重读工程，资产索引与报告一起重读——用户在编辑器外改/删 plan/assetIndex.json 后点「重新加载」，
@@ -1045,8 +1070,17 @@ async function runSave(): Promise<boolean> {
         return false;
       }
       project.value = mergeProjects(lastSaved.value, disk, project.value);
-      lastSaved.value = cloneProject(project.value);
       conflictError.value = "";
+      // ACT: 合并结果与磁盘内容等价 = 这次「冲突」只是对面刚写完、我这边没有独有改动。
+      // 此时不能再写盘：否则 updatedAt 又变一次，对面下一轮同样判定冲突，两个实例会无限乒乓写盘
+      // （画布节点 + 文档面板同时打开同一工程时每 ~0.4s 一次，且每轮各弹一条合并提示）。
+      // 只把基线对齐到磁盘，本轮到此为止。
+      if (sameProjectContent(project.value, disk)) {
+        project.value.updatedAt = disk.updatedAt;
+        lastSaved.value = cloneProject(project.value);
+        return true;
+      }
+      lastSaved.value = cloneProject(project.value);
       ElMessage.warning("工程已被其他操作修改，已合并保存：生成结果与历史版本保留，镜头内容以磁盘改动为准");
     }
     project.value.updatedAt = new Date().toISOString();
