@@ -27,7 +27,7 @@
 | --- | --- |
 | `path` | 工作区内的**剧本文本**路径，与 `text` 二选一；不要指向 `assets/assetCards.md`，那会把已定稿的卡片当正文再抽一遍 |
 | `text` | 直接给出的正文，与 `path` 二选一 |
-| `extraction` | **定稿直读**：`{ style, systemPrompt, assets[], shots[] }` 整批结构化结果（契约就是 `assetImport.ts` 导出的 `extractionSchema`，与模型返回同一个口径）。传了就不再调文本模型，也不需要 `model`/`path`/`text`；结构不合契约、编号重复会在出图与写盘**之前**报错 |
+| `extraction` | **定稿直读**：`{ style, systemPrompt, assets[], shots[] }` 整批结构化结果（契约就是 `assetImport.ts` 导出的 `extractionSchema`，与模型返回同一个口径）。传了就不再调文本模型，也不需要 `model`/`path`/`text`；结构不合契约、编号重复会在出图与写盘**之前**报错。**入口要的是两份稿的完整定稿**：代码硬拦的只有编号重复、结构不合与 `clips` 覆盖的非法引用，正文 `shots` 引用不存在的卡会被静默掐掉、分镜缺段不报错——半套稿会静默落成工程且重跑被独占写拦下，完整性只能在调用前自查；`shots` 仅「先导纯资产、之后 `node:editProject add` 补分镜」的确认场景可为空 |
 | `model` | 抽取用文本模型，`JSON.stringify([providerId, modelId])`（数组字符串），编号必须来自 `node:importModels` 的 `text` 清单；需要抽正文时**必填**——不在清单里或没选就直接报错，不再静默用面板默认（面板默认可能是不可用的模型，会一路挂到超时） |
 | `imageModel` | 出资产图的图片模型，同上取 `node:importModels` 的 `image` 清单；`generateImages` 为真时必填，同样不回落到列表第一个。Agent 选的模型会回写面板下拉，人工看得见也随时能改 |
 | `ratio` | 工程画幅与分镜画幅，取值 `9:16` / `16:9` / `1:1` / `4:3` / `3:4`；非法值回落到 `9:16`（资产卡的画幅另按类别标准档位归一） |
