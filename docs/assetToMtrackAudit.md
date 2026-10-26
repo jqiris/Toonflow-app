@@ -1,5 +1,3 @@
-> **HISTORICAL（H3 迁移后口径更新）**：本文档写作于旧双花括号 ref 占位符与三字段提示词口径时期，正文中涉及的 `{{ref N}}` 占位符与 `integratedMultimodalDescription` 三字段存储已随 MiniMax H3 官方六段（`subject_definitions` / `summary` / `retention_analysis` / `detailed_description` / `overall_soundscape` / `non_diegetic_music`）与 `<Picture N>` / `<Video N>` / `<Audio N>` 参考标记口径全量迁移后作废；权威口径见 `docs/h3PromptAlignment.md`，本文件仅作历史追溯保留。
-
 # 资产卡 → 多轨生成 链路缺口审计（对照 LSC H3 技能包）
 
 审计对象：我们这条「FreeVideo 出资产 → 画布资产卡节点 → 多轨总装（assetIndex / project.json）→ 逐镜生成 → 合成」链路。
@@ -61,7 +59,7 @@
 
 - 现象：`MtrackClip` 没有 `events` / `dialogue` / `speaker`；LSC 靠 D、E 编号和 `(S1)` 说话者在跨镜保持一致（`h3-video-studio/SKILL.md:57-61`），我们只能全塞进三段提示词。
 - 证据：`packages/nodeShared/src/mtrack/mtrackProject.ts:42-49`（`ClipPrompt` 只有三字段）、`:66-88`（`MtrackClip` 无对白字段）。
-- 为什么缺：H3 的 `integrated_multimodal_description` 本身就是自由文本，台词用 `<d>` 写在里面，不需要额外字段；缺的是写法模板与「说话者编号跨镜头一致」的检查项。
+- 为什么缺：H3 的 `detailed_description` 本身就是自由文本，台词用 `<d>` 写在里面，不需要额外字段；缺的是写法模板与「说话者编号跨镜头一致」的检查项。
 - 由谁补：**技能文档**（给分镜行模板 + 一致性检查）。
 
 ### G7 `mode=image` 只允许一张参考，但代码不校验
@@ -137,7 +135,7 @@
 | 同上 `:44-49` / `:51-63` / `:66-88` | 已读：`ClipPrompt` 三字段、`ClipAttempt.jobId`、`continuationJobId`、`MtrackClip` 全字段 |
 | 同上 `:101-106` | 已读：`AssetIndexCard = {id,name?,kind?,textOnly?,nodeId?}` |
 | `packages/nodeShared/src/mtrack/mediaDispatch.ts:18-42` | 已读：`ClipGenerationRequest` 字段 `clipId/providerId/modelId/prompt/images/audios/videos/continueFrom/ratio/resolution/duration/generateAudio/mode/outputDirectory/referenceMap/continuedFrom` |
-[HISTORICAL] | 同上 `:60-81` / `:84-96` | 已读：`referenceTags`（`{{ref N}}` → `<Picture N>/<Video N>/<Audio N>`）、`buildPromptText`（风格前缀 + 段名兜底） |
+ | 同上 `:60-81` / `:84-96` | 已读：`referenceTags`（`「双花括号 ref 占位符」` → `<Picture N>/<Video N>/<Audio N>`）、`buildPromptText`（风格前缀 + 段名兜底） |
 | 同上 `:103-211` | 已读：`composeClipRequest` 签名与全部报错文案（`参考图未就绪…`、`是首镜…`、`承接…最多 3 个参考素材（引擎限制，图片/视频/音频合计）…`，见 `:209-210`） |
 | `packages/nodeShared/src/mtrack/mediaTask.ts:37/65/78/86` | 已读：`submitClipTask/readClipTask/cancelClipTasks/waitClipTask`，端点 `/api/ai/media/generate`、`tasks/status`、`tasks/cancel` |
 | `packages/tools/planOperator/src/index.ts:131-135` | 已读：`action` 枚举 9 个（parse/resolve/validate/build/mtrackRead/mtrackUpdate/dispatch/assemble/composite）与默认路径 `plan/story.mtrack`、`assets/assetCards.md` |

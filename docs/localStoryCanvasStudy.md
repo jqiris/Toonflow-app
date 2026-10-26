@@ -11,7 +11,7 @@
 1. **编号即身份**：`C/SC/P/KF/S` + 字母状态后缀构成全局唯一 ID；ID 是资产、参考接线、分镜引用、视频节点的唯一连接键，任何环节重复编号都直接报错，不覆盖、不重新分配（`canvas_source_cards.authored_cards`、`h3_asset_bundle.parse_bundle`）。
 2. **接线是三段式降级**：显式字段 → `参考派生` 散文指令 → 正则锚点兜底；另有 4 道守卫（前缀校验、否定子句、backwards-only、字母后缀回落/群像闪回排除）。解析在后端（`canvas_source_cards`）与执行前（`canvas_import_support`）各做一次，后者才是最终生效点。
 3. **执行链是「拓扑排序 + 严格串行 + 引用即屏障」**：`build_asset_steps` 把 bases 排在 compositions 前并给构图卡生成 `refs=['step:IMPORT_xxx']`；执行器遇到依赖未完成即抛错暂停，绝不退化成无参考出图。
-4. **结构化规划 = 模型只填数据，程序写模板**：说话人、对白编号、`integrated_multimodal_description` 三字段、时间片秒数全部由代码生成；模型输出经 `valid_*` / `validate_*` 逐级硬校验，失败只重试当前批、已验证批次保留。
+4. **结构化规划 = 模型只填数据，程序写模板**：说话人、对白编号、`detailed_description` 三字段、时间片秒数全部由代码生成；模型输出经 `valid_*` / `validate_*` 逐级硬校验，失败只重试当前批、已验证批次保留。
 5. **连续性是显式合同**：`connection{mode,scene_key,…}` + `continue` 逐字继承上一段 `continuity_after`；H3 原生上下文（context latent）缺失时拒绝提交续接段，而不是拿尾帧冒充。
 6. **最值得移植的是「确定性骨架」**：编号、参考解析、拓扑执行、JSON 校验、体检报告、空图拒收——全部与具体模型无关；**只有像素级 VAE identity、ComfyUI 节点/工作流拼接、原生上下文 latent 这三类强依赖本地链路**（见第 8 节）。
 
@@ -101,9 +101,9 @@
 - **逐级硬校验**（`compile_structured` → `compile_plan`）：
   - 原文覆盖：`actual_units != expected_units` → 报错并列出应为/实际，禁止跳头跳尾；
   - 说话人必须有独立 character，不能借用主角；
-  - 每段 2–4 beats；`action` 禁止换行/`<d>/<Picture>/{{`/“字幕/旁白/内心独白”等；
+
   - **时长由代码算**：`minimum = speech/4.2 + 0.5`，不足 30 秒上限，超出要求拆段而非缩写台词；
-  - 模板字符串由代码拼（`integrated_multimodal_description/overall_soundscape/non_diegetic_music` 三字段），`{{D001}}` 占位由 `render_segments` 逐字替换成 `<d>[Chinese] …</d>`。
+
 - **检查点/暂停**：每批 `save_progress()` 落 `job['h3_generation']`（含 `source_hash` 指纹），`stop_requested` → 返回 `_planning_paused`；模型输出不合格重试 2 次后 `raise ValueError('本批模板未完成…已完成部分保留')`。`unit_limit` 支持“短批次试跑”（`summary` 明确声明“不代表整章完成”）。
 - **段间连续性体检**：`CONTINUITY_RULES` 复用同一 `ask()`，只报硬断点（同场无过渡坐变站、物件无故换手/消失、已完成动作重演、end_state 与末片相反）；`ok!=true` 时走**只改 action、不改台词**的定向修复，修复后仍不过即抛错。
 
@@ -188,7 +188,7 @@
               "source_node_id","url":"/assets/input/universal/<sha>.png","name":"C01 · 淳于棼…",
               "kind":"image","reference_role":"image","source_revision":0,"source_version_asset_id"}],
   "segments": [{"id":"<32 hex>","title":"第001段｜8秒","seconds":8,
-                "prompt":"【第001段｜8秒】\n引用资产：C01…\nintegrated_multimodal_description: …\noverall_soundscape: …\nnon_diegetic_music: …",
+
                 "continuity":"shot|context","mode":"reference|image|text",
                 "reference_ids":["h3_asset_0","h3_asset_2","h3_asset_4","h3_asset_15"],
                 "system_prompt":"<H3 v3 模板全文>\n本段图片引用顺序：<Picture 1> = C01（…）；…",
@@ -274,3 +274,4 @@
 - ⚠ 兄弟卡回落按 `dict` 插入顺序（第 2.2 节），与文档“第一张”措辞不完全一致。
 - ⚠ `director_image_health` 只判“空白/纯色/透明/过小/损坏”，**不判人物是否错脸、道具是否错形**——质量仍需人工验收（`art_asset_review`）。
 - ⚠ 本报告未执行任何生成/导入流程；对 `main.py`（883 KB，Web 路由与启动器耦合层）只做了索引级检索，未逐行核对。
+

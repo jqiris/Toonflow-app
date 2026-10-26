@@ -63,7 +63,7 @@
 
 用 `getCanvasNodes` 的 `ports` 取得真实端口，`connectNodes({ connections: [{ source, sourceHandle, target, targetHandle }] })` 只连接本画布的输出端口到输入端口。用 `getCanvasEdges` 回读连接，不能跨画布引用源节点来造边。
 
-[HISTORICAL] 连接本次真正使用的媒体，再核对目标真实输入序列，按实际 `{{ref N}}` 映射写提示词。当前原生生成节点的顺序可按以下方式核验：读取目标全部入边，按实际目标端口筛选；对每条边读取源节点的 `outputs[sourceHandle]`，用 `encodeURIComponent(JSON.stringify([sourceId, sourceHandle]))` 得到引用键，按目标 `data.referenceOrder[targetHandle]` 排序，未登记项保持入边顺序追加。不同媒体类型共用该输入序列的编号，未就绪项仍占位并阻止生成。
+连接本次真正使用的媒体，再核对目标真实输入序列，按实际参考标记映射写提示词：参考标记一律 <Picture N> / <Video N> / <Audio N>，各媒质独立编号，N 按当前节点真实输入顺序与媒质独立从 1 开始。当前原生生成节点的顺序可按以下方式核验：读取目标全部入边，按实际目标端口筛选；对每条边读取源节点的 `outputs[sourceHandle]`，用 `encodeURIComponent(JSON.stringify([sourceId, sourceHandle]))` 得到引用键，按目标 `data.referenceOrder[targetHandle]` 排序，未登记项保持入边顺序追加。不同媒体类型各自独立编号，未就绪项仍占位并阻止生成。权威口径见 docs/h3PromptAlignment.md。
 
 仅在实际工具提供顺序调整能力时使用其 schema；不能只改提示词编号却不改实际参考。缺失参考不可悄悄过滤后继续使用旧编号。故事/完整剧本节点用于审阅，不将长剧本连到图像/视频输入代替专门提示词；当前生成节点会将连接的 STRING 文本全文追加到提示词中。
 

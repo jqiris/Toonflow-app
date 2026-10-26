@@ -1,5 +1,3 @@
-> **HISTORICAL（H3 迁移后口径更新）**：本文档写作于旧双花括号 ref 占位符与三字段提示词口径时期，正文中涉及的 `{{ref N}}` 占位符与 `integratedMultimodalDescription` 三字段存储已随 MiniMax H3 官方六段（`subject_definitions` / `summary` / `retention_analysis` / `detailed_description` / `overall_soundscape` / `non_diegetic_music`）与 `<Picture N>` / `<Video N>` / `<Audio N>` 参考标记口径全量迁移后作废；权威口径见 `docs/h3PromptAlignment.md`，本文件仅作历史追溯保留。
-
 # 多轨编辑器界面与服务端差距清单（对照 LocalStoryCanvas）
 
 > 审计对象：本仓库 `packages/nodeShared/src/mtrack/`、`packages/nodes/multitrackNode/`、`packages/tools/planOperator/`、`packages/nodes/videoGenerationNode/`、`packages/providers/src/media/freevideo.ts`、`apps/server/src/routes/`
@@ -102,7 +100,7 @@ LSC 的对应入口在 `native-h3-scene.js:1489`（POST `/projects/{id}/run`）�
 > **2026-10-22 更新**：本小节的审计原文记于 rewriteShot 落地之前，保留在下方作为**历史状态**。现状：
 >
 > 1. **路由与界面入口都已存在**：`POST /api/mtrack/rewriteShot`（`apps/server/src/routes/mtrack/rewriteShot.ts`，`router.ts:76` import、`:207` 注册）；界面「整理本镜提示词」按钮在 `packages/nodeShared/src/mtrack/components/clipEditor.vue`（emit `rewrite`），由 `multitrackEditor.vue` 的 `rewriteClipPrompt` 接线调用。
-[HISTORICAL] > 2. **本次补齐三项（对齐 LSC）**：①**结果不自动采用**——返回 `{ text, requiresReview: true }`（`rewriteShot.ts:100`），整理稿进单镜编辑器「待采用」区块（左原文只读、右整理稿可编辑），点「采用整理结果」才写回 `prompt.integratedMultimodalDescription`，「放弃」原文一字不动；②**一致性守卫**——待采用期间原文画面描述、`clip.seconds`、本次整理规则任一变化即禁用采用并提示重新整理；③**生成中互斥**——服务端读 `plan/story.mtrack`，任一 clip `status === "generating"` 即 409「正在生成，请结束后再整理提示词，避免模型同时占显存」（判定 `rewriteShot.ts:42-66`，抛出 `:72`），工程文件不存在或全无 `generating` 时放行。另：`rules` 可选（≤20000，`rewriteShot.ts:22`），非空整段替换内置规则（`:88`），空/缺省用内置 `rewriteRules`（`:27-35`）。
+ > 2. **本次补齐三项（对齐 LSC）**：①**结果不自动采用**——返回 `{ text, requiresReview: true }`（`rewriteShot.ts:100`），整理稿进单镜编辑器「待采用」区块（左原文只读、右整理稿可编辑），点「采用整理结果」才写回 `prompt.detailedDescription`，「放弃」原文一字不动；②**一致性守卫**——待采用期间原文画面描述、`clip.seconds`、本次整理规则任一变化即禁用采用并提示重新整理；③**生成中互斥**——服务端读 `plan/story.mtrack`，任一 clip `status === "generating"` 即 409「正在生成，请结束后再整理提示词，避免模型同时占显存」（判定 `rewriteShot.ts:42-66`，抛出 `:72`），工程文件不存在或全无 `generating` 时放行。另：`rules` 可选（≤20000，`rewriteShot.ts:22`），非空整段替换内置规则（`:88`），空/缺省用内置 `rewriteRules`（`:27-35`）。
 > 3. **仍然没有 timeline-settings 等价物，且不打算做**：LSC 那份设置页一半是「本机 LoRA 目录」——它喂本机 ComfyUI 的 LoRA 清单，我们走供应商 HTTP（`freevideo.ts` 直连 MiniMax-H3），既没有本机 LoRA 目录也没有 ComfyUI 模型库，这个字段对我们没有对应物；另一半「内置 H3 规则文本」我们的对应物是 `rewriteShot` 的内置 `rewriteRules` + 请求级 `rules`，不需要一张全片设置页承载，也没有落盘全片整理规则的字段（`global` 只有 `ratio`/`style`/`systemPrompt`/`model`，其中 `systemPrompt` 至今不进入生成提示词，见 §2.7）。
 >
 > 结论：差距表第 9 行的整理本镜部分从**完全缺失**改为**已走通**（时间线设置部分标为不适用）；剩余可选项只有「把整理规则做成工程级设置」，当前按 YAGNI 不做。
@@ -131,7 +129,7 @@ LSC `h3-grid-multitrack.js` 是另一条链：拆 9 格图 → 上传 → `POST 
 **已走通**：`global.style` 与 `global.systemPrompt` 在「高级设置 · 全片约束」里可编辑（`multitrackEditor.vue:73-95`），经 `onGlobalPatch`（`:466-469`）改 `project.global`，走原有整份快照保存链落盘（含 CAS 冲突检测，`:371-397`）。
 
 **缺口**：
-[HISTORICAL] 1. **这两个字段不参与生成**（审计时口径）。`directDispatch.buildPrompt`（`:83-96`）当时只取 `clip.prompt.integratedMultimodalDescription / overallSoundscape / nonDiegeticMusic` + 参考顺序声明（现行实现只拼全片前缀并原样透传正文，不再追加参考顺序声明）；`launchDispatch` 传给 `beginDirectDispatch` 的也只有 `clips` 和 `videoModel`（`multitrackEditor.vue:625-631`），`global.style/systemPrompt` 从未下传。全仓 grep `global.style|global.systemPrompt` 只有四类引用：编辑器展示（`multitrackEditor.vue:81`、`:90`）、`normalizeProject` 归一（`mtrackProject.ts:157-158` 与 `planOperator/src/mtrackProject.ts:97-98`）、`mtrackEdit.setGlobal` 写入（`mtrackEdit.ts:144-145`）、模板文档说明（`skills/assetCard/references/multitrackTemplate.md:70-71`）——没有任何一处把它们拼进提示词。
+ 1. **这两个字段不参与生成**（审计时口径）。`directDispatch.buildPrompt`（`:83-96`）当时只取 `clip.prompt.detailedDescription / overallSoundscape / nonDiegeticMusic` + 参考顺序声明（现行实现只拼全片前缀并原样透传正文，不再追加参考顺序声明）；`launchDispatch` 传给 `beginDirectDispatch` 的也只有 `clips` 和 `videoModel`（`multitrackEditor.vue:625-631`），`global.style/systemPrompt` 从未下传。全仓 grep `global.style|global.systemPrompt` 只有四类引用：编辑器展示（`multitrackEditor.vue:81`、`:90`）、`normalizeProject` 归一（`mtrackProject.ts:157-158` 与 `planOperator/src/mtrackProject.ts:97-98`）、`mtrackEdit.setGlobal` 写入（`mtrackEdit.ts:144-145`）、模板文档说明（`skills/assetCard/references/multitrackTemplate.md:70-71`）——没有任何一处把它们拼进提示词。
 2. **`global.ratio` 无 UI**：只在新建空白工程时写死 `"9:16"`（`:212`），之后只能通过 `setGlobal` op 改；而 `createClip` 会用 `global.ratio` 做新片段默认比例（`mtrackProject.ts:191-207`、`mtrackEdit.ts:78`）。
 3. **`global.model` 无 UI**：只有命令式 `setGlobal{model:{providerId,modelId}}` 能写；写了之后 `configureNode` 才下发（`directDispatch.ts:191-194`）。界面用户无法选视频模型，只能靠节点自身默认值。
 4. 无「quality / 采样 / 种子 / 自动合并」这类 LSC 有的批次级参数（`native-h3-scene.js:1332`、`:1348`）。

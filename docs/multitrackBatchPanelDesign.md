@@ -1,5 +1,3 @@
-> **HISTORICAL（H3 迁移后口径更新）**：本文档写作于旧双花括号 ref 占位符与三字段提示词口径时期，正文中涉及的 `{{ref N}}` 占位符与 `integratedMultimodalDescription` 三字段存储已随 MiniMax H3 官方六段（`subject_definitions` / `summary` / `retention_analysis` / `detailed_description` / `overall_soundscape` / `non_diegetic_music`）与 `<Picture N>` / `<Video N>` / `<Audio N>` 参考标记口径全量迁移后作废；权威口径见 `docs/h3PromptAlignment.md`，本文件仅作历史追溯保留。
-
 # 批量生成面板 · 最小可行设计
 
 > 依据：`docs/multitrackGapAudit.md`（t1）§2.2 / §2.3 / §4 第 1 项；参考实现 LocalStoryCanvas（下称 LSC）。
@@ -109,8 +107,8 @@ defineEmits<{
 ```ts
 /** 提示词三字段全空即视为缺失：面板范围校验与逐镜派工共用同一判据。 */
 export function hasPrompt(clip: MtrackClip): boolean {
-[HISTORICAL]   const { integratedMultimodalDescription, overallSoundscape, nonDiegeticMusic } = clip.prompt;
-[HISTORICAL]   return Boolean(integratedMultimodalDescription.trim() || overallSoundscape.trim() || nonDiegeticMusic.trim());
+   const { detailedDescription, overallSoundscape, nonDiegeticMusic } = clip.prompt;
+   return Boolean(detailedDescription.trim() || overallSoundscape.trim() || nonDiegeticMusic.trim());
 }
 ```
 

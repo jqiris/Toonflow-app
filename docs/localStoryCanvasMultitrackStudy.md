@@ -46,7 +46,7 @@
   "id": "156dbb87...",
   "title": "第001段｜8秒",
   "seconds": 8,
-  "prompt": "【第001段｜8秒】\n引用资产：C01（淳于棼·人间游侠）；C03（周弁·人间酒友）；...\nintegrated_multimodal_description: ...\noverall_soundscape: ...\nnon_diegetic_music: ...",
+  "prompt": "【第001段｜8秒】\n引用资产：C01（淳于棼·人间游侠）；C03（周弁·人间酒友）；...\ndetailed_description: ...\noverall_soundscape: ...\nnon_diegetic_music: ...",
   "continuity": "shot",                 // shot | context
   "mode": "reference",
   "reference_ids": ["h3_asset_0", "h3_asset_2", "h3_asset_4", "h3_asset_15"],
@@ -56,16 +56,18 @@
 
 要点：
 
-1. **段头即语法**：每段第一行必须是 `【第N段｜X秒】`，段号对节点序号、秒数对节点时长；解析器支持 `【第1段｜5秒】/【第1段 5秒】/【镜头3｜4秒】` 等多种写法。
-2. **提示词三字段**（H3 官方口径）：
-   - `integrated_multimodal_description`：画面、动作、对白（对白包在 `<d>[Chinese]…</d>`）；
+1. **提示词六段**（H3 官方口径，LSC 侧历史为三字段变体，本仓库采用六段）：
+   - `subject_definitions`：资产定义（被引用主体的身份特征）；
+   - `summary`：一段摘要；
+   - `retention_analysis`：参考保持分析；
+   - `detailed_description`：画面、动作、对白（对白包在 `<d>[Chinese]…</d>`）；
    - `overall_soundscape`：环境声与动作声；
    - `non_diegetic_music`：配乐 / `N/A`。
-3. **参考顺序即协议**：`reference_ids` 的数组顺序 = `<Picture 1..N>`，LSC 侧还会在段尾追加一句「本段图片引用顺序：<Picture 1> = C01（…，用途：character）；…」（**LSC 自有写法，本仓库已不采用**：段尾参考顺序声明行已取消，改由写作者按官方六段直接书写正文）。
-4. **素材排他**：写了 `<Picture N>` 的资产，正文**禁止**再详细描述其外貌，否则模型会混淆（**LSC 口径**；本仓库不采用——官方 `ref-en.txt` §0/§5.3 要求写出被引用特征，见 assetCard runbook §四）。
-5. **说话人 ID**：`(S1)`、`(S2)` 全片唯一，对白必须 `<d>[语言] 内容</d>`。
+2. **参考顺序即协议**：`reference_ids` 的数组顺序 = `<Picture 1..N>`，LSC 侧还会在段尾追加一句「本段图片引用顺序：<Picture 1> = C01（…，用途：character）；…」（**LSC 自有写法，本仓库已不采用**：段尾参考顺序声明行已取消，改由写作者按官方六段直接书写正文）。
+3. **素材排他**：写了 `<Picture N>` 的资产，正文**禁止**再详细描述其外貌，否则模型会混淆（**LSC 口径**；本仓库不采用——官方 `ref-en.txt` §0/§5.3 要求写出被引用特征，见 assetCard runbook §四）。
+4. **说话人 ID**：`(S1)`、`(S2)` 全片唯一，对白必须 `<d>[语言] 内容</d>`。
 
-[HISTORICAL] > **Toonflow 侧对应**：`<Picture N>` ↔ `{{ref N}}`（`useNodeReferences` 的编号），`reference_ids` 顺序 ↔ `data.referenceOrder` + 入边顺序。这是两套系统唯一需要严格对齐的地方。
+ > **Toonflow 侧对应（现行口径）**：本仓库多轨工程的参考顺序即 `<Picture N>` / `<Video N>` / `<Audio N>` 的编号来源（同媒质各自从 1 起，取自 `clip.referenceIds` 的过滤位次），对应本仓库侧的 `clip.referenceIds` 顺序与画布 `data.referenceOrder` + 入边顺序；本仓库正文直接书写尖括号标记，不存在旧的双花括号 ref 占位符写法，也没有 wire 层换算通道。
 
 ---
 
@@ -119,5 +121,6 @@
 | 单段时长 | 1–15 秒（节点限制），推荐 4–6 | **2–60 秒逐秒**，更宽 |
 | 参考数量 | 由工作流决定 | 图 ≤4 / 视频 ≤1 / 音频 ≤1，超限会被逼到首尾帧模式 |
 | 首尾帧续接 | 尾帧续写（latent） | `startFrameOptional`：1 张作尾帧，2 张按序首/尾 |
-[HISTORICAL] | 提示词标记 | `<Picture N>` | `{{ref N}}` |
+ | 提示词标记 | `<Picture N>` | `「双花括号 ref 占位符」` |
 | 合成 | ffmpeg concat | 同样可 ffmpeg concat，但需统一规格 |
+

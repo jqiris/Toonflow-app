@@ -393,12 +393,10 @@ LSC 用尾帧 latent 续写；本仓库不自己截帧，走引擎官方的续�
 
 ### 10.3 实跑发现并已修正的链路问题（均为真实故障，非纸面推演）
 
-> **HISTORICAL（v7 旧口径记录）**：以下 1/2/4 三条描述已作废的 `{{ref N}}` 双花括号占位符与 wire 层 `{{ref N}}` → `<Picture N>` 换算通道；H3 官方格式下写作者直接写 `<Picture N>` / `<Video N>` / `<Audio N>`，不再有任何换算层，权威口径见 `docs/h3PromptAlignment.md`。以下记录仅作历史追溯保留。
-
-[HISTORICAL] 1. **`{{ref N}}` 断链（已作废）**：`{{refN}}` 只是画布 mention chip，引擎不替换。修复位置在节点层——`packages/nodes/videoGenerationNode/src/index.vue` 新增 `referenceTags()`，当选中 provider 为 `freevideo` 时按画布引用列表**全局序号**（`packages/nodeShared/src/useNodeReferences.ts`）把 `{{ref N}}` 转 `<Picture N>`（IMAGE→Picture / VIDEO→Video / AUDIO→Audio / STRING→参考N）。
-[HISTORICAL] 2. **provider 层同类修复被回滚（已作废）**：`packages/providers/src/media/freevideo.ts` 拿不到 STRING 参考的全序位置，混入文本/视频时编号整体错位（改动前 `{{refN}}` 原样送引擎是无效但不指错，改动后错指=回归），故 provider 层 diff 已清空，修复只保留在节点层。
+ 1. **`「双花括号 ref 占位符」` 断链（已作废）**：`「双花括号 ref 占位符」` 只是画布 mention chip，引擎不替换。修复位置在节点层——`packages/nodes/videoGenerationNode/src/index.vue` 新增 `referenceTags()`，当选中 provider 为 `freevideo` 时按画布引用列表**全局序号**（`packages/nodeShared/src/useNodeReferences.ts`）把 `「双花括号 ref 占位符」` 转 `<Picture N>`（IMAGE→Picture / VIDEO→Video / AUDIO→Audio / STRING→参考N）。
+ 2. **provider 层同类修复被回滚（已作废）**：`packages/providers/src/media/freevideo.ts` 拿不到 STRING 参考的全序位置，混入文本/视频时编号整体错位（改动前 `「双花括号 ref 占位符」` 原样送引擎是无效但不指错，改动后错指=回归），故 provider 层 diff 已清空，修复只保留在节点层。
 3. **FreeVideo API 五条备忘**（已写入 SOP，仍有效）：不接受 width/height 直传（422 `permitted field combination`），用 `megapixels` 档位（1.0→1376×768）；`/media` 返回 201 非 200；轮询用 `?wait=25`；下载带 Bearer。
-[HISTORICAL] 4. **V7 正则漏检（已作废）**：原 `ref\s+(\d+)` 要求空白，真实画布里 64 处无空白写法 `{{ref1}}` 全部不命中；t15 修为 `\{\{\s*ref\s*(\d+)\s*\}\}`（`planValidator.ts:207`，注释注明四种写法均命中）。
+ 4. **V7 正则漏检（已作废）**：原 `ref\s+(\d+)` 要求空白，真实画布里 64 处无空白写法 「双花括号 ref 占位符」 全部不命中；t15 修为 `\{\{\s*ref\s*(\d+)\s*\}\}`（`planValidator.ts:207`，注释注明四种写法均命中）。
 
 ### 10.4 SOP 冻结前的最后两处断点（t13 评审，t19 已修）
 

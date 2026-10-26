@@ -286,7 +286,7 @@ non_diegetic_music: ...
 | `packages/skills/canvas/SKILL.md`、`packages/skills/canvas/references/videoProduction.md` | 画布技能里的提示词写法 |
 | `packages/skills/v118workflow/SKILL.md`、`references/videoProduction.md`、`references/knowledge/videoPromptCraft.md`、`references/knowledge/imagePromptCraft.md` | 工作流技能里的提示词段落 |
 | `packages/mcp/skills/toonflow/SKILL.md` | MCP 对外技能说明 |
-[HISTORICAL] | `docs/promptCompatBlueprint.md`、`promptCompatPromptSchema.md`、`promptCompatRecommendation.md`、`promptCompatDelta.md`、`promptCompatRedTeam.md`、`promptCompatRisk.md`、`promptCompatRouter.md`、`promptCompatFreevideo.md`、`promptCompatNonFree.md`、`promptCompatBaseline.md` | 兼容方案系列：本契约取代其中「保留 `{{ref N}}`、无兼容分支」之外的兼容层设计，需标注作废或改写 |
+
 [HISTORICAL] | `docs/assetCardWorkflowPlan.md`、`docs/assetCardWorkflowPlanReview.md`、`docs/multitrackProductionPlan.md`、`docs/multitrackQualityReview.md`、`docs/multitrackGapAudit.md`、`docs/mtrackWorkbenchContract.md`、`docs/mtrackLscAlignment.md`、`docs/requirementPlanOperatorMultitrack.md`、`docs/requirementMultitrackAgentBridge.md`、`docs/requirementRevisionNodeMultitrack.md`、`docs/assetToMtrackAudit.md`、`docs/agentGuideAudit.md`、`docs/localStoryCanvasStudy.md`、`docs/localStoryCanvasMultitrackStudy.md` | 各文档中的「参考顺序即编号」「`{{ref N}}` 是写作者唯一写法」等已反转口径段落，需按本契约改写并标注旧口径作废 |
 | `docs/h3PromptAlignment.md` | 本文件，权威契约 |
 

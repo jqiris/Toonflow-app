@@ -81,7 +81,7 @@ export interface ExtContext {
 |---|---|---|
 | `node:getConfig` | 读当前配置与可用模式 | 无 |
 | `node:setConfig` | 改模型/时长/分辨率/比例/模式/声音 | `duration` 必须在 `durationResolutionMap` 内；`mode` 必须匹配当前引用 |
-[HISTORICAL] | `node:setPrompt` | 写提示词（支持 `{{ref N}}`） | `prompt` |
+ | `node:setPrompt` | 写提示词（支持 `「双花括号 ref 占位符」`） | `prompt` |
 | `node:generateVideo` | 启动后台生成 | 无；立即返回，用 `getGenerationStatus` 查 |
 
 **结论**：每分镜的完整控制链 = `addNode` → `connectNodes` → `setConfig` → `setPrompt` → `generateVideo`，全部现成。

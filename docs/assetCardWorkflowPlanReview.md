@@ -65,10 +65,10 @@
 2. **工具契约**：`ToolFiles`（readFile/writeFile(exclusive)/mkdir/rename/remove/copyFile/importImage…）与 `ToolContext{cwd,config,files,canvas,skills,…}` 与方案一致；`createToolConfig` 从 `package.json` 读 `version`、嵌入 `readme.md`、仅 `NODE_ENV=dev` 复制到 `data/tools`——与方案命令相符。
 3. **技能加载**：`loadAgentSkills` 的 `skillPaths = [cwd/skill, data/skills]`，同名工作区优先；`disabledSkills` 过滤只作用于 `data/skills`；`data/skills` 由 `initializePlugins` 无 revision 调用（只补缺失）。
 4. **画布能力**：`renameNodes.label` 1–200 字符、`getCanvasNodes.fields` 可选 `label/type/position/ports/data/outputs`、`dataKeys` 最多 20、`getCanvasEdges.direction` 支持 `incoming`——方案里的快照读法可行；每次读取 64 KiB 上限正是新增「快照完整性」要求的来源。
-[HISTORICAL] 5. **`{{ref N}}` 语义**：`useNodeReferences` 的键为 `encodeURIComponent(JSON.stringify([source,sourceHandle]))`，未列入项按入边顺序追加，`referenceMentions` 与媒体共用编号——与 §1.3 一致。
+ 5. **`「双花括号 ref 占位符」` 语义**：`useNodeReferences` 的键为 `encodeURIComponent(JSON.stringify([source,sourceHandle]))`，未列入项按入边顺序追加，`referenceMentions` 与媒体共用编号——与 §1.3 一致。
 6. **模型/模式**：`freevideo.ts` 视频 `mode: ["text","startFrameOptional",["imageReference:4","videoReference:1","audioReference:1"]]`，图像 `multiReference` 与 4 参考的实际行为以节点 `getMatchingModes` 为准（见 A3）。
 7. **扩展契约**：`ExtContext`（`resource{kind,directory,path,nodeId,label}`、`files`、`active`、`mountNode?`）与 `defineExt` 的 `id`/`resourceKind` 校验与方案 §3.4 一致；`canvasNode` 扩展确实没有节点 `data` 通道。
-[HISTORICAL] 8. **与现有技能不重复**：`canvas` 与 `v118workflow` 把 `{{ref N}}` 编号核对写成**提示词纪律**（`canvas/references/videoProduction.md` 第 3–4 节、`v118workflow/references/canvasOperations.md` 第 51 行「工作流资产编号只是文字索引」），`workflow` 明确禁止另立镜头编号主结构。方案不新建第二套编号规则，只把「文字索引」升级为**带唯一性/顺序校验的编号**，并把 label 模板作为既有「场次号/片段号写进名称」写法的具体化——**无重复，属补位**。
+ 8. **与现有技能不重复**：`canvas` 与 `v118workflow` 把 `「双花括号 ref 占位符」` 编号核对写成**提示词纪律**（`canvas/references/videoProduction.md` 第 3–4 节、`v118workflow/references/canvasOperations.md` 第 51 行「工作流资产编号只是文字索引」），`workflow` 明确禁止另立镜头编号主结构。方案不新建第二套编号规则，只把「文字索引」升级为**带唯一性/顺序校验的编号**，并把 label 模板作为既有「场次号/片段号写进名称」写法的具体化——**无重复，属补位**。
 
 ---
 
