@@ -146,7 +146,7 @@ type ImportRequest = {
 const props = defineProps<{ active: boolean; disabled?: boolean }>();
 const emit = defineEmits<{ summary: [summary: string] }>();
 const { node } = useNode();
-const { addNodes, getSelectedNodes, nodeTypes, onNodeDragStart, onSelectionStart, onMoveStart } = useVueFlow();
+const { addNodes, addEdges, getSelectedNodes, nodeTypes, onNodeDragStart, onSelectionStart, onMoveStart } = useVueFlow();
 const ai = useNodeAi();
 const files = useNodeFiles();
 const visible = ref(false);
@@ -427,7 +427,7 @@ async function runImport(input: ImportRequest): Promise<AssetImportSummary> {
   }
 }
 
-function createImageNode(item: { path: string; mimeType: string; label: string }) {
+function createImageNode(item: { path: string; mimeType: string; label: string; refs?: { id: string; nodeId: string }[] }) {
   // ACT: 卸载后画布 flow 已销毁，再 addNodes 会往不存在的实例写节点；这里直接拒绝并让调用方计入失败。
   if (unmounted) throw new Error("节点已卸载，未再创建资产图节点");
   if (!nodeTypes?.value?.["remote-imageNode"]) throw new Error("请先启用图片节点插件，否则资产图无处安放");
@@ -445,6 +445,11 @@ function createImageNode(item: { path: string; mimeType: string; label: string }
   };
   addNodes([created]);
   placedIds.push(id);
+  // ACT: 衍生卡与基卡自动连线（基卡 image 口 → 本卡 in 口）：画布上直接看见衍生链，后续人工重出衍生图时参考线已就位；
+  // 基卡节点若已在别处被删，addEdges 静默落空不影响出图。
+  for (const ref of item.refs ?? []) {
+    addEdges({ id: crypto.randomUUID(), source: ref.nodeId, sourceHandle: "image", target: id, targetHandle: "in" });
+  }
   return id;
 }
 

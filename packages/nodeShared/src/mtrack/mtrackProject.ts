@@ -135,6 +135,8 @@ export interface AssetIndexCard {
   kind?: string;
   textOnly?: boolean;
   nodeId?: string | null;
+  /** 基卡编号（衍生卡指向基础卡）；导入节点出图时以基卡成图作参考图并自动连线，无引用时缺省。 */
+  refs?: string[];
 }
 
 export interface AssetIndex {

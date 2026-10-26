@@ -123,7 +123,7 @@
 
 正常路径不让 Agent 手写派生文件：画布上的「导入资产与分镜」节点（`packages/nodes/assetImportNode`，节点 type `remote-assetImportNode`，agent 侧工具 `node:importScript`）按本模板的编号与字段抽取，独占写下面两个文件。
 
-- `plan/assetIndex.json` = `{ "version": "assetIndex-v1", "cards": [{ id, name, kind, textOnly, nodeId }] }`（`packages/nodeShared/src/mtrack/mtrackProject.ts:128-139`）。`id` 是卡片编号（大写 `C01` / `SC01` / `P01`，`S` 类只记文字）；`kind` 取 `character` / `scene` / `prop` / `sound`；`textOnly: true` 不出图；`nodeId` 指向**已出图的图片节点**，没出图或文本类卡为 `null`（V13 只认已出图资产）。
+- `plan/assetIndex.json` = `{ "version": "assetIndex-v1", "cards": [{ id, name, kind, textOnly, nodeId, refs? }] }`（`packages/nodeShared/src/mtrack/mtrackProject.ts:128-139`）。`id` 是卡片编号（大写 `C01` / `SC01` / `P01`，`S` 类只记文字）；`kind` 取 `character` / `scene` / `prop` / `sound`；`textOnly: true` 不出图；`nodeId` 指向**已出图的图片节点**，没出图或文本类卡为 `null`（V13 只认已出图资产）；`refs` 是基卡编号数组（衍生卡指向基础卡，导入节点出图时以基卡成图作参考并自动连线，后缀卡没声明时回落同前缀基卡）。
 - 画布资产节点的 label 必须写成 **`<代号> <名称>`**（如 `C01 淳于棼（青年）`）：派工侧按 label 前缀认卡片编号（`packages/nodeShared/src/mtrack/directDispatch.ts:208-212` 的 `labelMatchesCard`），label 丢了编号会被判成「非资产卡」，多轨「参考素材」里只显示无预览、勾不上。
 - 导入时**代码确定性拦下的只有两条**：编号唯一（重复即报错）、分镜引用的卡不在本次抽取里（落盘前掐掉该引用，不带着缺失参考进场）；「场景卡空镜无人 / 道具卡无手」只是内置抽取提示词的要求（`packages/nodes/assetImportNode/src/assetImport.ts` 的 `extractionSystemPrompt`），**不是落盘校验**，出图后要人眼核。
 - 落盘是独占写：`plan/story.mtrack` 或 `plan/assetIndex.json` 任一已存在就整体拒绝，不追加不合并；想在原工程上继续就 `node:bindProject(mode:"open")`，想重来先手动改名/清理（占用探测在 `importAssets` 入口做，重跑立刻被拒，不会先烧模型）。

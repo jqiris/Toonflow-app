@@ -23,6 +23,8 @@ export type ExtractedAsset = {
   negativePrompt?: string;
   ratio?: string;
   textOnly?: boolean;
+  /** 基卡引用（衍生卡指向基础卡）：出图时把基卡的本次成图作参考图，并在画布上自动连基卡→本卡的线。 */
+  refs?: string[];
 };
 
 export type ExtractedShot = {
@@ -82,6 +84,8 @@ export const kindLabels: Record<AssetKind, string> = {
 const maxImageReferences = 9;
 /** 承接镜（context）的图片参考上限（planValidator V16 的引擎 continue_from 契约）：与独立镜的 9 张更紧。 */
 const maxContextReferences = 3;
+/** 资产出图链路的基卡参考上限：与 freevideo-image 的参考图上限同口径（providers/src/media/freevideo.ts 的 maxImageReferences = 4）。 */
+const maxAssetImageReferences = 4;
 
 /** 声音卡强制只文字：模型显式写 textOnly:false 也不拿它出图（S 类资产只出现在提示词正文里）。 */
 export function isTextOnlyAsset(asset: Pick<ExtractedAsset, "kind" | "textOnly">): boolean {
@@ -146,11 +150,11 @@ const extractionSystemPrompt = `你是短剧/漫剧的资产与分镜抽取器�
 - P01、P02…：道具卡，kind=prop，默认画幅 1:1，画面里不出现手
 - S01、S02…：只记录文字的声音资产，kind=sound 且 textOnly=true（不许写 false，声音卡一律不出图）；原文有台词、独白或旁白时，为每个说话人（含画外旁白）各建一张，prompt 写一句稳定的音色描述（年龄感、音高、清亮/沙哑等质感、气息、语速），此后每镜提示词里同一说话人逐字复用这句；同一角色需要不同年龄或状态的声线时另建后缀卡（如 S01-A）。
 状态后缀属身份：C01-A 与 C01 是两张卡，必须各自单独列出。
-原文明确出现同一角色状态变化（换装、变身、持续伤势）或同一道具状态变化（新变旧、受损）时，基础态卡与衍生态卡各自单独列出；衍生卡 prompt 基于基卡只改声明的状态项、其余部分逐字保留，并在散文里写明引用基卡（如「与 C01 同一张脸，换装」）。
+原文明确出现同一角色状态变化（换装、变身、持续伤势）或同一道具状态变化（新变旧、受损）时，基础态卡与衍生态卡各自单独列出；衍生卡把基卡编号写进 refs 数组（如 "refs":["C01"]，同前缀、基卡必须列在衍生卡之前），prompt 基于基卡只改声明的状态项、其余部分逐字保留，并在散文里写明引用基卡（如「与 C01 同一张脸，换装」）；出图时本节点会以基卡的本次成图作参考图并自动连线。
 
 输出 JSON 结构：
 {"style":"全片统一风格词","systemPrompt":"全片统一约束，例如排除项：文字、水印、多余手指",
- "assets":[{"id":"C01","name":"淳于棼（青年）","kind":"character","prompt":"面向文生图的画面描述：年龄、外貌、发型、服装、气质，并写明是四视图整版（① 半身像 ② 正面全身 ③ 90° 侧面 ④ 背面全身）；场景卡写空间结构、材质、光线且强调空镜无人；道具卡写形制、材质、磨损","negativePrompt":"可选","ratio":"16:9","textOnly":false}],
+ "assets":[{"id":"C01","name":"淳于棼（青年）","kind":"character","prompt":"面向文生图的画面描述：年龄、外貌、发型、服装、气质，并写明是四视图整版（① 半身像 ② 正面全身 ③ 90° 侧面 ④ 背面全身）；场景卡写空间结构、材质、光线且强调空镜无人；道具卡写形制、材质、磨损","negativePrompt":"可选","ratio":"16:9","textOnly":false,"refs":[]},{"id":"C01-A","name":"淳于棼（换装）","kind":"character","prompt":"以参考图 1 为同一人物的身份锚点，重绘同一角色的四视图整版：面部结构、发际线与参考图 1 完全一致，仅更换服装为……","refs":["C01"]}],
  "shots":[{"title":"分镜标题","seconds":5,"prompt":"该镜提示词：原文给过就整段原样保留（六个官方段首齐全），原文没给才写一句话画面描述","referenceIds":["C01","SC01"],"mode":"ref","continuity":"shot"}]}
 
 要求：
@@ -174,6 +178,7 @@ export const extractionSchema = z.object({
     negativePrompt: z.string().optional(),
     ratio: z.string().optional(),
     textOnly: z.boolean().optional(),
+    refs: z.array(z.string().trim().min(1)).default([]).describe("基卡编号：衍生卡指向基础卡（如 C01-A 引用 C01）。出图时以基卡本次成图作参考图（≤4 张）并在画布自动连基卡→本卡的线；后缀卡没声明时回落到同前缀基卡"),
   })).min(1),
   shots: z.array(z.object({
     title: z.string().default(""),
@@ -215,14 +220,22 @@ export function normalizeExtraction(parsed: unknown): AssetExtraction {
     if (ids.has(asset.id)) throw new Error(`重复资产编号 ${asset.id}`);
     ids.add(asset.id);
   }
+  // ACT: 基卡引用归一——去重去自引用；没声明 refs 的后缀卡（C01-A）回落到同前缀基卡（与参考接线解析规则 §四同口径）。
+  // ACT: 不校验 ref 是否在本次资产里——基卡未勾选（面板按勾选裁剪后才进这里）或写错的编号要留到出图环节点名告警，静默丢掉等于假装关联不存在。
+  // 声明顺序不做 backwards-only 硬拦：出图前 orderByRefs 按 refs 依赖重排，基卡列在衍生卡之后也能先出基卡再拿成图作参考。
+  const baseOf = (id: string) => {
+    const matched = /^(.*\d)-[A-Z]$/.exec(id);
+    return matched ? matched[1] : undefined;
+  };
+  const assets = result.data.assets.map(asset => {
+    const declared = [...new Set(asset.refs.filter(ref => ref !== asset.id))];
+    const fallback = !declared.length ? baseOf(asset.id) : undefined;
+    return { ...asset, textOnly: isTextOnlyAsset(asset), refs: fallback ? [fallback] : declared };
+  });
   return {
     style: result.data.style,
     systemPrompt: result.data.systemPrompt,
-    assets: result.data.assets.map(asset => ({
-      ...asset,
-      kind: asset.kind,
-      textOnly: isTextOnlyAsset(asset),
-    })),
+    assets,
     // 参考只认本次抽到的资产：模型偶尔引用不存在的编号，落盘前就掐掉，避免多轨派工报「参考图未就绪」。
     shots: result.data.shots.map(shot => ({
       ...shot,
@@ -257,6 +270,26 @@ export async function extractAssets(options: {
   return parseExtraction(result.text);
 }
 
+/**
+ * 出图顺序按 refs 依赖做轻量拓扑排序（抽取模型有时把衍生卡排在基卡之前，契约要求父卡在前）：
+ * 引用在本批里但还没出的排后面；引用不在本批（未勾选/文本卡）视为已满足；出现环时剩余保持原顺序。
+ */
+function orderByRefs(assets: ExtractedAsset[]): ExtractedAsset[] {
+  const queued = [...assets];
+  const ordered: ExtractedAsset[] = [];
+  const done = new Set<string>();
+  const pending = new Set(assets.map(asset => asset.id));
+  while (queued.length) {
+    const index = queued.findIndex(asset => (asset.refs ?? []).every(ref => ref === asset.id || !pending.has(ref) || done.has(ref)));
+    if (index < 0) break;
+    const [asset] = queued.splice(index, 1);
+    ordered.push(asset);
+    done.add(asset.id);
+    pending.delete(asset.id);
+  }
+  return [...ordered, ...queued];
+}
+
 /** 出图只走图片模型的媒体通道（与图片生成节点同一条路），落盘到节点的 assets/<nodeId>。 */
 export async function generateAssetImages(options: {
   ai: AssetImportAi;
@@ -265,21 +298,40 @@ export async function generateAssetImages(options: {
   model: AssetImportModel;
   directory: string;
   assetDirectory: string;
-  createImageNode(item: { path: string; mimeType: string; label: string }): Promise<string>;
+  createImageNode(item: { path: string; mimeType: string; label: string; refs?: { id: string; nodeId: string }[] }): Promise<string>;
   signal?: AbortSignal;
   onProgress?(event: AssetImportProgress): void;
 }): Promise<{ nodeIds: Map<string, string>; failed: { id: string; reason: string }[]; warnings: string[] }> {
   const nodeIds = new Map<string, string>();
+  /** 本次已出的成图（path+mimeType），供衍生卡作参考图复用——不重读磁盘，路径就是媒体通道刚返回的。 */
+  const produced = new Map<string, { path: string; mimeType: string }>();
   const failed: { id: string; reason: string }[] = [];
   const warnings: string[] = [];
+  const ordered = orderByRefs(options.assets);
   await options.workspace.mkdir("assets").catch(ignoreExisting);
   await options.workspace.mkdir(options.assetDirectory).catch(ignoreExisting);
   let done = 0;
-  for (const asset of options.assets) {
+  for (const asset of ordered) {
     options.signal?.throwIfAborted();
     // ACT: 画幅归一在被改写时留痕（C/SC 卡必须是 16:9 四视图整版/空镜，P 卡 1:1），不静默换档。
     const picked = pickAssetRatio(asset.ratio, asset.kind);
     if (picked.warning) warnings.push(`${asset.id}：${picked.warning}`);
+    // ACT: 基卡关联——refs 声明的基卡若本次已出图，成图作参考图 + 画布连线（衍生卡基于基础卡出图链路的真实实现）；
+    // 基卡出图失败/成环时不接线不传参考，按无参考出图并点名，与「宁可漏接、不可误接」同口径。
+    const baseRefs: { id: string; nodeId: string; path: string; mimeType: string }[] = [];
+    for (const ref of asset.refs ?? []) {
+      const producedImage = produced.get(ref);
+      const refNodeId = nodeIds.get(ref);
+      if (producedImage && refNodeId) {
+        baseRefs.push({ id: ref, nodeId: refNodeId, ...producedImage });
+      } else {
+        warnings.push(`${asset.id} 的基卡 ${ref} 没有可用成图（未勾选、出图失败或依赖成环），本卡按无参考出图`);
+      }
+    }
+    if (baseRefs.length > maxAssetImageReferences) {
+      warnings.push(`${asset.id} 的基卡参考 ${baseRefs.length} 张超过图片模型上限 ${maxAssetImageReferences}，只保留前 ${maxAssetImageReferences} 张`);
+      baseRefs.length = maxAssetImageReferences;
+    }
     // ACT: 单张失败不再中断整条导入——已出的图与已建的节点保留，索引里这张卡的 nodeId 留 null，
     // 失败清单回传（面板文案与 node:importStatus 都能看到），补一张的代价远小于整批重来。
     try {
@@ -296,10 +348,18 @@ export async function generateAssetImages(options: {
         prompt: asset.negativePrompt?.trim() ? `${body}\n避免出现：${asset.negativePrompt.trim()}` : body,
         outputDirectory: options.assetDirectory,
         ratio: picked.ratio,
+        ...(baseRefs.length ? { images: baseRefs.map(ref => ({ path: ref.path, mimeType: ref.mimeType })) } : {}),
       }, options.signal);
       const image = images[0];
       if (!image?.path) throw new Error("出图没有返回文件");
-      nodeIds.set(asset.id, await options.createImageNode({ path: image.path, mimeType: image.mimeType, label }));
+      const nodeId = await options.createImageNode({
+        path: image.path,
+        mimeType: image.mimeType,
+        label,
+        refs: baseRefs.map(ref => ({ id: ref.id, nodeId: ref.nodeId })),
+      });
+      nodeIds.set(asset.id, nodeId);
+      produced.set(asset.id, { path: image.path, mimeType: image.mimeType });
     } catch (cause) {
       // 用户主动取消/超时要照常向上抛，只有单张失败被吞成清单。
       if (options.signal?.aborted) throw cause;
@@ -409,6 +469,7 @@ export async function writePlanFiles(options: {
     kind: asset.kind,
     textOnly: isTextOnlyAsset(asset),
     nodeId: options.nodeIds.get(asset.id) ?? null,
+    ...(asset.refs?.length ? { refs: asset.refs } : {}),
   }));
   // ACT: 文本/声音卡不进 referenceIds——校验器 V13 把 textOnly 卡当「图片参考」判 error，派工也要求该卡在画布上有可用产出；
   // 声音资产的用途写在提示词正文里，等接上音频节点再按音频槽单独下发（本节点不出音频）。
@@ -508,7 +569,7 @@ export type AssetImportInput = {
   /** 按 clipId 覆盖抽取出来的分镜（分镜 id 从 S001 起按正文顺序编号），用于导入后仍然保留原文写好的六段式提示词。 */
   clips?: AssetImportClipOverride[];
   assetDirectory: string;
-  createImageNode?(item: { path: string; mimeType: string; label: string }): Promise<string>;
+  createImageNode?(item: { path: string; mimeType: string; label: string; refs?: { id: string; nodeId: string }[] }): Promise<string>;
   imageModel?: AssetImportModel;
   signal?: AbortSignal;
   onExtracted?(extraction: AssetExtraction): void;
