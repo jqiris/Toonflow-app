@@ -4,7 +4,7 @@
 > 审阅对象：M0 技能契约、M1 `planOperator` 工具、M2 `multitrack` 扩展、M3 生成 SOP，对照 `docs/` 下已定稿方案。
 > 审阅时间：2026-10-19。
 
-> **现状更新（2026-10-25）**：文中「写作者直接写官方六段 + `<Picture N>`」「旧 `{{ref N}}` 只报迁移 warning」两条口径已反转——写作者写 `{{ref N}}`（N = `referenceIds` 位次），写 `<Picture N>` 会被 V7 判 error（`planValidator.ts:239-245`）；角色参考板统一 16:9·2K 四栏；资产与分镜接入由画布「导入资产与分镜」节点（`packages/nodes/assetImportNode`）承接。本文件其余审阅结论保留为当时记录。
+[HISTORICAL] > **现状更新（2026-10-25）**：文中「写作者直接写官方六段 + `<Picture N>`」「旧 `{{ref N}}` 只报迁移 warning」两条口径已反转——写作者写 `{{ref N}}`（N = `referenceIds` 位次），写 `<Picture N>` 会被 V7 判 error（`planValidator.ts:239-245`）；角色参考板统一 16:9·2K 四栏；资产与分镜接入由画布「导入资产与分镜」节点（`packages/nodes/assetImportNode`）承接。本文件其余审阅结论保留为当时记录。
 
 ---
 
@@ -63,8 +63,8 @@
 | 多轨字段表（模板 §2 vs `planValidator.ts` `MultitrackClip`） | ✅ 一致：`clipId/seconds/ratio/resolution/generateAudio/prompt.*/referenceIds/continuity/status/nodeId/assetPath` 全部对齐；`seconds` 2–60 整数、`resolution ∈ {768P,2K}`、`ratio` 五档、`clipId ^S\d{3}$` 与 V11/V12 实现逐字一致 |
 | 状态机（模板 §3 vs `resolvedToLite`/`clipSchema`） | ✅ 一致：`pending/generating/generated/accepted/failed` 五态，`planValidator.ts:154` 同集合 |
 | 参考上限 4（模板 §2.2 vs `MAX_IMAGE_REFERENCES`） | ✅ 一致：`planValidator.ts:80` V8 同值；编辑器 `referenceList` 上限 4 同值 |
-| 参考顺序协议（写作者标 `{{ref N}}`，模板 §四 vs SOP §四） | ✅ 现口径一致：写作者写 `{{ref N}}`（N = `referenceIds` 位次），模板 §四 与 SOP §四 仍要求写作者直接写官方六段，但标记不是 `<Picture N>`——尖括号只在 wire 层换算后出现，写进正文会被 V7 判 error |
-| V7 校验 | ✅ 已实现（口径已反转）：现行 V7 把 `<Picture N>`/`<Video N>`/`<Audio N>` 当非法写法报 error（`planValidator.ts:239-245`），只校验 `{{ref N}}` 是否越界、不查重号；旧「尖括号是官方标记」的记录作废 |
+[HISTORICAL] | 参考顺序协议（写作者标 `{{ref N}}`，模板 §四 vs SOP §四） | ✅ 现口径一致：写作者写 `{{ref N}}`（N = `referenceIds` 位次），模板 §四 与 SOP §四 仍要求写作者直接写官方六段，但标记不是 `<Picture N>`——尖括号只在 wire 层换算后出现，写进正文会被 V7 判 error |
+[HISTORICAL] | V7 校验 | ✅ 已实现（口径已反转）：现行 V7 把 `<Picture N>`/`<Video N>`/`<Audio N>` 当非法写法报 error（`planValidator.ts:239-245`），只校验 `{{ref N}}` 是否越界、不查重号；旧「尖括号是官方标记」的记录作废 |
 | 生成调用序列 11 步（SOP §一 vs 方案 §4.1） | ✅ 一致 |
 | 状态查询纪律（SOP §二 vs 方案 §4.6 vs 工具 promptGuidelines） | ✅ 一致，三处同文 |
 | 能力边界/降级（SKILL.md vs SOP §十 vs readme） | ⚠️ 见 W2（`capabilityDegraded` 字段未实现） |
@@ -96,7 +96,7 @@
 
 | # | 问题 | 影响 | 建议 |
 |---|---|---|---|
-| W1 | V7（旧口径：`{{ref N}}` 在 `1..参考数` 内且每个 N 至少出现一次）在 `planValidator.ts` **未实现** | 提示词越界不报错，靠人工 | **已修复**：现行 V7 校验 `{{ref N}}` 是否越界、不查重号；`<Picture N>`/`<Video N>`/`<Audio N>` 一律 error（`packages/tools/planOperator/src/planValidator.ts:239-257`） |
+[HISTORICAL] | W1 | V7（旧口径：`{{ref N}}` 在 `1..参考数` 内且每个 N 至少出现一次）在 `planValidator.ts` **未实现** | 提示词越界不报错，靠人工 | **已修复**：现行 V7 校验 `{{ref N}}` 是否越界、不查重号；`<Picture N>`/`<Video N>`/`<Audio N>` 一律 error（`packages/tools/planOperator/src/planValidator.ts:239-257`） |
 | W2 | `capabilityDegraded` 字段在 `planValidator.ts` 与 `build` 产出中**未实现**，SKILL.md/readme/SOP §十 三处宣称「固定输出」 | 降级项不显式落盘 | M1 补 `capabilityDegraded: string[]` 常量字段（3 项降级恒为 true，直接静态输出） |
 | W3 | `mtrackSchema`（`index.ts:30-33`）不含 `version/projectId/updatedAt/global.style/global.systemPrompt/global.model` 与 `clips[].title/sourceRange/attempts/notes` | 这些字段不被校验也不被拒（`z.object` 非 strict，静默忽略） | 可接受：V11–V15 不依赖这些字段；但应在 readme 注明「未校验字段清单」避免误以为校验过 |
 | W4 | 方案 §6 M3 行仍写「工具加 `dispatch` action」 | 与已交付范围不符 | 已在方案 §6 M3 保留为后续项，建议下一轮明确「M3 仅 SOP，dispatch 待定」 |

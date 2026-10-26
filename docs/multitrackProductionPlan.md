@@ -44,7 +44,7 @@ assets/assetCards.md → plan/storyboard.md → plan/story.mtrack → 每镜一�
 | 5 逐分镜生成 | 每个 clip 的 `nodeId` / `assetPath` / `status` | **每次生成前**确认算力 | 单镜重生成，不动其他镜 |
 | 6 验收与合成 | `plan/composite.json` + 成片 | 用户验收成片 | 重新合成 |
 
-> **现状更新（2026-10-25）**：阶段 2→4 由画布「导入资产与分镜」节点（`packages/nodes/assetImportNode`）承接——接入剧本文本后抽取资产卡与分镜、批量出资产图并建图片节点、写 `plan/assetIndex.json` 与 `plan/story.mtrack`；随后把资产节点连到多轨节点 `in` 端口，在多轨「参考素材」里只从连线上打勾（位次即 `{{ref N}}`）。下文 `planOperator assemble` 的「资产接入三步」只用于已有工程补接，不再是新项目主入口。
+> **现状更新（2026-10-25）**：阶段 2→4 由画布「导入资产与分镜」节点（`packages/nodes/assetImportNode`）承接——接入剧本文本后抽取资产卡与分镜、批量出资产图并建图片节点、写 `plan/assetIndex.json` 与 `plan/story.mtrack`；随后把资产节点连到多轨节点 `in` 端口，在多轨「参考素材」里只从连线上打勾（同媒质位次即 `<Picture N>` / `<Video N>` / `<Audio N>`，见 `docs/h3PromptAlignment.md`）。下文 `planOperator assemble` 的「资产接入三步」只用于已有工程补接，不再是新项目主入口。
 
 **关口铁律**（继承 LSC 与 Toonflow 既有纪律）：
 - 确认简报 ≠ 确认剧本；确认资产 ≠ 验收生成结果；一个小样 ≠ 授权整批。
@@ -96,7 +96,10 @@ assets/assetCards.md → plan/storyboard.md → plan/story.mtrack → 每镜一�
       "resolution": "768P",
       "generateAudio": true,
       "prompt": {
-        "integratedMultimodalDescription": "[Shot 1] 黄昏广陵宅南古槐下…",
+        "subjectDefinitions": "<Picture 1> 是角色A（槐下饮酒者），<Picture 2> 是槐树与庭院，<Picture 3> 是酒碗与酒杯",
+        "summary": "黄昏，广陵宅南古槐下，角色A与友人围坐饮酒，气氛松弛。",
+        "retentionAnalysis": "保留人物面部、酒碗形制与庭院空间结构，允许衣物细节微调。",
+        "detailedDescription": "[Shot 1] 黄昏广陵宅南古槐下，<Picture 1> 侧身而坐，手中举着 <Picture 3> 中的酒碗…",
         "overallSoundscape": "蝉鸣、风吹槐叶、酒碗碰撞",
         "nonDiegeticMusic": "低沉古筝与箫声"
       },
@@ -122,10 +125,13 @@ assets/assetCards.md → plan/storyboard.md → plan/story.mtrack → 每镜一�
 | `ratio` | string | ✅ | `9:16`/`16:9`/`1:1`/`4:3`/`3:4` | 与 global 不同则覆盖 |
 | `resolution` | string | ✅ | `768P`/`2K` | 来自 `durationResolutionMap` |
 | `generateAudio` | boolean | ✅ | — | H3 `audio: "optional"`；freevideo 侧只透传不消费，**apiMart / tfRouter / compshare 会消费**（下发为 `generate_audio`） |
-| `prompt.integratedMultimodalDescription` | string | ✅ | 非空 | 画面/动作/对白（`<d>[Chinese]…</d>`） |
-| `prompt.overallSoundscape` | string | ✅ | 可 `N/A` | 环境声与动作声 |
-| `prompt.nonDiegeticMusic` | string | ✅ | 可 `N/A` | 配乐 |
-| `referenceIds` | string[] | ✅ | **校验器 V8 拦图片 ≤9、音频 ≤1**（常量 `MAX_IMAGE_REFERENCES` / `MAX_AUDIO_REFERENCES`，见 `packages/tools/planOperator/src/planValidator.ts`）——**视频参考与图片同桶计数**，所以「视频 ≤1」只是供应商模式声明，不是校验器拦的；**供应商模式声明与多轨界面勾选还另外都只有 4**（`packages/providers/src/media/freevideo.ts` 的 `imageReference:4`、`packages/nodeShared/src/mtrack/components/referencePicker.vue` 的勾选上限）——超 4 张是产品侧挡下、不是校验器；承接镜（`context`）参考合计 ≤3（V16）；≥30 秒自动分块时引擎实限 3 张；顺序即 `{{ref N}}` | 资产卡编号 |
+| `prompt.subjectDefinitions` | string | ✅ | 非空 | H3 六段第 1 段：主体定义，用 `<Picture N>` / `<Video N>` / `<Audio N>` 标记指位 |
+| `prompt.summary` | string | ✅ | 非空 | H3 六段第 2 段：一句话概括全镜 |
+| `prompt.retentionAnalysis` | string | ✅ | 非空 | H3 六段第 3 段：分析哪些参考应被保留、哪些可变 |
+| `prompt.detailedDescription` | string | ✅ | 非空 | H3 六段第 4 段：详细画面/动作/对白（`[Shot N]` 起，含 `<Picture N>` 指位） |
+| `prompt.overallSoundscape` | string | ✅ | 可 `N/A` | H3 六段第 5 段：环境声与动作声 |
+| `prompt.nonDiegeticMusic` | string | ✅ | 可 `N/A` | H3 六段第 6 段：配乐 |
+| `referenceIds` | string[] | ✅ | **校验器 V8 拦图片 ≤9、音频 ≤1**（常量 `MAX_IMAGE_REFERENCES` / `MAX_AUDIO_REFERENCES`，见 `packages/tools/planOperator/src/planValidator.ts`）——**视频参考与图片同桶计数**，所以「视频 ≤1」只是供应商模式声明，不是校验器拦的；**供应商模式声明与多轨界面勾选还另外都只有 4**（`packages/providers/src/media/freevideo.ts` 的 `imageReference:4`、`packages/nodeShared/src/mtrack/components/referencePicker.vue` 的勾选上限）——超 4 张是产品侧挡下、不是校验器；承接镜（`context`）参考合计 ≤3（V16）；≥30 秒自动分块时引擎实限 3 张；同媒质顺序即 `<Picture N>` / `<Video N>` / `<Audio N>`（见 `docs/h3PromptAlignment.md`） | 资产卡编号 |
 | `continuity` | enum | ✅ | `shot`（独立起拍/切镜）/`context`（承接上一镜） | 首段必须 `shot`；`context` 另受 V16 约束（参考合计 ≤3、时长 ≥10 秒）。旧工程的 `start`/`cut` 归一为 `shot`、`continue` 归一为 `context`（`normalizeContinuity`） |
 | `status` | enum | ✅ | `pending`/`generating`/`generated`/`accepted`/`failed` | 状态机见 §2.4 |
 | `nodeId` | string\|null | ✅ | 画布节点通道生成后必有；服务端媒体任务通道恒为 `null` | 视频节点 ID（媒体任务通道不建节点） |
@@ -153,11 +159,10 @@ referenceIds: ["C01", "C03", "C05", "SC02"]   ← 全是图片时位次恰好等
         <Picture 1> <Picture 2> <Picture 3> <Picture 4>
 ```
 
-> **现状更新（2026-10-25）**：上图是换算结果，不是写作者写法——正文写 `{{ref N}}`，`<Picture N>` 由 wire 层按 `dataType` 生成（`directDispatch.ts:95-102`、`mediaDispatch.ts:110-121`）。
-
 - Toonflow 侧实际顺序由 `data.referenceOrder`（键 `encodeURIComponent(JSON.stringify([source,sourceHandle]))`）+ 入边顺序决定，**必须逐一核对**；
-- **六段由写作者直接写**：接了参考图就按 MiniMax H3 官方 ref2va 六段书写（`subject_definitions:` / `summary:` / `retention_analysis:` / `detailed_description:`），引擎只拼「全片风格 / 全片约束」前缀、正文原样透传，不代写任何一段，也**不再自动追加段尾「本段参考顺序」声明行**（该写法已取消；写作者直接写 `{{ref N}}`，N = `referenceIds` 位次，节点 wire 层按 `dataType` 换算成官方标记；写 `<Picture N>` 会被 V7 判 error，见 `planValidator.ts:239-245`）；
+- **六段由写作者直接写**：接了参考图就按 MiniMax H3 官方 ref2va 六段书写（`subject_definitions:` / `summary:` / `retention_analysis:` / `detailed_description:`），引擎只拼「全片风格 / 全片约束」前缀、正文原样透传，不代写任何一段；参考标记**直接写** `<Picture N>` / `<Video N>` / `<Audio N>`（各媒质独立编号），不再使用旧双花括号占位符，也不再有 wire 层换算通道；
 - **参考形貌必写**：官方 `ref-en.txt` §0/§5.3 要求 detailed_description 尽可能详细，被引用资产首次出现处要写「被引用特征 + 画面位置 + 当前动作」（旧版「写了引用就不描述外貌」的素材排他说法已废弃）。
+- **H3 对齐权威口径**：六段段名、顺序、退化三段、参考标记写法与 V7 校验规则见 `docs/h3PromptAlignment.md`。
 
 ---
 
@@ -230,7 +235,7 @@ packages/ext/multitrack/
 5) node:getConfig  → 确认可用 mode 与 duration
 6) node:setConfig({ providerId:"freevideo", modelId:"MiniMax-H3",
                     duration:<seconds>, resolution:<768P|2K>, ratio, generateAudio, mode })
-7) node:setPrompt({ prompt: <写作者已写好的官方六段，参考写 {{ref N}}；引擎只拼全片风格/全片约束前缀、正文原样透传> })
+7) node:setPrompt({ prompt: <写作者已写好的官方六段，参考写 <Picture N>/<Video N>/<Audio N>；引擎只拼全片风格/全片约束前缀、正文原样透传> })
 8) 展示生成方案并等待用户批准
 9) node:generateVideo({})
 10) 同一轮内用 node:getGenerationStatus 查终态；**跨轮/换会话前必须先用 getCanvasNodes 读该节点 outputs 确认已产出**，不能凭状态字段判断（见 §4.6）
@@ -388,10 +393,12 @@ LSC 用尾帧 latent 续写；本仓库不自己截帧，走引擎官方的续�
 
 ### 10.3 实跑发现并已修正的链路问题（均为真实故障，非纸面推演）
 
-1. **`{{ref N}}` 断链**：`{{refN}}` 只是画布 mention chip，引擎不替换。修复位置在节点层——`packages/nodes/videoGenerationNode/src/index.vue` 新增 `referenceTags()`，当选中 provider 为 `freevideo` 时按画布引用列表**全局序号**（`packages/nodeShared/src/useNodeReferences.ts`）把 `{{ref N}}` 转 `<Picture N>`（IMAGE→Picture / VIDEO→Video / AUDIO→Audio / STRING→参考N）。
-2. **provider 层同类修复被回滚**：`packages/providers/src/media/freevideo.ts` 拿不到 STRING 参考的全序位置，混入文本/视频时编号整体错位（改动前 `{{refN}}` 原样送引擎是无效但不指错，改动后错指=回归），故 provider 层 diff 已清空，修复只保留在节点层。
-3. **FreeVideo API 五条备忘**（已写入 SOP）：`{{refN}}` 不替换；不接受 width/height 直传（422 `permitted field combination`），用 `megapixels` 档位（1.0→1376×768）；`/media` 返回 201 非 200；轮询用 `?wait=25`；下载带 Bearer。
-4. **V7 正则漏检**：原 `ref\s+(\d+)` 要求空白，真实画布里 64 处无空白写法 `{{ref1}}` 全部不命中；t15 修为 `\{\{\s*ref\s*(\d+)\s*\}\}`（`planValidator.ts:207`，注释注明四种写法均命中）。
+> **HISTORICAL（v7 旧口径记录）**：以下 1/2/4 三条描述已作废的 `{{ref N}}` 双花括号占位符与 wire 层 `{{ref N}}` → `<Picture N>` 换算通道；H3 官方格式下写作者直接写 `<Picture N>` / `<Video N>` / `<Audio N>`，不再有任何换算层，权威口径见 `docs/h3PromptAlignment.md`。以下记录仅作历史追溯保留。
+
+[HISTORICAL] 1. **`{{ref N}}` 断链（已作废）**：`{{refN}}` 只是画布 mention chip，引擎不替换。修复位置在节点层——`packages/nodes/videoGenerationNode/src/index.vue` 新增 `referenceTags()`，当选中 provider 为 `freevideo` 时按画布引用列表**全局序号**（`packages/nodeShared/src/useNodeReferences.ts`）把 `{{ref N}}` 转 `<Picture N>`（IMAGE→Picture / VIDEO→Video / AUDIO→Audio / STRING→参考N）。
+[HISTORICAL] 2. **provider 层同类修复被回滚（已作废）**：`packages/providers/src/media/freevideo.ts` 拿不到 STRING 参考的全序位置，混入文本/视频时编号整体错位（改动前 `{{refN}}` 原样送引擎是无效但不指错，改动后错指=回归），故 provider 层 diff 已清空，修复只保留在节点层。
+3. **FreeVideo API 五条备忘**（已写入 SOP，仍有效）：不接受 width/height 直传（422 `permitted field combination`），用 `megapixels` 档位（1.0→1376×768）；`/media` 返回 201 非 200；轮询用 `?wait=25`；下载带 Bearer。
+[HISTORICAL] 4. **V7 正则漏检（已作废）**：原 `ref\s+(\d+)` 要求空白，真实画布里 64 处无空白写法 `{{ref1}}` 全部不命中；t15 修为 `\{\{\s*ref\s*(\d+)\s*\}\}`（`planValidator.ts:207`，注释注明四种写法均命中）。
 
 ### 10.4 SOP 冻结前的最后两处断点（t13 评审，t19 已修）
 

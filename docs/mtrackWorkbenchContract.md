@@ -27,7 +27,7 @@
 
 工作台「参考素材」区块是资产卡勾选网格，勾选结果**直接读写 `clip.referenceIds`（cardId 字符串数组）**，不引入第二套选区状态。
 
-- **顺序即图N 编号**：`referenceIds` 数组位次就是提示词里 `{{ref N}}` 的 N；下发时按 dataType 换算成 `<Picture N>` / `<Video N>` / `<Audio N>`（各自独立编号、同源复用首个编号）。现有实现：网格序号 `components/referencePicker.vue:27`（`图${orderOf+1}` 角标）、`:59-61`（orderOf）、`:71-80`（toggle：点满 4 个不再加）；换算 `mediaDispatch.ts:55-81`（`referenceTags`）；下发顺序严格按 `referenceIds` `mediaDispatch.ts:124-129`；顺序一致性由校验器 V15 兜底 `planValidator.ts:273-285`。卡片上展示的「图N」= 下标 + 1。
+[HISTORICAL] - **顺序即图N 编号**：`referenceIds` 数组位次就是提示词里 `{{ref N}}` 的 N；下发时按 dataType 换算成 `<Picture N>` / `<Video N>` / `<Audio N>`（各自独立编号、同源复用首个编号）。现有实现：网格序号 `components/referencePicker.vue:27`（`图${orderOf+1}` 角标）、`:59-61`（orderOf）、`:71-80`（toggle：点满 4 个不再加）；换算 `mediaDispatch.ts:55-81`（`referenceTags`）；下发顺序严格按 `referenceIds` `mediaDispatch.ts:124-129`；顺序一致性由校验器 V15 兜底 `planValidator.ts:273-285`。卡片上展示的「图N」= 下标 + 1。
 - **mode 三档沿用现契约**：`ClipMode = "ref" | "image" | "text"`（`mtrackProject.ts:25-40`，含缺省推断 `resolveClipMode`），UI 呈现参考模式选择器现实现 `referencePicker.vue:4-9`（使用方式下拉）。这是 LSC `task_mode` 的开放子集，产品收敛理由见 `mtrackLscAlignment.md:21-30`，**不新增第四态**。
 - **上限沿用 mtrackEdit.ts / planValidator 现有校验，不新增第二套**：
   - 独立镜头图片参考 ≤4：`mtrackEdit.ts:57-59`（编辑期拦截）、`planValidator.ts:80`/`:250-260`（V8，`MAX_IMAGE_REFERENCES = 4`）；网格端「点满 4 个不再加」的现实现 `referencePicker.vue:11`（计数 `N/4`）、`:78`（上限拦截）。

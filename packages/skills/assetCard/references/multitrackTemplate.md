@@ -39,7 +39,10 @@
       "resolution": "768P",
       "generateAudio": true,
       "prompt": {
-        "integratedMultimodalDescription": "[Shot 1] Live-action, cinematic, dusk light under the old locust tree south of the Guangling mansion. C01 raises the bowl and drinks; [Shot 2] At 00:04.500, the camera cuts to a close shot of the bowl tilting.",
+        "subjectDefinitions": "subject_definitions:\n<Subject 1> is the young man in <Picture 1> wearing a grey short jacket with a jade pendant.",
+        "summary": "summary:\n[reference generation] A two-shot dusk drinking scene under an old locust tree, camera push-in to the bowl at 00:04.500.",
+        "retentionAnalysis": "retention_analysis:\n<Subject 1> (appears in [Shot 1], [Shot 2]): fully_preserved - grey short jacket and jade pendant match <Picture 1>.",
+        "detailedDescription": "detailed_description:\n[Shot 1] Live-action, cinematic, dusk light under the old locust tree south of the Guangling mansion. <Subject 1> from <Picture 1> raises the ceramic bowl and drinks. [Shot 2] At 00:04.500, the camera cuts to a close shot of the bowl tilting.",
         "overallSoundscape": "Cicadas, wind through locust leaves, the clink of the ceramic bowl.",
         "nonDiegeticMusic": "A low guzheng and xiao motif, sparse."
       },
@@ -55,7 +58,7 @@
 }
 ```
 
-> 片段带参考时，`integratedMultimodalDescription` 要按 §四 直接写官方六段（`subject_definitions:` → `summary:` → `retention_analysis:` → `detailed_description:`），正文用 `{{ref N}}` 指位；上面骨架为求简短，只示意了画面正文段。
+> 片段带参考时，六段字段的正文都按 §四 直接写官方六段结构（段首标签 + 段内正文，段间空一行）：`subjectDefinitions`（subject_definitions）、`summary`、`retentionAnalysis`、`detailedDescription`（detailed_description）、`overallSoundscape`、`nonDiegeticMusic`；正文里指位一律用官方 `<Picture N>` / `<Video N>` / `<Audio N>`，N = `referenceIds` 中同类型参考的位次（图片、视频、音频各自独立从 1 起编号）。上面骨架为求简短，只示意了画面正文段。
 
 ---
 
@@ -87,10 +90,13 @@
 | `ratio` | string | ✅ | 五档枚举 | 与 `global.ratio` 不同则覆盖；**缺省不跟随 `global.ratio`，会静默落 `9:16`**（`mtrackProject.ts:262`），手写 JSON 必须每镜写全 |
 | `resolution` | string | ✅ | `768P`/`2K` | 来自 `durationResolutionMap`（V12） |
 | `generateAudio` | boolean | ✅ | — | H3 `audio: "optional"` 的开关 |
-| `prompt.integratedMultimodalDescription` | string | ✅ | 非空 | 画面/动作/对白；**正文用英文**，`[Shot 1]` 起，多镜头写 `[Shot 2] At 00:03.000, …`（严格递增且在时长内）；对白包 `<d>[Chinese]…</d>` |
-| `prompt.overallSoundscape` | string | ✅ | 可 `N/A`；**留空则不下发该段** | 环境声与动作声（只写内容，`overall_soundscape:` 由引擎拼） |
-| `prompt.nonDiegeticMusic` | string | ✅ | 可 `N/A`；**留空则不下发该段** | 配乐（只写内容，`non_diegetic_music:` 由引擎拼） |
-| `referenceIds` | string[] | ✅ | **图片 ≤9**（校验器 V8 的 `MAX_IMAGE_REFERENCES = 9`）、**音频 ≤1**（同属 V8 的 `MAX_AUDIO_REFERENCES = 1`）；**视频参考并入图片桶一起计数，V8 不校验视频**（卡体系没有 `video` 这个 `kind`，「视频 ≤1」只是供应商声明）；**多轨界面勾选上限只有 4**（`referencePicker.vue` 的 `toggle` 硬编码，4 来自供应商声明的 `imageReference:4`）——超 4 张是被界面挡下的，不是校验器挡下的；顺序是画布引用位次，`{{ref N}}` 的 `N` 就是这里的下标 +1（可混入 `kind: "sound"` 音频卡） | 资产卡编号，须存在于 `assetIndex.json` 且资产已出图（V13） |
+| `prompt.subjectDefinitions` | string | 有参考时 ✅；无参考可空 | 段首标签 `subject_definitions:` 由本字段首行书写 | 六段之一：定义每个 `<Subject N>` 及其 `<Picture N>` / `<Video N>` / `<Audio N>` 来源与主要特征（详见 §四）；**正文用英文** |
+| `prompt.summary` | string | 有参考时 ✅；无参考可空 | 段首标签 `summary:` 由本字段首行书写 | 六段之一：一句话总述任务类型（`[reference generation]` / `[keyframe completion]` / `[video continuation]` 等）与主要参考关系 |
+| `prompt.retentionAnalysis` | string | 有参考时 ✅；无参考可空 | 段首标签 `retention_analysis:` 由本字段首行书写 | 六段之一：逐条写 `<Subject N>` / `<Picture N>` 等的关系标记，可见内容用 `fully_preserved` / `partially_preserved` / `attribute_transfer` / `weak_reference`，音频用 `fully_copy` / `partially_copy` / `reference` / `weak_reference` |
+| `prompt.detailedDescription` | string | ✅ | 非空 | 六段之一；段首标签 `detailed_description:` 由本字段首行书写；正文用英文，`[Shot 1]` 起、多镜头写 `[Shot 2] At 00:03.000, …`（严格递增且在时长内）；对白包 `<d>[Chinese]…</d>`；参考标记用官方 `<Picture N>` / `<Video N>` / `<Audio N>` |
+| `prompt.overallSoundscape` | string | ✅ | 可 `N/A`；**留空则不下发该段** | 六段之一；段首标签 `overall_soundscape:` 由本字段首行书写；环境声与动作声 |
+| `prompt.nonDiegeticMusic` | string | ✅ | 可 `N/A`；**留空则不下发该段** | 六段之一；段首标签 `non_diegetic_music:` 由本字段首行书写；配乐 |
+| `referenceIds` | string[] | ✅ | **图片 ≤9**（校验器 V8 的 `MAX_IMAGE_REFERENCES = 9`）、**音频 ≤1**（同属 V8 的 `MAX_AUDIO_REFERENCES = 1`）；**视频参考并入图片桶一起计数，V8 不校验视频**（卡体系没有 `video` 这个 `kind`，「视频 ≤1」只是供应商声明）；**多轨界面勾选上限只有 4**（`referencePicker.vue` 的 `toggle` 硬编码，4 来自供应商声明的 `imageReference:4`）——超 4 张是被界面挡下的，不是校验器挡下的；顺序是画布引用位次；官方参考标记 `<Picture N>` / `<Video N>` / `<Audio N>` 的 `N` 按 `referenceIds` 中同类型（IMAGE / VIDEO / AUDIO）位次独立从 1 起编号（详见 §四） | 资产卡编号，须存在于 `assetIndex.json` 且资产已出图（V13） |
 | `mode` | enum | 否 | `ref` / `image` / `text` | 任务模式：`ref` 多图参考、`image` 单图首帧、`text` 纯文。**缺省只能推断出 `text`（无 `referenceIds`）或 `ref`（有参考）；`image` 推断不出来，要单图首帧必须显式写**（`resolveClipMode`，`mtrackProject.ts:47-51`） |
 | `continuity` | enum | ✅ | `shot`（独立起拍/切镜）/ `context`（承接上一镜） | **首段必须 `shot`**；`context` 时参考素材合计 ≤3（图片/视频/音频同口径，V16 按 `referenceIds` 总数判）、时长 ≥10 秒；**默认 `context`**，例外与判据见 §2.3 |
 | `status` | enum | ✅ | `pending`/`generating`/`generated`/`accepted`/`failed` | 状态机见 §三 |
@@ -145,94 +151,95 @@ pending ──提交生成──> generating ──成功──> generated ─�
 
 ---
 
-## 四、参考标记：写作者直接写六段 + `{{ref N}}`
+## 四、参考标记：作者直接写官方六段 + `<Picture N>`
 
 `referenceIds` 的数组顺序即权威。Toonflow 侧的实际顺序由 `data.referenceOrder`（键为 `encodeURIComponent(JSON.stringify([source, sourceHandle]))`）+ 入边顺序决定，**必须逐一核对**，不能假定连线手势等于数组顺序（V15）。
 
-**编号规则**：参考标记统一写 `{{ref N}}`，`N` 就是 `referenceIds` 里的位次（从 1 起）。不管参考是图片、音频还是视频，都按同一份列表连续编号：
+**编号规则**：作者直接写官方参考标记 `<Picture N>` / `<Video N>` / `<Audio N>`；每个类型的 `N` 独立从 1 起编号，位次取自该类型资产在 `referenceIds` 数组中的先后（同类型去重后按出现顺序）。引擎下发时不再换算、不再替换，正文里的标记原样进入六段文本，最终由 `buildPrompt`（`packages/nodeShared/src/mtrack/mediaDispatch.ts`）拼装、由 `composeClipRequest` 校验越界与旧占位符：
 
 ```text
-referenceIds: ["C01", "C03", "C05", "SC02"]
-                 ↓      ↓      ↓      ↓
-            {{ref 1}} {{ref 2}} {{ref 3}} {{ref 4}}
+referenceIds: ["C01", "C03", "C05", "SC02"]   ← 全是图片卡
+              ↓      ↓      ↓      ↓
+        <Picture 1> <Picture 2> <Picture 3> <Picture 4>
 ```
 
-混排音频卡（`kind: "sound"`）时位次照常往后排，不跳号：
+混入视频 / 音频卡时，各类型编号互不干扰，同类型内部按位次连续编号：
 
 ```text
-referenceIds: ["C01", "S01", "C03"]
-                 ↓      ↓      ↓
-            {{ref 1}} {{ref 2}} {{ref 3}}
+referenceIds: ["SC01(IMAGE)", "C01(IMAGE)", "V01(VIDEO)", "S01(AUDIO)"]
+              ↓           ↓          ↓          ↓
+         <Picture 1> <Picture 2> <Video 1> <Audio 1>
 ```
 
-引擎下发前会按参考的媒体类型把 `{{ref N}}` 换算成模型侧标记（图片、视频、音频各自编号），写作者只需要记住「`N` = 参考列表第 N 项」这一条，不必自己按类型数。同一个资产在多处引用时，始终写同一个 `{{ref N}}`。
+同一资产在多处引用时始终用同一个标记；同一类型的位次在正文里可以反复出现（不要求每种位次都出现，缺席该位次不报错，该资产仍留在 `referenceIds` 里才会送进引擎）。**V7 现行规则翻转**：官方尖括号标记视为合法正文，旧的「双花括号 ref 占位符」一律 error。
 
-V7 只查越界：`{{ref N}}` 的 `N` 必须落在 `1..referenceIds.length` 内。**不查重号**（同一编号在正文里反复出现属正常写法），也**不要求**每个编号都出现——某张参考本镜用不上，正文里可以完全不出它的标记，但它仍要留在 `referenceIds` 里才会送进引擎。
+### 六段由作者直接写，引擎不再代写
 
-### 六段由写作者直接写，引擎不再代写
+官方 ref2va 六段一一对应 `clips[].prompt` 的六个驼峰字段；段首标签（`subject_definitions:` 等）由作者在本字段首行书写，段名本身不再由引擎代拼：
 
-官方 ref2va 六段里，前四段写进 `clips[].prompt.integratedMultimodalDescription`（段首标签自己写，段间空一行），后两段分别写进 `overallSoundscape` / `nonDiegeticMusic`（**字段里只写内容，不写段名**——段名由 `buildPrompt` 拼，写两遍会变成 `overall_soundscape: overall_soundscape: …`）：
-
-| 段 | 段首标签 | 写进哪个字段 | 写什么 |
+| 段 | 段首标签 | 写入字段 | 写什么 |
 |---|---|---|---|
-| 资产定义段 | `subject_definitions:` | `integratedMultimodalDescription` | 每个参考资产一行 `<Subject N> = <卡ID>（<名称>，用途：<kind>）`，并写出该资产的外貌 / 空间结构 / 形制特征 |
-| 摘要段 | `summary:` | 同上 | 一两句总述本镜画面与动作 |
-| 参考保持分析段 | `retention_analysis:` | 同上 | 逐条写 `<Subject N>` 保留了哪些特征，用官方关系标记 `fully_preserved` / `partially_preserved` |
-| 画面正文段 | `detailed_description:` | 同上 | `[Shot 1]` 起的分镜动作与环境；被引用资产首次出现处写「被引用特征 + 画面位置 + 当前动作」，用 `{{ref N}}` 指位 |
-| 环境声段 | `overall_soundscape:`（引擎补） | `overallSoundscape`（只写内容） | 环境声与动作声 |
-| 配乐段 | `non_diegetic_music:`（引擎补） | `nonDiegeticMusic`（只写内容） | 配乐 |
+| 资产定义段 | `subject_definitions:` | `prompt.subjectDefinitions` | 每个参考资产一行 `<Subject N>`，写出该资产的外貌 / 空间结构 / 形制特征；若资产来自图片 / 视频 / 音频，在同一行的定义中显式引用 `<Picture N>` / `<Video N>` / `<Audio N>` 作为来源（官方规范 §2） |
+| 摘要段 | `summary:` | `prompt.summary` | 一段英文，句首是方括号任务类型（`[reference generation]` / `[keyframe completion]` / `[video editing + audio reuse]` …），随后总结主体与主要参考关系 |
+| 参考保持分析段 | `retention_analysis:` | `prompt.retentionAnalysis` | 每个 `<Subject N>` / `<Picture N>` 一行，用官方关系标记 `fully_preserved` / `partially_preserved` / `attribute_transfer` / `weak_reference`（音频对应 `fully_copy` / `partially_copy` / `reference` / `weak_reference`） |
+| 画面正文段 | `detailed_description:` | `prompt.detailedDescription` | `[Shot 1]` 起的分镜动作与环境；被引用资产首次出现处写「被引用特征 + 画面位置 + 当前动作」，用 `<Picture N>` / `<Video N>` / `<Audio N>` 指位；对白包 `<d>[语言]…</d>` |
+| 环境声段 | `overall_soundscape:` | `prompt.overallSoundscape` | 环境声与动作声（含段名） |
+| 配乐段 | `non_diegetic_music:` | `prompt.nonDiegeticMusic` | 配乐（含段名） |
 
-**硬要求：有参考的片段，`integratedMultimodalDescription` 的第一行必须是 `subject_definitions:`**（段首标签，不能只按顺序罗列六段内容）。漏写段首时 `buildPrompt`（`packages/nodeShared/src/mtrack/directDispatch.ts:106`）会兜底补一个 `detailed_description: `（有参考）/ `integrated_multimodal_description: `（无参考），等于把整段当成画面正文——`summary` 与 `retention_analysis` 直接缺失，六段结构不完整。
+**硬要求**：有参考的片段，`subjectDefinitions` 的第一行必须是 `subject_definitions:`（段首标签）；`summary` / `retentionAnalysis` / `detailedDescription` / `overallSoundscape` / `nonDiegeticMusic` 同理。留空该字段则该段整体不下发；六个字段全空等于无提示词，V11 拒绝。
 
 可直接照抄的完整示例（沿用 §一 骨架的 S001；正文按 §〇 口径用英文，资产名可写中文卡名）：
 
 ```jsonc
 "prompt": {
-  "integratedMultimodalDescription": "subject_definitions:\n<Subject 1> = C01（淳于棼·人间游侠，用途：character），青灰短褐、腰间旧玉佩、束发木簪。\n<Subject 2> = C03（淳于棼·驸马，用途：character），驸马红袍、金冠、腰悬玉带。\n<Subject 3> = C05（罗云，用途：character），藕荷色襦裙、右眉浅疤、垂鬟。\n<Subject 4> = SC02（槐下饮酒·夜，用途：scene），老槐树、石桌石凳、树下灯笼。\n\nsummary:\n槐树下夜饮：C01 举碗饮尽，C05 斟酒，镜头由中景推到碗的特写。\n\nretention_analysis:\n<Subject 1> (appears in [Shot 1], [Shot 2]): fully_preserved - 青灰短褐、旧玉佩、束发木簪，与 {{ref 1}} 一致。\n<Subject 3> (appears in [Shot 2]): fully_preserved - 藕荷色襦裙、右眉浅疤，与 {{ref 3}} 一致。\n<Subject 4> (appears in [Shot 1], [Shot 2]): partially_preserved - 保留老槐树形态与石桌位置，夜色与灯笼暖光按本镜重打。\n\ndetailed_description:\n[Shot 1] Live-action, cinematic, dusk light under the old locust tree south of the Guangling mansion. C01 ({{ref 1}}), a lean man in a grey short jacket with an old jade pendant, stands by the stone table and drains the ceramic bowl; C05 ({{ref 3}}) leans in to refill it. The old locust tree and stone table from SC02 ({{ref 4}}) frame them in the foreground shadow. [Shot 2] At 00:04.500, the camera cuts to a close shot of the bowl tilting, a drop of wine running down its rim.",
-  "overallSoundscape": "Cicadas, wind through locust leaves, the clink of the ceramic bowl, wine pouring.",
-  "nonDiegeticMusic": "A low guzheng and xiao motif, sparse."
+  "subjectDefinitions": "subject_definitions:\n<Subject 1> is the young man in <Picture 1>, wearing a grey short jacket with an old jade pendant at his waist and a wooden hairpin.",
+  "summary": "summary:\n[reference generation] A two-shot dusk drinking scene under an old locust tree; <Subject 1> raises the bowl and the camera pushes in to a close shot of it.",
+  "retentionAnalysis": "retention_analysis:\n<Subject 1> (appears in [Shot 1], [Shot 2]): fully_preserved - grey short jacket, jade pendant, and wooden hairpin all match <Picture 1>.",
+  "detailedDescription": "detailed_description:\nThe scene is lit by dusk under an old locust tree south of the Guangling mansion, cinematic realism. [Shot 1] <Subject 1> (from <Picture 1>) stands at a stone table under the tree and lifts a ceramic bowl to his lips, drinking; another figure leans in to refill it. The tree canopy and the stone table from the same reference frame the foreground shadow. [Shot 2] At 00:04.500, the camera cuts to a close shot of the bowl tilting, a drop of wine running down its rim.",
+  "overallSoundscape": "overall_soundscape:\nCicadas, wind through locust leaves, the clink of the ceramic bowl, wine pouring.",
+  "nonDiegeticMusic": "non_diegetic_music:\nA low guzheng and xiao motif, sparse."
 }
 ```
 
-下发到引擎时，`buildPrompt`（`packages/nodeShared/src/mtrack/directDispatch.ts:97-114`）看到正文已自带官方段首就**不再套字段名**（`:95` 的 `officialSection` 匹配即跳过补全），正文原样进 wire，段间空一行：
+下发到引擎时，`buildPromptText`（`packages/nodeShared/src/mtrack/mediaDispatch.ts`）按六段顺序（`subject_definitions` → `summary` → `retention_analysis` → `detailed_description` → `overall_soundscape` → `non_diegetic_music`）把非空字段用空行分隔拼成一段；退化到无参考（三主段缺失）时只下发 `detailed_description` + `overall_soundscape` + `non_diegetic_music` 三段；有 `referenceIds` 时会额外注入首帧指令 `For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.`。最终 wire 文本示意：
 
 ```text
 subject_definitions:
-<Subject 1> = C01（…）
+<Subject 1> is the young man in <Picture 1>, ...
 
 summary:
-…
+[reference generation] A two-shot dusk drinking scene ...
 
 retention_analysis:
-…
+<Subject 1> (appears in [Shot 1], [Shot 2]): fully_preserved - ...
 
 detailed_description:
-[Shot 1] …
+The scene is lit by dusk ... [Shot 1] ... [Shot 2] At 00:04.500, ...
 
-overall_soundscape: Cicadas, wind through locust leaves, …
+overall_soundscape:
+Cicadas, wind through locust leaves, the clink of the ceramic bowl, wine pouring.
 
-non_diegetic_music: A low guzheng and xiao motif, sparse.
+non_diegetic_music:
+A low guzheng and xiao motif, sparse.
 ```
 
-上面是**节点 wire 层最终发给引擎的文本**。`buildPrompt` 不改写正文：正文里的 `{{ref N}}` 原样保留，到 `packages/nodes/videoGenerationNode/src/index.vue` 的 `generationPrompt` 才用 `referenceTags(refList)` 按每个参考的 `dataType` 逐位换算成模型侧标记（图片、视频、音频各自编号）；模型 id 命中 `minimax-h3` 的供应商都会换算。写作者只管按 §四 的 `{{ref N}}` 口径写，换算不用自己数。
+`global.style` / `global.systemPrompt` **不再由 buildPromptText 拼成「全片风格 / 全片约束」前缀**（旧行为）；这两项改由服务端通道另行下发，不占官方六段位置，也不在 wire 提示词文本里出现。要求 wire 提示词严格以 `subject_definitions:` 开头（或退化时以 `detailed_description:` 开头）的场合不需要留空它们，直接写即可。
 
-工程设了 `global.style` / `global.systemPrompt` 时，引擎会把「全片风格：…」「全片约束：…」这两行拼在整段正文最前面（`packages/nodeShared/src/mtrack/directDispatch.ts:101-105`），它们不属于官方六段；要求 wire 提示词严格以 `subject_definitions:` 开头的场合，把这两个工程字段留空。
-
-- 没有参考的片段只写画面正文段（其余五段不出现），下发时仍是 `integrated_multimodal_description: <正文>`。
-- 画布参考区把资产插进镜头时，mention chip 写入的也是 `{{ref N}}`（N = 参考位次），与手写同一套口径，画布链路不需要额外处理。
-- `subject_definitions` 里的「用途：」跟卡类别走：`character` / `scene` / `prop` / `sound`——`plan/assetIndex.json` 的 `kind` 只认这四个值（`packages/nodes/assetImportNode/src/assetImport.ts:15` 的 `AssetKind`）；`KF` 构图卡不进 `assetIndex`，用途可写 `composition`，但**它不是 `kind` 的取值**，写进索引会被当非法。
-- 每改一次 `referenceIds` 或连线，都要重新核对正文里的 `{{ref N}}` 位次并重新 `setPrompt`（R9：编号漂移）。
+- 没有参考的片段只写画面正文段（`detailedDescription`），其余五段可留空；下发时是退化的三段（`detailed_description:` + `overall_soundscape:` + `non_diegetic_music:`）。
+- 画布参考区把资产插进镜头时，mention chip 写入的也是官方 `<Picture N>` / `<Video N>` / `<Audio N>`（N 按类型位次），与手写同一套口径，画布链路不需要额外处理。
+- `subject_definitions` 里的「用途」跟卡类别走：`character` / `scene` / `prop` / `sound`——`plan/assetIndex.json` 的 `kind` 只认这四个值（`packages/nodes/assetImportNode/src/assetImport.ts:15` 的 `AssetKind`）；`KF` 构图卡不进 `assetIndex`，用途可写 `composition`，但**它不是 `kind` 的取值**，写进索引会被当非法。
+- 每改一次 `referenceIds` 或连线，都要重新核对正文里的 `<Picture N>` / `<Video N>` / `<Audio N>` 位次（按类型分组独立编号）并重新 `setPrompt`（R9：编号漂移）。
 
 ### 参考形貌规则
 
 挂了参考的资产，**正文仍要写清它的形貌**——这是 MiniMax H3 官方 full-reference（ref2va）规范的硬要求，不是可选项：
 
-- `subject_definitions` 里定义 `<Subject N>` 时要列出该资产的特征（外貌 / 空间结构 / 形制）。
+- `subject_definitions` 里定义 `<Subject N>` 时要列出该资产的特征（外貌 / 空间结构 / 形制），并显式引用 `<Picture N>` / `<Video N>` / `<Audio N>` 作为来源（同一段的多个 Subject 可以共享同一个 Picture 来源）。
 - `retention_analysis` 里用官方关系标记写清保留了哪些特征（见 [生成工作手册](generationRunbook.md) §十一）。
 - `detailed_description` 里该资产首次出现时，要同时写「被引用的特征 + 画面位置 + 当前动作」，环境与光照照常写；`[Shot 1]` 前允许用一两句英文定下风格。
-- 担心模型把第 1 张图当精确首帧时，可在 `detailed_description` 末尾自己补一句「图片仅作参考，不自动作为精确首帧。」——本仓库无 latent 续接，这是可选句子，引擎不再自动追加。
+- 担心模型把第 1 张图当精确首帧时，可在 `detailed_description` 末尾自己补一句「图片仅作参考，不自动作为精确首帧。」——本仓库无 latent 续接，这是可选句子，引擎不再自动追加（但有 `referenceIds` 时 `buildPromptText` 会额外注入 `For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.` 首帧指令，与这句可选句子不冲突）。
 
-"因为挂了参考图所以正文不能描述"是错的：官方 `ref-en.txt` §0 明确要求 detailed_description 尽可能详细，§5.3 要求在参考主体首次出现时描述其被引用特征；官方完整示例里同一处咖啡店砖墙、沙发、霓虹灯在 `subject_definitions`、`retention_analysis`、`detailed_description` 三处都写了一遍。正文只留一句 `{{ref 1}}` 而不写特征，模型就只能靠一张图去猜，这才是画面跑偏的常见原因。
+「因为挂了参考图所以正文不能描述」是错的：官方 `ref-en.txt` §0 明确要求 detailed_description 尽可能详细，§5.3 要求在参考主体首次出现时描述其被引用特征；官方完整示例里同一处咖啡店砖墙、沙发、霓虹灯在 `subject_definitions`、`retention_analysis`、`detailed_description` 三处都写了一遍。正文只留一个 `<Picture 1>` 而不写特征，模型就只能靠一张图去猜，这才是画面跑偏的常见原因。
 
 需要换装、换状态时，改的是**参考卡的编号**（换 `C03`），不是把参考图里没有的新外貌写成另一套；描述要与参考图一致。
 
@@ -268,7 +275,7 @@ non_diegetic_music: A low guzheng and xiao motif, sparse.
 | `referenceIds` 存在于 `assetIndex.json` 且资产已出图；`generated`/`accepted` 的 `nodeId`/`assetPath` 必须存在 | V13 |
 | 合成清单只含 `accepted` 镜，顺序连续无空洞 | V14 |
 | `referenceIds` 顺序与画布实际 `referenceOrder` + 入边顺序逐一一致 | V15 |
-| 参考标记 `{{ref N}}` 的编号**只查越界**（`N` 必须在 `1..referenceIds.length` 内），**不查重号**、缺席某个编号不报错；正文出现 `<Picture N>`/`<Video N>`/`<Audio N>` 尖括号一律 error | V7 |
+| 参考标记 `<Picture N>` / `<Video N>` / `<Audio N>` 按媒质（IMAGE/VIDEO/AUDIO）分组**各自独立查越界**（`N` 必须在 `1..同类型参考张数` 内）；正文出现「双花括号 ref 占位符」一律 error | V7 |
 | 参考数超过节点实际匹配模式上限 | V8 / V10 |
 | 续接镜（`context`）参考合计 ≤3、时长 ≥10 秒（引擎限制） | V16 |
 

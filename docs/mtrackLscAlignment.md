@@ -16,7 +16,7 @@
 | `task_mode` | `default` / `ref` / `edit` / `l2v` | `ref` / `image` / `text` | ⚠️ 子集（见下） |
 | 参考图上限 | 独立 4 张 / 续接 3 张 | 同 | ✅ 校验器 V8/V16 拦截 |
 | 续接时长下限 | 10 秒 | 同 | ✅ 校验器 V16 拦截 |
-| 参考顺序 | `images[]` 顺序决定 Picture 编号 | `referenceIds` 顺序决定，`{{ref N}}` 换算 | ✅ |
+[HISTORICAL] | 参考顺序 | `images[]` 顺序决定 Picture 编号 | `referenceIds` 顺序决定，`{{ref N}}` 换算 | ✅ |
 | 帧率 | 24 | 24 | ✅ |
 | 时长网格 | 17n+5 | 由引擎侧处理，协议层透传秒数 | ✅ |
 
@@ -87,7 +87,7 @@ if value.get('continue_from') and media has (first | last):
 | `nh-editor-heading`（:1330 标题 + 项目/预览位） | 头部「镜头创作」+ 镜数/总秒数/工程路径行；预览与项目管理移交浮窗 | ✅ |
 | `nh-quick-settings`（:1332 画幅/模型/分辨率） | 快捷设置行：画幅下拉 + 视频模型下拉 + 「W × H · 24fps」估算文本（与 freevideo 下发口径同源） | ✅ |
 | `nh-section-heading` 01 + `nh-tabs`（:1333 镜头页签条） | 「01 选择镜头」+ `shotTabs.vue` 页签条（标题/起止累计秒/状态）；批量调整 details + 「＋ 添加镜头」 | ✅ |
-| `nh-workspace`（:1334-1338 左镜头编辑 + 右参考素材） | 「02 镜头内容」`shotEditorPane.vue`（名称/时长/画幅/分辨率/声音/提示词大框/衔接） + `referencePicker.vue` 参考素材勾选网格（位次即 `{{ref N}}`） | ✅ |
+[HISTORICAL] | `nh-workspace`（:1334-1338 左镜头编辑 + 右参考素材） | 「02 镜头内容」`shotEditorPane.vue`（名称/时长/画幅/分辨率/声音/提示词大框/衔接） + `referencePicker.vue` 参考素材勾选网格（位次即 `{{ref N}}`） | ✅ |
 | `details('results')`（:1340 合并勾选镜头） | 「生成结果 · 校验」折叠区（statusPanel）；**合并勾选在浮窗版本菜单**（见下） | ✅ 位置偏离 |
 | 高级设置（:1342-1348 项目设置/约束/范围） | 「高级设置」details：项目名称、全片风格、系统提示词（全片 + 本镜覆盖）、生成范围（从第 N 镜 + 镜数，-1 = 到最后） | ✅（采样/LoRA 不暴露，见下） |
 | `nh-run-footer`（:1351 03 生成视频） | `runFooter.vue`：错误行 + 范围提示 + 保存/生成视频/暂停/继续/结束本批 + 状态行（`aria-live`） | ✅ |

@@ -14,7 +14,7 @@
 |---|---|---|---|
 | K1 | **资产卡编号体系**：`C/SC/P/KF/S` + 字母状态后缀，重复编号拒收（LSC 报告 §1.1） | 工作区文档 `assets/assetCards.md`（Markdown，程序可解析的标题行 `### C01 · 名称`） | Toonflow 节点没有 `assetId` 字段，编号只能存在于文件里；Markdown 是 Agent 可读、程序可解析、`useWorkspaceFiles` 与 `@toonflow/file` 都能写的最小载体，且不碰画布 JSON |
 | K2 | **声明式参考接线**：显式字段 > 派生散文 > 正则兜底 + 四道守卫（§2） | 技能 `packages/skills/assetCard/` 内约定 + 工作区索引 `plan/assetIndex.json` | 接线最终仍要落成 `connectNodes` 与 `setPrompt`；约定放技能、结果落索引文件，Agent 每轮可读回，可被 P2 工具确定性校验 |
-| K3 | **程序硬校验**：重复编号、目标存在、backwards-only、`{{ref N}}` 与入边一一对应（§3、§5.3） | 新工具包所在目录 `packages/tools/` 下（包与文件名见 §3.3，名称不得超过 32 字符），构建产物 `build/tools/<name>.tool.js` → 运行时 `data/tools/<name>.tool.js` | 唯一「一等」的确定性通道（Zod `parseAsync` + Draft-7 schema），是运行时业务校验而非测试代码；独立包，卸载即失效 |
+| K3 | **程序硬校验**：重复编号、目标存在、backwards-only、`<Picture N>` / `<Video N>` / `<Audio N>` 与入边同媒质位次一一对应（§3、§5.3） | 新工具包所在目录 `packages/tools/` 下（包与文件名见 §3.3，名称不得超过 32 字符），构建产物 `build/tools/<name>.tool.js` → 运行时 `data/tools/<name>.tool.js` | 唯一「一等」的确定性通道（Zod `parseAsync` + Draft-7 schema），是运行时业务校验而非测试代码；独立包，卸载即失效 |
 | K4 | **分镜/参考图角色分离**：`C*/SC*/P*` 母版、`KF*` 构图卡、分镜格只做动作依据（§6.1） | 技能内的角色分离表 + 资产卡模板；节点侧分别建图片生成节点（母版）与视频生成节点（片段） | 不新增节点类型即可表达；`nodeScaffold` 只放通用能力，业务语义放技能 |
 | K5 | **分镜头 → 视频节点映射**：一段 = 一个视频节点，按编号定位重生成（§6.2/§6.3） | `plan/segmentMap.json`（`segmentId → nodeId`）+ 技能中的命名约定 | Toonflow 无专用重生成路由，重生成 = 再调该节点 `node:generateVideo`；有了映射表才能按段定位 |
 
@@ -159,19 +159,22 @@
 ```
 
 - 节点 `label` 固定模板：`场<场景号>·片段<片段号>·视频`；资产节点：`资产·<卡ID>·<类型>`。`renameNodes` 的 `label` 限 1–200 字符。
-- **片段提示词模板**（写进 `node:setPrompt`，顺序即权威）：
+- **片段提示词模板**（写进 `node:setPrompt`，H3 官方六段，顺序即权威）：
 
-> 旧口径注记（已过时，仅作历史记录）：多轨片段提示词现按 MiniMax H3 官方 ref2va 六段由写作者直接书写，首行不再是「参考顺序：…」声明行，引擎也不再代写资产定义段 / 摘要段 / 参考保持分析段与此类声明行；旧工程带 `{{ref N}}` 的片段属迁移对象。
+> H3 官方格式由写作者直接书写六段（`subject_definitions` / `summary` / `retention_analysis` / `detailed_description` / `overall_soundscape` / `non_diegetic_music`），参考标记直接写 `<Picture N>` / `<Video N>` / `<Audio N>`（各媒质独立编号），引擎只拼「全片风格 / 全片约束」前缀、正文原样透传，不代写任何一段；无旧双花括号占位符的 wire 层换算通道。权威口径见 `docs/h3PromptAlignment.md`。
 
 ```text
-【片段 S001｜8秒】参考顺序：{{ref 1}}=C01、{{ref 2}}=SC01
-<一句话正向接线说明：只锁身份/空间/形制，不锁动作与构图>
-
-C01（本人）：<状态刻画>
-SC01（空间）：<空间刻画>
-动作与镜头：<逐镜或段内节拍>
-声音：<台词/音效>
-约束：<本段禁止项>
+【片段 S001｜8秒】
+subject_definitions:
+  <Picture 1> 是 C01（本人，身份权威）
+  <Picture 2> 是 SC01（空间，结构与布局权威）
+summary: <一句话概括全镜内容与情绪>
+retention_analysis: <分析哪些参考应被严格保留、哪些允许微调>
+detailed_description:
+  [Shot 1] <Picture 2> 空间内，<Picture 1> <状态刻画>，<逐镜或段内节拍>
+  声音：<台词/音效>
+overall_soundscape: <环境声与动作声>
+non_diegetic_music: <配乐，无则 N/A>
 ```
 
 - 身份/结构/道具三类约束文案（LSC §3.4 的 `identity_clause` 文案契约，纯文本、与模型无关）：
@@ -246,7 +249,7 @@ packages/tools/planOperator/
 | V4 | 构图卡不参与派生、必须至少一个母版参考 | 报错 |
 | V5 | `segmentMap` 中每个 `nodeId` 必须出现在画布快照中、类型为生成节点 | 报错 |
 | V6 | 节点入边数 = `references.length`，且按 `referenceOrder` 排序后与 `references` 顺序一致 | 报错（防「改方案没保存就出图」，LSC §5.3） |
-| V7 | 视频提示词里的参考标记：写作者写 `{{ref N}}`（N = 参考位次）；`<Picture N>`/`<Video N>`/`<Audio N>` 属 wire 层换算结果，写进正文即非法 | 报错：尖括号 level=error（`planValidator.ts:239-245`）；`{{ref N}}` 越界才报错、不查重号 |
+| V7 | 视频提示词里的参考标记：写作者直接写 `<Picture N>` / `<Video N>` / `<Audio N>`（各媒质独立编号，按 `referenceIds` 同媒质过滤位次）；旧双花括号占位符一律报 error（见 `docs/h3PromptAlignment.md` §7） | 报错：旧占位符命中即 error，尖括号按同媒质越界检查 |
 | V8 | 参考条数超过当前节点**实际匹配模式**的上限（空镜参考集非空或含 VIDEO/AUDIO 时，`MiniMax-H3` 只能落 `startFrameOptional` 的 2 图；图像节点 `multiReference` 4 图） | 报错，指明应改用拼板或改用模式 |
 | V9 | `textOnly` 卡不得有 `nodeId`、不得被引用为图片参考 | 警告 |
 | V10 | 节点的 `data.mode` 必须仍是快照时该模型「匹配模式集合」的成员（防止连线后 Vue Flow 的同步 `watch` 悄悄把模式切走，见 `videoGenerationNode` 第 190–197 行） | 报错 |
@@ -268,7 +271,7 @@ packages/tools/planOperator/
 
 | 角色 | 来源 | 进入视频节点的方式 |
 |---|---|---|
-| 人物母版 `C*` | 图片生成节点（多视图/正脸） | `in` 端口参考，`{{ref N}}` = 身份 |
+| 人物母版 `C*` | 图片生成节点（多视图/正脸） | `in` 端口参考，`<Picture N>` = 身份 |
 | 场景空镜 `SC*` | 图片生成节点（无人） | 同端口，只锁空间 |
 | 道具母版 `P*` | 图片生成节点（白底、无人手） | 同端口，只锁形制 |
 | 构图卡 `KF*` | 图片生成节点（引用母版拼板） | 构图参考，**不自动当首帧** |
@@ -395,7 +398,7 @@ Remove-Item build/tools/planOperator.tool.js, build/ext/ext-assetCardView.umd.js
 
 ### 4.3 明确列为「本期不做」的能力
 
-- 自动生成 `{{ref N}}` 的写入型 nodeTools（当前 `referenceOrder` 只能读，Agent 靠连线顺序影响排序）。
+- 自动生成 `<Picture N>` / `<Video N>` / `<Audio N>` 标记的写入型 nodeTools（当前 `referenceOrder` 只能读，Agent 靠连线顺序影响排序；参考标记由写作者按 `referenceIds` 同媒质位次直接书写，见 `docs/h3PromptAlignment.md`）。
 - 拼板（`pack_composition_references`）的自动实现：P2 只在 V8 触发时**提示**用户改用拼板或降参考数，不做图像合成（那需要图像库与 `@toonflow/file` 之外的路径）。
 - 空图/纯色拒收（`director_image_health`）：P3 扩展可读取产物并**提示**，但不阻断生成。
 
@@ -452,7 +455,7 @@ bun run build
 - [ ] `validate` 对 V1–V10 各报一次中文错误，错误文案含卡片 ID 与字段名。
 - [ ] `validate` 零写入：执行前后 `Get-ChildItem plan` 的 `LastWriteTime` 不变。
 - [ ] 对「已接线但 `referenceOrder` 被手动打乱」的节点，V6 报警并指出期望顺序与实际顺序。
-- [ ] `{{ref 3}}` 超出参考数时报 V7；空镜参考集非空（或混入 VIDEO/AUDIO）且参考图 3 张时 V8 触发（`MiniMax-H3` 只剩 `startFrameOptional` 的 2 图）。
+- [ ] 正文出现旧双花括号占位符时报 V7 error（已作废，见 `docs/h3PromptAlignment.md` §7）；`<Picture 3>` 超出同媒质参考数时同样报 V7 error；空镜参考集非空（或混入 VIDEO/AUDIO）且参考图 3 张时 V8 触发（`MiniMax-H3` 只剩 `startFrameOptional` 的 2 图）。
 - [ ] 连第 3 张图后节点 `data.mode` 被自动切成 `startFrameOptional` 时，V10 报错并提示恢复 `imageReference` 模式。
 - [ ] `configRules` 中的开关项出现在设置面板，改值后下一轮消息生效。
 
@@ -475,7 +478,7 @@ bun run build
 | R6 | **工具不是沙箱**：Agent 可绕过工具用宿主自带 `read`/`write`/`edit` 直写工作区 | 校验被绕过 | 文档明确「工具是检查器不是闸门」；要强约束时再上节点侧 guard（§3.5） | 回退到 P1 文本约定 |
 | R7 | **扩展无节点数据通道**：`ExtContext` 不提供节点 `data` | P3 面板内容可能滞后于画布 | 面板只认 `plan/*.json` 快照，并在头部显示 `generatedAt`；不宣称实时 | 卸载扩展 |
 | R8 | **双份真相**：资产卡 Markdown 与画布节点并存 | 改一处忘另一处 | `assetCards.md` 是唯一权威，节点只回填 `nodeId`；`validate` 对悬浮引用报 V5 | — |
-| R9 | **`{{ref N}}` 编号漂移**：增删连线后排序变化，且**连线变化会让节点 `watch` 自动改写 `data.mode`** | 提示词指向错误素材；参考图悄悄变成首帧 | 每次接线/删边后重新 `setPrompt`（`canvas` 技能既有要求）+ V6/V7/V10 校验；出图前由人确认模式 | 重新走一遍接线 |
+| R9 | **`<Picture N>` 编号漂移**：增删连线后同媒质排序变化，且**连线变化会让节点 `watch` 自动改写 `data.mode`** | 提示词指向错误素材；参考图悄悄变成首帧 | 每次接线/删边后重新 `setPrompt`（`canvas` 技能既有要求）+ V6/V7/V10 校验；出图前由人确认模式 | 重新走一遍接线 |
 | R10 | **成本与并发**：一次校验/生成消耗供应商额度；多 Agent 同改一画布 | 计费与覆盖 | 生成前由用户确认；同一画布同一时刻只允许一个 Agent（沿用 `canvas` 技能约束） | 取消生成（节点已有 `cancelGeneration`） |
 
 **全局回滚原则**：所有新增物都在「独立技能目录 + 独立包 + 独立工作区文件」三层里，宿主代码零改动；任一层删除都不影响其余层，最坏情况回到今天的手工接线流程（`packages/skills/canvas/references/videoProduction.md` 第 3 节）。
@@ -488,6 +491,6 @@ bun run build
 - 技能加载：`apps/server/src/agent/skills/index.ts`（工作区 `skill/` 优先、`SKILL.md` 校验）
 - 工具样板：`packages/tools/skillOperator/{build.ts,package.json,src/index.ts}`、`packages/tools/canvas/src/runtime.ts`（画布读取/接线 schema）、`packages/toolScaffold/index.ts`（`createToolConfig`：版本、`readme` 嵌入、`NODE_ENV=dev` 同步 `data/tools`）
 - 工具宿主：`packages/toolScaffold/src/runtime.ts`（`ToolPlugin`、`ToolContext.files`、`toolNameSchema`）、`apps/server/src/agent/tools/index.ts`（`files` 的工作区边界与锁）、`apps/server/src/utils/plugins/tools.ts`（元数据解析）、`apps/server/src/utils/plugins/initialize.ts`（`build/*` → `data/*` 同步）
-- 节点契约：`packages/nodeScaffold/readme.md`（`nodeTools.register`、`{{ref N}}`）、`packages/nodeShared/src/useNodeReferences.ts`（`referenceOrder` 键与排序）、`packages/nodes/videoGenerationNode/src/index.vue`（`setPrompt`/`generateVideo`/模式匹配）
+- 节点契约：`packages/nodeScaffold/readme.md`（`nodeTools.register`、参考标记写法见 `docs/h3PromptAlignment.md`）、`packages/nodeShared/src/useNodeReferences.ts`（`referenceOrder` 键与排序）、`packages/nodes/videoGenerationNode/src/index.vue`（`setPrompt`/`generateVideo`/模式匹配）
 - 扩展：`packages/extScaffold/src/runtime.ts`（`ExtContext`/`ExtDefinition`）、`packages/extScaffold/create.ts`（生成器）、`packages/ext/canvasNode/src/index.vue`（`mountNode` 用法）
 - 媒体：`packages/providers/src/media/freevideo.ts`（模式与时长/分辨率声明）

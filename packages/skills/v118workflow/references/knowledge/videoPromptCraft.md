@@ -1,3 +1,5 @@
+> **HISTORICAL（v1.1.8 旧模型模板）**：本文件为 Toonflow v1.1.8 时代的分镜图 / 视频提示词模板，含 `{{ref N}}` 旧双花括号占位符与旧模型参数示例。视频生成已**全量迁移到 MiniMax H3 官方六段格式**（`subject_definitions / summary / retention_analysis / detailed_description / overall_soundscape / non_diegetic_music`）与 `<Picture N>` / `<Video N>` / `<Audio N>` 参考标记口径，权威口径见 `docs/h3PromptAlignment.md`；本文件仅作历史参考保留，不得作为现行提示词编写依据。
+
 # 视频模式、模型模板与声音知识
 
 用于视频准备与验收。先读取已确认分镜、制作单元及真实参考，再只读本文件中本次适用模板；风格使用 [视觉风格](visualStyles.md) 的当前确认条目，镜头、计时与连续性用 [镜头知识](shotCraft.md)。本文件吸收 v1.1.8 的四份模型提示词，不引入其他 workflow 的 Seedance 路由或默认模型。

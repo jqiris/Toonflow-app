@@ -22,7 +22,10 @@ const configSchema = z.object({
  * 这里用 looseObject 逐层放宽，缺字段交给 normalizeProject 补默认值，不再用 .strict() 拒真实文件。
  */
 const clipPromptSchema = z.looseObject({
-  integratedMultimodalDescription: z.string().optional(),
+  subjectDefinitions: z.string().optional(),
+  summary: z.string().optional(),
+  retentionAnalysis: z.string().optional(),
+  detailedDescription: z.string().optional(),
   overallSoundscape: z.string().optional(),
   nonDiegeticMusic: z.string().optional(),
 });
@@ -429,10 +432,10 @@ export const plugin: ToolPlugin = {
                 mode: "待 node:getConfig 读 matchingModes 决定（不得写死）",
               },
               promptEssentials: [
-                "integratedMultimodalDescription 为画面主体（含 {{ref N}} 引用位）",
-                "overallSoundscape 为环境声",
-                "nonDiegeticMusic 为配乐",
-                "段尾须附参考顺序声明（与 referenceIds 顺序一致）",
+                "subjectDefinitions / summary / retentionAnalysis：有参考时必写，逐字对齐 ref-en.txt",
+                "detailedDescription：画面主体（含 <Picture N> / <Video N> / <Audio N> 参考标记，各媒质独立编号）",
+                "overallSoundscape 为环境声，nonDiegeticMusic 为配乐",
+                "无参考时退化：只留 detailedDescription / overallSoundscape / nonDiegeticMusic，三分析段不写",
               ],
               currentState: { status: clip.status, nodeId: clip.nodeId, assetPath: clip.assetPath, lastAttempt },
             };

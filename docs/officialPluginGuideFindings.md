@@ -80,7 +80,7 @@ media: workspaceAvailable ? {
 | **执行层** | tool `planOperator`（新增 `dispatch` action） | `context.canvas.call()` 建节点/连线/配参/写提示词/生成/查状态/回写 |
 | 语义层 | Agent | 判断本期范围、确认关口、批准算力、失败决策 |
 
-**Agent 不再逐镜手工执行 11 步调用**，只做语义判断与确认；重复性的建节点、连线、setConfig、setPrompt、generateVideo、回写状态交给工具的 `dispatch`。这大幅降低 Agent 出错面，也让「参考顺序 = `{{ref N}}`」由程序保证而非提示词纪律。
+[HISTORICAL] **Agent 不再逐镜手工执行 11 步调用**，只做语义判断与确认；重复性的建节点、连线、setConfig、setPrompt、generateVideo、回写状态交给工具的 `dispatch`。这大幅降低 Agent 出错面，也让「参考顺序 = `{{ref N}}`」由程序保证而非提示词纪律。
 
 ### 3.3 仍然不变的硬约束
 

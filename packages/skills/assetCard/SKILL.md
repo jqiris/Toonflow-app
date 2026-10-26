@@ -8,6 +8,8 @@ metadata:
   github: https://github.com/HBAI-Ltd/Toonflow-app
 ---
 
+> **H3 口径声明**：本工作流视频生成仅支持 MiniMax-H3（H3 官方六段格式 + `<Picture N>` / `<Video N>` / `<Audio N>` 参考标记）；不接受其他视频模型或旧格式占位符。
+
 # 资产卡与多轨制作约定
 
 本技能只提供**契约与模板**：资产卡语法、参考接线规则、多轨工程文件格式。它不执行生成、不操作画布、不改写其他技能已确认的内容。
@@ -63,11 +65,11 @@ Agent 侧阶段门与逐镜操作顺序见 `freevideoMultitrack` 技能；数据
 ## 生成闭环（简版）
 
 1. 资产卡定稿 → 编号、参考关系、画幅全部锁定（`C` 卡一律 16:9 四视图整版，见核心约定 6）；
-2. 分镜定稿 → 每段按 MiniMax H3 官方 ref2va 六段写清提示词（参考标记写 `{{ref N}}`，`N` 是本镜参考位次）与参考编号；
+2. 分镜定稿 → 每段按 MiniMax H3 官方 ref2va 六段写清提示词（参考标记一律写官方 `<Picture N>` / `<Video N>` / `<Audio N>`，每类独立从 1 起编号）与参考编号；
 3. **导入资产与分镜** → 画布「导入资产与分镜」节点（`packages/nodes/assetImportNode`，agent 侧 `node:importScript`）按卡片抽取，**独占写** `plan/assetIndex.json` 与 `plan/story.mtrack`。导入时**代码确定性报错的只有三类**：编号重复与结构不合契约（`assetImport.ts` 的 `normalizeExtraction`——模型返回与 `extraction` 入参共用同一份契约）；正文为空或超 20 万字符（`extractAssets` 开头）；`plan/assetIndex.json` 与 `plan/story.mtrack` 任一已存在（`requireNewPlanFiles`，在出图之前就探测，不会先烧模型）。`clips` 覆盖里的 `clipId` 不在本次分镜里、`prompt` 为空、引用了不存在或仅文字的资产，也直接报错（`resolveClipOverrides`）。**静默修正（只记 `warnings`，不中断）**：`seconds` 夹到 2–15（`sanitizeSeconds`/`secondsWarning`，落盘在 `writePlanFiles` 的逐镜循环）；分镜引用不是本次卡片、或引用仅文字卡，直接从 `referenceIds` 掐掉（`parseExtraction` 的 shot 归一 + `writePlanFiles` 的 `visual`/`usable` 过滤）；出图失败的卡自动移出参考清单（同 `usable` 过滤，失败清单来自 `generateAssetImages`）；图片参考超 9 个只留前 9 个（`writePlanFiles` 里 `maxImageReferences` 判断）；`context` 却不足 10 秒只告警不拦（`writePlanFiles` 的逐镜循环）。原文里已写好的六段提示词会被**整段原样保留**（抽取提示词 `extractionSystemPrompt` 的要求 2 与 6：照抄段名、顺序与换行），要改写单镜就传 `clips`。「场景卡空镜无人 / 道具卡无手」只是内置抽取提示词里的要求（`extractionSystemPrompt` 的编号规则段），**不是落盘校验**，出图后要人眼核。`KF` 卡不抽（人工补）。`path` 指**剧本文本**（传 `assets/assetCards.md` 会把卡片当正文再抽一遍），`path` 与 `text` 二选一；**卡片与分镜已经定稿就别让节点再抽一遍**——整批结构化结果传 `extraction`（`{ style, systemPrompt, assets[], shots[] }`，契约是 `assetImport.ts` 导出的 `extractionSchema`），节点一次模型都不调、也不需要 `model`；要抽散文才传 `path`/`text`，此时 `model` 必须取自 `node:importModels` 的 `text` 清单（`JSON.stringify([providerId, modelId])`；清单外编号直接报错，**不再静默回落面板默认**——默认那个模型可能密钥都没配，会一路挂到超时），出资产图另用 `imageModel`（取 `image` 清单）；Agent 选的模型会回写面板下拉，人工看得见也能改。中途想看跑到第几张用 `node:importStatus`。**会话 Agent 侧单次调用上限是画布桥与宿主的 120 秒**（`apps/server/src/agent/bridge/canvas.ts` 与 `apps/web` 的 `useCanvasTools`；节点里的 `timeoutMs: 30 * 60 * 1000` 只对面板按钮生效），整篇抽取加逐张出图多半撞顶，撞顶后已建图片节点与 `assets/<nodeId>/` 不回收、`plan/` 两文件任一已落则重跑被独占写拦下——定稿一律走 `extraction`；
 4. 批量生成资产图 → 每张 `C` 卡出图即四视图整版（横向四栏），节点 label 必须保持 `<代号> <名称>`，否则派工侧认不出资产卡；
 5. **绑定工程** → 导入只落了磁盘上的两个文件，多轨节点 `node.data.projectPath` 仍是空的：必须 `node:bindProject({ mode: "open", path: "plan/story.mtrack" })` 之后才读得到 `clips` 与「参考素材」（不绑或绑错文件时，下游 `readClips` / `readReferenceMap` 看到的是空工程）；
-6. 接线并勾选参考 → 资产节点连到多轨节点 `in` 端口后，由用户在编辑器「参考素材」网格里打勾，勾选直接写 `clip.referenceIds`、**位次即 `{{ref N}}` 的 `N`**；Agent 不预写 `referenceIds`，只在用户明确要求批量改写时才动它；
+6. 接线并勾选参考 → 资产节点连到多轨节点 `in` 端口后，由用户在编辑器「参考素材」网格里打勾，勾选直接写 `clip.referenceIds`、**位次即官方 `<Picture N>` / `<Video N>` / `<Audio N>` 的编号基数**；Agent 不预写 `referenceIds`，只在用户明确要求批量改写时才动它；
 7. 校验 → `planOperator validate`，error 清零才继续；
 8. 逐分镜生成 → 二选一（同一批镜头绝不同时执行，见 [runbook §十五·五](references/generationRunbook.md)）：会话内按 §十三 SOP 逐镜（即每段一个视频节点、展示方案并等待用户批准算力消耗后 `node:generateVideo`），或 `node:dispatchGenerate` 后台派工（立即返回 batchId，进度看 `node:getStatus` / `mtrackRead`）；
 9. 回写状态 → `generated` 不等于交付完成，用户验收后才 `accepted`；
@@ -91,11 +93,11 @@ Agent 侧阶段门与逐镜操作顺序见 `freevideoMultitrack` 技能；数据
 
 镜头操作里的「整理本镜提示词」按钮（`packages/nodeShared/src/mtrack/components/shotEditorPane.vue` → `multitrackEditor.vue` 的 `rewriteClipPrompt` → `POST /api/mtrack/rewriteShot`）走文本模型，只把本镜草稿整理成画面描述段。四条纪律（细节与接口字段见 [runbook §15.8](references/generationRunbook.md)）：
 
-- **结果不自动采用**：整理稿先落「待采用」区块（左原文只读、右整理稿可编辑），点「采用整理结果」才写回 `prompt.integratedMultimodalDescription`；点「放弃」原文一字不动。任何路径都不自动覆盖，接口返回的 `requiresReview: true` 就是「这是草稿」的契约信号。
+- **结果不自动采用**：整理稿先落「待采用」区块（左原文只读、右整理稿可编辑），点「采用整理结果」才写回该镜的六个驼峰字段（`prompt.subjectDefinitions` / `summary` / `retentionAnalysis` / `detailedDescription` / `overallSoundscape` / `nonDiegeticMusic`）；点「放弃」原文一字不动。任何路径都不自动覆盖，接口返回的 `requiresReview: true` 就是「这是草稿」的契约信号。
 - **一致性守卫**：待采用期间原文画面描述、`clip.seconds`、本次整理规则任一变化，「采用」禁用，必须重新整理，不能拿旧稿套新基线。
 - **规则可留空**：请求字段 `rules` 可选（≤20000），空/缺省用服务端内置规则；规则只对本次整理生效，不落盘、不随工程保存——不是全片设置。
 - **生成中拒绝**：本镜或本批任一镜头 `status === "generating"` 时服务端 409「正在生成，请结束后再整理提示词，避免模型同时占显存」；整理不产生 `attempts`、不占 `batchId`、不改 `status`。
-- 采用后仍要按 runbook §四 核对整理稿里的 `{{ref N}}` 与本镜参考顺序（`N` 是参考位次）；整理只做结构化改写，不新增剧情、人物、道具。
+- 采用后仍要按 runbook §四 核对整理稿里的官方 `<Picture N>` / `<Video N>` / `<Audio N>` 与本镜参考顺序（各类型独立从 1 起）；整理只做结构化改写，不新增剧情、人物、道具。
 
 ## 能力边界（必须如实告知）
 

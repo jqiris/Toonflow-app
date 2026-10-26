@@ -7,8 +7,8 @@
  * `POST /api/ai/media/generate`（`apps/server/src/routes/ai/media/generate.ts`）——
  * 它接收 `images[]`（工作区相对路径），调用 `u.mediaGeneration.generateMedia`，全程不需要画布节点。
  *
- * 画布只提供参考素材的**路径**（资产节点 outputs），不参与生成；`{{ref N}}` 的编号仍由
- * `story.mtrack` 的 `referenceIds` 顺序决定，与创作层看到的一致。
+ * 画布只提供参考素材的**路径**（资产节点 outputs），不参与生成；提示词里的 `<Picture N>` /
+ * `<Video N>` / `<Audio N>` 由创作层按媒质独立书写，编号只表示该类别内的次序，不编码类别之间的配对关系。
  */
 
 import { resolveReferenceSources, type CanvasCall } from "./directDispatch";
@@ -80,9 +80,10 @@ function mimeOf(path: string, fallback: string) {
 }
 
 /**
- * H3 的参考标记是 `<Picture N>` / `<Video N>` / `<Audio N>`，按参考的 dataType **各自编号**；
- * 创作层统一写 `{{ref N}}`（N 是 referenceIds 的位次），下发前必须在这里换算。
- * 与 videoGenerationNode 的 referenceTags 同口径：同一来源节点重复出现时沿用第一个编号。
+ * H3 的参考标记是 `<Picture N>` / `<Video N>` / `<Audio N>`，按参考的 dataType **各自编号**，
+ * 编号 = referenceIds 里同媒质的过滤位次（referenceIds 的顺序即参考数组顺序）。
+ * 只供回执与排错（referenceMap）和越界检查用：同一来源节点重复出现时沿用第一个编号；
+ * 提示词里写死的标记不做任何换算。
  */
 export function referenceTags(entries: readonly { dataType: string; source: string }[]) {
   const tags = new Map<number, string>();
@@ -107,24 +108,40 @@ export function referenceTags(entries: readonly { dataType: string; source: stri
   return tags;
 }
 
-/** 派工下发的唯一拼装点：风格前缀、漏写段首补字段名、声音两段拼段名（与编辑器 promptToText 合成的段名同形）。 */
-export function buildPromptText(clip: MtrackClip, global?: { style?: string; systemPrompt?: string }) {
-  const body = clip.prompt.integratedMultimodalDescription.trim();
-  const style = global?.style?.trim() ?? "";
-  const systemPrompt = global?.systemPrompt?.trim() ?? "";
-  const constraint = [style && `全片风格：${style}`, systemPrompt && `全片约束：${systemPrompt}`].filter(Boolean).join("\n");
-  const first = constraint ? `${constraint}\n${body}` : body;
-  const head = first && `${/^(subject_definitions|summary|retention_analysis|detailed_description|integrated_multimodal_description)\s*:/i.test(body) ? "" : `${clip.referenceIds.length ? "detailed_description" : "integrated_multimodal_description"}: `}${first}`;
-  return [
-    head,
-    clip.prompt.overallSoundscape.trim() && `overall_soundscape: ${clip.prompt.overallSoundscape.trim()}`,
-    clip.prompt.nonDiegeticMusic.trim() && `non_diegetic_music: ${clip.prompt.nonDiegeticMusic.trim()}`,
-  ].filter(Boolean).join("\n\n");
+/** 首帧模式（I2VA）的首行指令：逐字照抄 base-en.txt，首帧必为 `<Picture 1>`。 */
+export const firstFrameInstruction = "For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.";
+
+/**
+ * 派工下发的唯一拼装点：六段提示词拼装 + 首帧首行指令注入。
+ * 段名与顺序逐字对齐 ref-en.txt：subject_definitions / summary / retention_analysis /
+ * detailed_description / overall_soundscape / non_diegetic_music；空段整段省略（段名也不输出），
+ * 段名由这里补，与 mtrackProject.promptToText 合成的段名严格同形。
+ * ACT: 无参考时退化——丢掉三个分析段，只留 detailed_description / overall_soundscape /
+ * non_diegetic_music（t1 契约的有意偏离：主字段用 detailed_description，不用 integrated_multimodal_description）。
+ * 退化判定由调用方传 degraded，与 referenceEntries 同口径（mode=image 摘掉首帧图后无剩余参考也退化）。
+ */
+export function buildPromptText(clip: MtrackClip, degraded = false, withFirstFrame = false) {
+  const prompt = clip.prompt;
+  const sections = [
+    prompt.subjectDefinitions.trim() && `subject_definitions: ${prompt.subjectDefinitions.trim()}`,
+    prompt.summary.trim() && `summary: ${prompt.summary.trim()}`,
+    prompt.retentionAnalysis.trim() && `retention_analysis: ${prompt.retentionAnalysis.trim()}`,
+    prompt.detailedDescription.trim() && `detailed_description: ${prompt.detailedDescription.trim()}`,
+    prompt.overallSoundscape.trim() && `overall_soundscape: ${prompt.overallSoundscape.trim()}`,
+    prompt.nonDiegeticMusic.trim() && `non_diegetic_music: ${prompt.nonDiegeticMusic.trim()}`,
+  ].filter(Boolean);
+  const kept = degraded
+    ? sections.filter(section => /^(detailed_description|overall_soundscape|non_diegetic_music):/.test(section))
+    : sections;
+  const body = kept.join("\n\n");
+  if (!body) return "";
+  return withFirstFrame ? `${firstFrameInstruction}\n\n${body}` : body;
 }
 
 /**
- * 把一镜组装成可直接下发的请求：参考素材从画布资产节点取工作区路径，
- * 顺序严格按 `referenceIds`，`{{ref N}}` 按媒体类型换算成模型侧标记。
+ * 把一镜组装成可直接下发的请求：参考素材从画布资产节点取工作区路径，顺序严格按 `referenceIds`，
+ * 提示词里的 `<Picture N>` / `<Video N>` / `<Audio N>` 保持原样下发（各媒质独立编号，不做换算），
+ * 只校验越界：各媒质编号不能超过本镜同媒质的参考数。
  * 缺少任一参考的可用产出时报错（与旧派工同一口径：不带着缺失参考上场）。
  */
 export async function composeClipRequest(options: {
@@ -178,29 +195,37 @@ export async function composeClipRequest(options: {
   const firstFrameEntry = resolvedMode === "image" && clip.continuity !== "context" && imageEntries.length === 1 ? imageEntries[0] : undefined;
   /*
    * ACT: text 模式是纯文生，参考素材一律不下发——否则选择框里勾着的图会静默变成 ref2va，
-   * 与 referencePicker 的 modeHint「text 模式不会发送参考图」矛盾（审计 P2）。{{ref N}} 也一并抹掉。
+   * 与 referencePicker 的 modeHint「text 模式不会发送参考图」矛盾（审计 P2）。提示词里的参考标记也一并失效。
    */
   const referenceEntries = resolvedMode === "text" ? [] : firstFrameEntry ? entries.filter(item => item !== firstFrameEntry) : entries;
   /*
    * ACT: 编号基准必须是 `clip.referenceIds` 的**位次**（就是 entries 的下标），不能是 referenceEntries 的下标：
-   * mode=image 且恰一张图时那张图已被摘去作首帧，按摘除后的下标编号会让 `{{ref 1}}` 找不到映射、被原样下发，
-   * 而校验器 V7（planValidator.ts:228/:235/:250）的基准是 referenceIds，还判它通过。
-   * 与 videoGenerationNode:241/:355 的「按 refList 逐项换算」同口径：首帧也占它自己的位次。
+   * mode=image 且恰一张图时那张图已被摘去作首帧，按摘除后的下标编号会让 `<Picture 1>` 的基准错位，
+   * 而校验器 V7 的基准同样是 referenceIds。首帧也占它自己的位次，referenceMap 里照记它。
    */
   const tags = referenceTags(entries.map(item => ({ dataType: item.dataType, source: item.nodeId })));
   const imageList = referenceEntries.filter(item => item.dataType === "IMAGE");
   const audioList = referenceEntries.filter(item => item.dataType === "AUDIO");
   const videoList = referenceEntries.filter(item => item.dataType === "VIDEO");
-  const body = buildPromptText(clip, global)
-    .replace(/\{\{\s*ref\s*(\d+)\s*\}\}/gi, (mention, n: string) => (resolvedMode === "text" ? "" : (tags.get(Number(n)) ?? mention)));
+  // ACT: 首帧镜的图片参考数按 entries 口径（首帧那张图也占自己的 <Picture 1> 位次），其余媒质按下发集合算。
+  const pictureLimit = firstFrameEntry ? imageEntries.length : imageList.length;
+  const body = buildPromptText(clip, !referenceEntries.length, Boolean(firstFrameEntry));
   /*
-   * ACT: 换算不到就报错，绝不把 `{{ref N}}` 字面量透传给引擎（与 videoGenerationNode:355-358 同口径）。
-   * 命中得的标记已在上一行替换掉，所以这里还能搜到的就是越界位次（N<1 或 N>referenceIds.length）。
-   * text 模式本就不下发参考，上面已把标记抹掉，不参与本检查。
+   * ACT: 提示词里的标记只有 `<Picture N>` / `<Video N>` / `<Audio N>` 一种合法形态（H3 官方口径），
+   * 各媒质独立编号，编号只表示该媒质在参考里的位次——所以越界按媒质分组检查：
+   * `<Picture N>` ≤ 本镜图片参考数、`<Video N>` ≤ 视频参考数、`<Audio N>` ≤ 音频参考数。
+   * 旧的双花括号 ref 占位符没有换算层可走，一律直接报错。
    */
-  if (resolvedMode !== "text") {
-    for (const matched of body.matchAll(/\{\{\s*ref\s*(\d+)\s*\}\}/gi)) {
-      throw new Error(`${clip.clipId} 的提示词含 {{ref ${Number(matched[1])}}} 超出范围：本镜参考顺序共 ${clip.referenceIds.length} 项（referenceIds 的位次即 {{ref N}} 的 N），请改正参考标记或补齐参考`);
+  const legacyMarker = String.fromCharCode(123, 123) + "\\s*ref\\s*(\\d+)\\s*" + String.fromCharCode(125, 125);
+  for (const matched of body.matchAll(new RegExp(legacyMarker, "gi"))) {
+    const marker = String.fromCharCode(123, 123) + "ref " + Number(matched[1]) + String.fromCharCode(125, 125);
+    throw new Error(`${clip.clipId} 的提示词含旧版双花括号占位符 ${marker}，不是 H3 合法的参考标记：请改用 <Picture N> / <Video N> / <Audio N>（各媒质独立编号）`);
+  }
+  for (const matched of body.matchAll(/<\s*(Picture|Video|Audio)\s+(\d+)\s*>/gi)) {
+    const kind = matched[1].toLowerCase() as "picture" | "video" | "audio";
+    const limit = kind === "picture" ? pictureLimit : kind === "video" ? videoList.length : audioList.length;
+    if (Number(matched[2]) > limit) {
+      throw new Error(`${clip.clipId} 的提示词含 <${matched[1]} ${Number(matched[2])}> 超出范围：本镜该媒质参考共 ${limit} 项，请改正参考标记或补齐参考`);
     }
   }
   // ACT: 提示词为空时服务端 zod 只回 400「参数错误」，编辑器无从解释；在派工前就拦下并说清是哪个字段。

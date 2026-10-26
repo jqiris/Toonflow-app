@@ -12,7 +12,7 @@
 
 本文记录这条流程对既有方案的修订。
 
-> **现状更新（2026-10-25）**：下文 §3.1 的「提示词正文的六段与官方标记由写作者直接书写」「`<Picture N>` 只数图片类、`<Audio N>` 只数音频」两条口径**已反转**：写作者正文统一写 `{{ref N}}`（`N` = 本镜 `referenceIds` 的全局位次），写 `<Picture N>`/`<Video N>`/`<Audio N>` 尖括号会被 V7 判 error（`packages/tools/planOperator/src/planValidator.ts` 的 V7 分支）；尖括号只是 wire 层在下发前按参考 `dataType` 换算的模型侧标记，不教写作者手写。参考上限分层同步为：校验器 V8 图 ≤9/音频 ≤1（不校验视频）、供应商 freevideo 单请求 ≤4、续接合计 ≤3（V16）。现行口径见 `packages/skills/assetCard/references/generationRunbook.md` §四/§五。本文其余修订记录保留为当时决策。
+[HISTORICAL] > **现状更新（2026-10-25）**：下文 §3.1 的「提示词正文的六段与官方标记由写作者直接书写」「`<Picture N>` 只数图片类、`<Audio N>` 只数音频」两条口径**已反转**：写作者正文统一写 `{{ref N}}`（`N` = 本镜 `referenceIds` 的全局位次），写 `<Picture N>`/`<Video N>`/`<Audio N>` 尖括号会被 V7 判 error（`packages/tools/planOperator/src/planValidator.ts` 的 V7 分支）；尖括号只是 wire 层在下发前按参考 `dataType` 换算的模型侧标记，不教写作者手写。参考上限分层同步为：校验器 V8 图 ≤9/音频 ≤1（不校验视频）、供应商 freevideo 单请求 ≤4、续接合计 ≤3（V16）。现行口径见 `packages/skills/assetCard/references/generationRunbook.md` §四/§五。本文其余修订记录保留为当时决策。
 
 ---
 
@@ -76,7 +76,7 @@
 | C. 多轨节点调 `context.canvas` 让 Agent 建 | —— | 同上，且引入 Agent 依赖 |
 
 **选 A**，把 A 绕开的校验**搬到多轨节点内部与 `planOperator` 里**：
-- `referenceIds` 顺序即画布引用位次，`{{ref N}}` 的 `N` 就是这里的位次（从 1 起，图片/音频/视频按同一份列表连续编号），并在**编辑器里显示序号**（人眼可核对）；提示词正文的六段由写作者直接书写、引擎不代写，段内参考标记统一写 `{{ref N}}`——`<Picture N>`/`<Video N>`/`<Audio N>` 是下发前由 wire 层按参考 `dataType` 换算出的模型侧标记，写进正文会被 V7 判 error（2026-10-25 现状更新：本节旧文称「官方标记由写作者直接书写」，口径已反转）；
+[HISTORICAL] - `referenceIds` 顺序即画布引用位次，`{{ref N}}` 的 `N` 就是这里的位次（从 1 起，图片/音频/视频按同一份列表连续编号），并在**编辑器里显示序号**（人眼可核对）；提示词正文的六段由写作者直接书写、引擎不代写，段内参考标记统一写 `{{ref N}}`——`<Picture N>`/`<Video N>`/`<Audio N>` 是下发前由 wire 层按参考 `dataType` 换算出的模型侧标记，写进正文会被 V7 判 error（2026-10-25 现状更新：本节旧文称「官方标记由写作者直接书写」，口径已反转）；
 - `mode` 由 `ai.getMediaModels()` 返回的能力自行判定（`getMatchingModes` 的逻辑在多轨节点内重实现：按参考集合算出可用模式，**空镜或超 4 图时直接拒绝并提示拆分**）；
 - V1–V15 仍由 `planOperator` 在生成前校验，多轨节点生成前调用同一套规则（经 `packages/nodeShared` 共享，避免两处实现漂移）。
 

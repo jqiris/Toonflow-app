@@ -50,8 +50,12 @@ export function resolveClipMode(clip: Pick<MtrackClip, "mode" | "referenceIds">)
   return "ref";
 }
 
+/** H3 官方六段提示词（段名与顺序逐字对齐 ref-en.txt「Overall Structure」，camelCase 落盘）。 */
 export interface ClipPrompt {
-  integratedMultimodalDescription: string;
+  subjectDefinitions: string;
+  summary: string;
+  retentionAnalysis: string;
+  detailedDescription: string;
   overallSoundscape: string;
   nonDiegeticMusic: string;
 }
@@ -215,7 +219,10 @@ function readStatus(value: unknown): ClipStatus {
 function readPrompt(value: unknown): ClipPrompt {
   const source = isRecord(value) ? value : {};
   return {
-    integratedMultimodalDescription: readString(source.integratedMultimodalDescription),
+    subjectDefinitions: readString(source.subjectDefinitions),
+    summary: readString(source.summary),
+    retentionAnalysis: readString(source.retentionAnalysis),
+    detailedDescription: readString(source.detailedDescription),
     overallSoundscape: readString(source.overallSoundscape),
     nonDiegeticMusic: readString(source.nonDiegeticMusic),
   };
@@ -295,7 +302,14 @@ export function createClip(index: number, ratio: string): MtrackClip {
     ratio,
     resolution: "768P",
     generateAudio: false,
-    prompt: { integratedMultimodalDescription: "", overallSoundscape: "", nonDiegeticMusic: "" },
+    prompt: {
+      subjectDefinitions: "",
+      summary: "",
+      retentionAnalysis: "",
+      detailedDescription: "",
+      overallSoundscape: "",
+      nonDiegeticMusic: "",
+    },
     referenceIds: [],
     // 与 LSC 一致：新建镜头一律先独立起拍（首镜必须 shot），用户按需改成 context 承接上一镜。
     continuity: "shot",
@@ -311,61 +325,76 @@ export function totalSeconds(clips: MtrackClip[]): number {
   return clips.reduce((sum, clip) => sum + (Number.isFinite(clip.seconds) ? clip.seconds : 0), 0);
 }
 
-/** 该镜是否已有可用提示词。与派工组装 mediaDispatch.buildPromptText 同口径：三个提示词字段取第一个非空即有内容可下发。 */
+/**
+ * 六段段名（逐字对齐 ref-en.txt「Overall Structure」，顺序固定）。字段里只存段内正文，
+ * 段名由 promptToText / mediaDispatch.buildPromptText 在边界处补齐。
+ */
+const promptHeadings = ["subject_definitions:", "summary:", "retention_analysis:", "detailed_description:", "overall_soundscape:", "non_diegetic_music:"] as const;
+type promptField = "subjectDefinitions" | "summary" | "retentionAnalysis" | "detailedDescription" | "overallSoundscape" | "nonDiegeticMusic";
+const promptFieldByHeading: Record<string, promptField> = {
+  "subject_definitions:": "subjectDefinitions",
+  "summary:": "summary",
+  "retention_analysis:": "retentionAnalysis",
+  "detailed_description:": "detailedDescription",
+  "overall_soundscape:": "overallSoundscape",
+  "non_diegetic_music:": "nonDiegeticMusic",
+};
+
+/** 该镜是否已有可用提示词：六段任一非空即有内容可下发。 */
 export function hasPrompt(clip: MtrackClip): boolean {
-  const prompt = clip.prompt;
-  return Boolean((prompt?.integratedMultimodalDescription || prompt?.overallSoundscape || prompt?.nonDiegeticMusic || "").trim());
+  return promptValuesOf(clip.prompt).some(value => value.trim());
 }
 
-/** 声音两段在正文里的段名（由 mediaDispatch.buildPromptText 在 wire 层拼接，这里只用于编辑框的合成/拆分）。 */
-const soundscapeHeading = "overall_soundscape:";
-const musicHeading = "non_diegetic_music:";
+function promptValuesOf(prompt: ClipPrompt): string[] {
+  return [prompt.subjectDefinitions, prompt.summary, prompt.retentionAnalysis, prompt.detailedDescription, prompt.overallSoundscape, prompt.nonDiegeticMusic];
+}
 
 /**
- * 三段提示词合成编辑器里的单个文本框内容：正文 + 两个声音段（带段名）。
- * ACT: 编辑器只给一个框，框内按官方六段写全文——声音段的段名由这里补，
- * 与 mediaDispatch.buildPromptText 下发时拼的段名严格同形，避免编辑器写一套、下发拼另一套。
+ * 六段提示词合成编辑器里的单个文本框内容：段名 + 段内正文，段间一个空行。
+ * ACT: 空段整段省略（段名也不输出），顺序严格按 ref-en.txt 的六段顺序。
  * 上限：段名必须各占一段（行首），正文中间出现同名行会被视为段边界。
  */
 export function promptToText(prompt: ClipPrompt): string {
-  return [
-    prompt.integratedMultimodalDescription.trim(),
-    prompt.overallSoundscape.trim() && `${soundscapeHeading} ${prompt.overallSoundscape.trim()}`,
-    prompt.nonDiegeticMusic.trim() && `${musicHeading} ${prompt.nonDiegeticMusic.trim()}`,
-  ].filter(Boolean).join("\n\n");
+  const pairs = promptHeadings.map((heading, index) => ({ heading, value: promptValuesOf(prompt)[index] }));
+  return pairs
+    .map(item => item.value.trim() ? `${item.heading} ${item.value.trim()}` : "")
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 /**
- * 编辑器里的单框文本拆回三段字段：行首的 `overall_soundscape:` / `non_diegetic_music:` 各起一段，
- * 其余全部归 integratedMultimodalDescription。段名不进字段（字段里只写内容）。
- * ACT: 只认行首段名，正文里普通提及段名的句子不会被切开；同一段重复出现时取最后一段，不静默丢内容。
+ * 编辑器里的单框文本拆回六段字段：行首段名各起一段，段名不进字段（字段里只写内容）。
+ * ACT: 只认行首段名，正文里普通提及段名的句子不会被切开；同一字段重复出现时取最后一段，不静默丢内容；
+ * 未识别的段名归入 detailedDescription（H3 主字段）。
  */
 export function textToPrompt(text: string): ClipPrompt {
-  const body: string[] = [];
-  let soundscape = "";
-  let music = "";
-  let field: "body" | "soundscape" | "music" = "body";
+  const sections: Record<promptField, string[]> = {
+    subjectDefinitions: [],
+    summary: [],
+    retentionAnalysis: [],
+    detailedDescription: [],
+    overallSoundscape: [],
+    nonDiegeticMusic: [],
+  };
+  let field: promptField | "body" = "body";
   for (const line of text.split(/\r?\n/)) {
     const trimmed = line.trim();
-    const heading = trimmed.toLowerCase();
-    if (heading.startsWith(soundscapeHeading)) {
-      field = "soundscape";
-      soundscape = trimmed.slice(soundscapeHeading.length).trim();
+    const heading = promptHeadings.find(item => trimmed.toLowerCase().startsWith(item));
+    if (heading) {
+      field = promptFieldByHeading[heading];
+      const inline = trimmed.slice(heading.length).trim();
+      if (inline) sections[field].push(inline);
       continue;
     }
-    if (heading.startsWith(musicHeading)) {
-      field = "music";
-      music = trimmed.slice(musicHeading.length).trim();
-      continue;
-    }
-    if (field === "soundscape") soundscape = `${soundscape}\n${line}`.trim();
-    else if (field === "music") music = `${music}\n${line}`.trim();
-    else body.push(line);
+    (field === "body" ? sections.detailedDescription : sections[field]).push(line);
   }
   return {
-    integratedMultimodalDescription: body.join("\n").trim(),
-    overallSoundscape: soundscape,
-    nonDiegeticMusic: music,
+    subjectDefinitions: sections.subjectDefinitions.join("\n").trim(),
+    summary: sections.summary.join("\n").trim(),
+    retentionAnalysis: sections.retentionAnalysis.join("\n").trim(),
+    detailedDescription: sections.detailedDescription.join("\n").trim(),
+    overallSoundscape: sections.overallSoundscape.join("\n").trim(),
+    nonDiegeticMusic: sections.nonDiegeticMusic.join("\n").trim(),
   };
 }
 
@@ -557,7 +586,7 @@ function globalSignature(global: MtrackProject["global"]): string {
 
 /**
  * 单镜生成设置签名：项目级设置 + 本镜字段 + 参考集合，承接镜再链上一镜签名。
- * 与 LSC signatures() 同口径——镜头全量进签名，参考身份单列，context 链向前累加。
+ * 与 LSC signatures() 同口径——六段提示词整块进签名，参考身份单列，context 链向前累加。
  */
 function clipSignature(globalSig: string, clip: MtrackClip, previous: string): string {
   return stableJson({

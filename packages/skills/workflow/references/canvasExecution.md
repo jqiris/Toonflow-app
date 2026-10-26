@@ -53,11 +53,11 @@
 
 生成节点 `prompt` 是本次唯一执行提示词入口，通过 `node:setPrompt({prompt})` 写入。完整剧本和分镜文本节点保留内容依据，不再用 STRING 连线重复挂到生成节点；当前实现会把相连文本全文追加到 prompt。现有无关 STRING 引用在已授权编辑范围内移除，否则说明影响后暂停该生成。
 
-当供应商/画布接口实际使用 `{{ref N}}` 作为传输引用时，`{{ref N}}` 只能对应本次真实连接顺序与类型，不能把计划清单顺序当作真实顺序。**这属于执行层映射，不授权把 PART A 已定稿 `Reference binding` 的原始节点/资产句柄改写成另一套用户可见提示词格式。** 当前需分批读取现场数据还原顺序，不存在 `getReferences` 工具：
+当供应商/画布接口实际使用官方 `<Picture N>` / `<Video N>` / `<Audio N>` 作为传输引用时，标记只能对应本次真实连接顺序与类型，不能把计划清单顺序当作真实顺序，每类独立从 1 起。**这属于执行层映射，不授权把 PART A 已定稿 `Reference binding` 的原始节点/资产句柄改写成另一套用户可见提示词格式。** 当前需分批读取现场数据还原顺序，不存在 `getReferences` 工具：
 
 1. 用 `getCanvasEdges({ nodeIds: [目标ID], direction: "incoming" })` 分页读取全部入边，保持返回顺序，筛选实际输入端口的边。用 `getCanvasNodes` 显式指定 `fields: ["ports", "outputs"]` 分批核对源节点，确认源端口存在且类型兼容，从 `outputs[sourceHandle]` 取实际内容，按截断信息补齐必要字段。
 2. 用 `getCanvasNodes` 的 `fields: ["data"], dataKeys: ["referenceOrder"]` 读取目标排序。以 `encodeURIComponent(JSON.stringify([source,sourceHandle]))` 为键，按 `data.referenceOrder[目标端口]` 中的位置稳定排序；没有列入的排最后并保留原入边顺序。仅在字段完整且确实不存在排序记录时按有效入边顺序。
-3. 排序后第 N 项对应 `{{ref N}}`，不同类型共用编号。输出未就绪的输入仍占位并阻止生成，不能把空项删掉后继续套编号。节点/端口类型兼容性以运行时返回为准。
+3. 排序后每张图片按位次生成 `<Picture N>`、视频生成 `<Video N>`、音频生成 `<Audio N>`，不同类型独立编号。输出未就绪的输入仍占位并阻止生成，不能把空项删掉后继续套编号。节点/端口类型兼容性以运行时返回为准。
 
 无法取得完整输入或证明顺序时保留提示词草稿并说明待核实项，不猜编号。
 

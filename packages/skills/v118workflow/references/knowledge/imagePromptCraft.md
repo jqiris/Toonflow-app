@@ -1,3 +1,5 @@
+> **HISTORICAL（v1.1.8 旧模型模板）**：本文件为 Toonflow v1.1.8 时代的分镜图 / 视频提示词模板，含 `{{ref N}}` 旧双花括号占位符与旧模型参数示例。视频生成已**全量迁移到 MiniMax H3 官方六段格式**（`subject_definitions / summary / retention_analysis / detailed_description / overall_soundscape / non_diegetic_music`）与 `<Picture N>` / `<Video N>` / `<Audio N>` 参考标记口径，权威口径见 `docs/h3PromptAlignment.md`；本文件仅作历史参考保留，不得作为现行提示词编写依据。
+
 # 分镜图提示词与首帧知识
 
 用于首帧路线或用户确认需要分镜图的制作单元。输入是确认分镜及已采用资产图；这是把同一画面转成模型可执行描述，不是第二次创作剧情。先读本文件，涉及风格时只读 [视觉风格](visualStyles.md) 中已确认条目；角色/场景资产设计缺项回 [资产设计](assetDesign.md) 及资产阶段。

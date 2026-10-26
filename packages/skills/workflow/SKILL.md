@@ -34,7 +34,7 @@ metadata:
 
 视频生成先判工程形态：
 
-一、**多轨主路径（默认）**：工作区 `plan/` 下存在 `story.mtrack`（或任意 `.mtrack` 工程），或本次任务属于分镜批量、跨镜连续性、需要状态回写与验收合成（新项目同样走本路径，工程由导入节点创建）→ 走 assetCard 技能链路：资产卡与分镜稿定稿 → 画布「导入资产与分镜」节点（`packages/nodes/assetImportNode`：抽取资产卡与分镜、批量出资产图、写 `plan/assetIndex.json` 与 `plan/story.mtrack`）→ 资产节点连到多轨节点 `in` 端口，多轨「参考素材」只从连线上打勾（位次即 `{{ref N}}`）→ `planOperator` validate 清零 → 逐镜生成，二选一：会话内按 runbook §十三 逐镜 SOP（`planOperator` dispatch 出清单，逐镜按 §一 11 步执行），或画布多轨节点 `node:dispatchGenerate` 后台派工（立即返回 batchId，进度看 `node:getStatus` / `mtrackRead`）。**同一批镜头两者绝不同时执行。**
+一、**多轨主路径（默认）**：工作区 `plan/` 下存在 `story.mtrack`（或任意 `.mtrack` 工程），或本次任务属于分镜批量、跨镜连续性、需要状态回写与验收合成（新项目同样走本路径，工程由导入节点创建）→ 走 assetCard 技能链路：资产卡与分镜稿定稿 → 画布「导入资产与分镜」节点（`packages/nodes/assetImportNode`：抽取资产卡与分镜、批量出资产图、写 `plan/assetIndex.json` 与 `plan/story.mtrack`）→ 资产节点连到多轨节点 `in` 端口，多轨「参考素材」只从连线上打勾（位次即官方 `<Picture N>` / `<Video N>` / `<Audio N>` 的编号基数）→ `planOperator` validate 清零 → 逐镜生成，二选一：会话内按 runbook §十三 逐镜 SOP（`planOperator` dispatch 出清单，逐镜按 §一 11 步执行），或画布多轨节点 `node:dispatchGenerate` 后台派工（立即返回 batchId，进度看 `node:getStatus` / `mtrackRead`）。**同一批镜头两者绝不同时执行。**
 
 二、**直连例外**：工作区没有多轨工程，且用户点名只要一条视频（单段、无分镜表、无资产卡体系、不要求跨镜连续性的灵感短片），或对既有单视频节点的局部重生成/参数修正 → 按 [canvasExecution](references/canvasExecution.md) 单节点链路 `node:getConfig` → `node:setConfig` → `node:setPrompt` → `node:generateVideo` → `node:getGenerationStatus` 直调；仍须逐项展示方案并取得消耗算力授权；产物不回填 mtrack。
 
@@ -44,7 +44,7 @@ metadata:
 
 形态判定为多轨后，Agent 侧阶段门与逐镜操作顺序见 `freevideoMultitrack` 技能；数据契约仍以本链路 runbook/模板为准。
 
-**多轨产物格式硬隔离（强制）**：命中多轨形态后，本段产物只能是 `clips[].prompt` 三字段里的 MiniMax H3 官方 ref2va 六段——`subject_definitions` / `summary` / `retention_analysis` / `detailed_description` 四段写进 `integratedMultimodalDescription`（段首标签自己写），`overallSoundscape` 与 `nonDiegeticMusic` 只写环境声与配乐的内容、不写段名。**PART A 的 Seedance 字段结构一律禁止进入多轨产物**：A9.1「资产标识 + 正式提示词」外壳，以及 A9.2 的 `Objective` / `Reference binding` / `Immutable locks` / `Target duration` / `Timeline` / `Visual direction` / `Audio direction` / `Preserve` / `Avoid` 字段，都不得出现在 `clips[].prompt` 里，也不得以「参考着写」「只借字段名」的方式降级混入。多轨形态下 PART A 只提供创作内核（节拍、站位、连续性规则），格式只认 [assetCard 生成 SOP runbook](../assetCard/references/generationRunbook.md) §四 与 [多轨工程模板](../assetCard/references/multitrackTemplate.md) §四。用户在多轨工程内点名要 Seedance 提示词写法时，PART A 仍作创作内核，但产物外壳仍是 ref2va 六段，不得据此改用 A9.1/A9.2 字段。
+**多轨产物格式硬隔离（强制）**：命中多轨形态后，本段产物只能是 `clips[].prompt` 六个驼峰字段里的 MiniMax H3 官方 ref2va 六段——`subject_definitions` / `summary` / `retention_analysis` / `detailed_description` / `overall_soundscape` / `non_diegetic_music` 一一对应 `subjectDefinitions` / `summary` / `retentionAnalysis` / `detailedDescription` / `overallSoundscape` / `nonDiegeticMusic`（每段字段首行必须写官方段名，段间空一行）。**PART A 的 Seedance 字段结构一律禁止进入多轨产物**：A9.1「资产标识 + 正式提示词」外壳，以及 A9.2 的 `Objective` / `Reference binding` / `Immutable locks` / `Target duration` / `Timeline` / `Visual direction` / `Audio direction` / `Preserve` / `Avoid` 字段，都不得出现在 `clips[].prompt` 里，也不得以「参考着写」「只借字段名」的方式降级混入。多轨形态下 PART A 只提供创作内核（节拍、站位、连续性规则），格式只认 [assetCard 生成 SOP runbook](../assetCard/references/generationRunbook.md) §四 与 [多轨工程模板](../assetCard/references/multitrackTemplate.md) §四。用户在多轨工程内点名要 Seedance 提示词写法时，PART A 仍作创作内核，但产物外壳仍是 ref2va 六段，不得据此改用 A9.1/A9.2 字段。
 
 ### Seedance 路由锁存（最高优先级入口规则）
 
@@ -803,7 +803,7 @@ A9 只定义**最终交付外壳**，不改变 A2–A8 的任何执行逻辑。
 
 - Seedance 2.0 → 使用 A9.1
 - Seedance 2.5 → 使用 A9.2
-- freevideo / MiniMax-H3（默认） → 不使用 A9 外壳；直连例外按 [canvas 片段制作指南](../canvas/references/videoProduction.md) 的三段式写（素材定义 + 顺序镜头 + 风格约束），多轨工程按 [assetCard runbook](../assetCard/references/generationRunbook.md) §四 的 `clips[].prompt` 三字段写：正文英文；有参考时前四段整段写进正文、**第一行直接是 `subject_definitions:`**（不再套 `integrated_multimodal_description:`），两个声音段只写内容不写段名（`overall_soundscape:` / `non_diegetic_music:` 由引擎拼）；无参考时正文不套段首，引擎补 `integrated_multimodal_description:`。参考标记按 §四 的 `{{ref N}}` 口径。引擎只做三件事——拼「全片风格 / 全片约束」前缀、漏写官方段首时补字段名、把两个声音字段拼成同名两段尾——正文原样透传，不代写任何段，也不追加参考顺序声明行。PART A 的 A1–A8、A11–A12 执行规则仍适用。
+- freevideo / MiniMax-H3（默认） → 不使用 A9 外壳；直连例外按 [canvas 片段制作指南](../canvas/references/videoProduction.md) 的三段式写（素材定义 + 顺序镜头 + 风格约束），多轨工程按 [assetCard runbook](../assetCard/references/generationRunbook.md) §四 的 `clips[].prompt` 六字段对象写：正文英文；有参考时按官方六段顺序写全（subject_definitions / summary / retention_analysis / detailed_description / overall_soundscape / non_diegetic_music，每个驼峰字段首行是官方段名）；参考标记用官方 `<Picture N>` / `<Video N>` / `<Audio N>`，每类按 `referenceIds` 中同类型位次独立编号从 1 起。`buildPromptText` 只做两件事——按六段顺序拼装非空段、注入首帧首行指令；不做前缀拼接、不做占位符换算、不做段名补齐。PART A 的 A1–A8、A11–A12 执行规则仍适用。
 
 如果 A9 的表达方式与 A2–A8、A11–A12 的执行规则发生冲突，以执行规则为准。
 

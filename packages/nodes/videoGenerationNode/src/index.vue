@@ -59,9 +59,9 @@
             filterable
             :loading="modelsLoading"
             :disabled="generating || deleting"
-            placeholder="选择模型"
+            placeholder="选择模型（仅支持 MiniMax-H3）"
             aria-label="生成模型"
-            noDataText="请先在设置中添加视频模型"
+            noDataText="仅支持 MiniMax-H3 视频生成，请先在设置中添加 MiniMax-H3 模型"
             placement="top-start"
             @visible-change="(visible) => visible && loadModels().catch((error) => showNodeError(error, '模型读取失败'))">
             <template #prefix><icon-sparkles :size="17" /></template>
@@ -207,8 +207,9 @@ watch([selectedModel, () => data.value.duration], ([choice]) => {
   if (choice.audio !== "optional") data.value.generateAudio = choice.audio === true;
 }, { flush: "sync" });
 const modelGroups = computed(() => groupNodeModels(models.value));
-// {{ref N}} 的 N 是画布参考顺序的序号（含文本参考），H3 的参考标签按媒体类型各自编号，
-// 必须在此按 refList 逐项换算；同一来源节点重复出现时沿用第一个编号，避免同一张图占两个参考位。
+// 作者已在正文里写官方 <Picture N> / <Video N> / <Audio N>（H3 官方口径），
+// 这里只按 refList 逐项派生合法集合供 startGeneration 越界检查；同一来源节点重复出现时沿用第一个编号，
+// 避免同一张图占两个参考位。旧「双花括号 ref 占位符」到 <Picture N> 的换算层已删除。
 function referenceTags(list: readonly { dataType: string | string[]; source: string }[]) {
   const tags = new Map<number, string>();
   const assigned = new Map<string, string>();
@@ -237,9 +238,9 @@ function isH3Model(model?: { modelId: string }) {
   return h3ModelId.test(model?.modelId ?? "");
 }
 const generationPrompt = computed(() => {
-  const text = data.value.prompt.trim();
-  const tags = isH3Model(selectedModel.value) ? referenceTags(refList.value) : undefined;
-  const prompt = tags ? text.replace(/\{\{\s*ref\s*(\d+)\s*\}\}/gi, (mention, n: string) => tags.get(Number(n)) ?? mention) : text;
+  // H3 官方口径：作者直接写 <Picture N> / <Video N> / <Audio N>，正文原样下发；
+  // 旧「双花括号 ref 占位符」不再换算，startGeneration 会拦下并给出正确写法。
+  const prompt = data.value.prompt.trim();
   return [
     prompt,
     ...refList.value.flatMap((item, index) => (item.dataType === "STRING" && item.value?.trim() ? [`参考 ${index + 1}：\n${item.value.trim()}`] : [])),
@@ -348,14 +349,29 @@ async function startGeneration() {
   if (deleting.value) throw new Error("节点正在删除");
   if (!choice || !input) throw new Error("请先选择视频模型");
   if (!generationPrompt.value) throw new Error("请输入生成提示词");
-  // ACT: 参考标记统一写 {{ref N}}；行内尖括号标签会被 wire 层当普通文本透传，生成前先拦下并给出正确写法。
-  const inlineTag = /<\s*(picture|video|audio)\s*\d+\s*>/i.exec(data.value.prompt);
-  if (inlineTag) throw new Error(`参考标记请写 {{ref N}}，N 为参考顺序里的序号（本节点共 ${refList.value.length} 项）；当前写的是 ${inlineTag[0]}`);
+  // ACT: H3 官方口径：作者直接写 <Picture N> / <Video N> / <Audio N>，
+  // 旧「双花括号 ref 占位符」一律报错；官方标记按媒质分组（图片/视频/音频独立从 1 起）逐个越界检查。
+  if (/\{\{\s*ref\s*/i.test(data.value.prompt)) {
+    throw new Error("参考标记请写官方 <Picture N> / <Video N> / <Audio N>（每类独立从 1 起编号），旧「双花括号 ref 占位符」已废弃");
+  }
   if (isH3Model(choice)) {
-    const tags = referenceTags(refList.value);
-    for (const matched of data.value.prompt.matchAll(/\{\{\s*ref\s*(\d+)\s*\}\}/gi)) {
-      const n = Number(matched[1]);
-      if (!tags.has(n)) throw new Error(`参考标记 {{ref ${n}}} 超出范围：本节点参考顺序共 ${refList.value.length} 项`);
+    const counts = { IMAGE: new Set<number>(), VIDEO: new Set<number>(), AUDIO: new Set<number>() };
+    refList.value.forEach(item => {
+      const types = Array.isArray(item.dataType) ? item.dataType : [item.dataType];
+      const type = types.includes("IMAGE") ? "IMAGE"
+        : types.includes("VIDEO") ? "VIDEO"
+          : types.includes("AUDIO") ? "AUDIO"
+            : null;
+      if (!type) return;
+      let n = 0;
+      for (const num of counts[type]) { if (num > n) n = num; }
+      counts[type].add(n + 1);
+    });
+    for (const matched of data.value.prompt.matchAll(/<\s*(picture|video|audio)\s*(\d+)\s*>/gi)) {
+      const type = matched[1].toUpperCase() as "IMAGE" | "VIDEO" | "AUDIO";
+      if (!counts[type].has(Number(matched[2]))) {
+        throw new Error("参考标记 " + matched[0] + " 超出范围：本节点 " + type + " 参考共 " + counts[type].size + " 项");
+      }
     }
   }
   if (refList.value.some(item => item.value === undefined)) throw new Error("引用节点暂无内容，请先补充引用内容");
@@ -475,7 +491,7 @@ nodeTools.register({
 
 nodeTools.register({
   name: "setPrompt",
-  description: "修改此节点的视频生成提示词，支持 {{ref 1}} 等参考标记；只修改提示词，不启动生成",
+  description: "修改此节点的视频生成提示词，支持 <Picture 1> / <Video 1> / <Audio 1> 等官方参考标记；只修改提示词，不启动生成",
   parameters: z.strictObject({ prompt: z.string() }),
   execute({ prompt: value }) {
     if (deleting.value) throw new Error("节点正在删除，请稍后修改");

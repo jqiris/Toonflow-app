@@ -11,7 +11,7 @@
 - 「同时生成资产图」勾选后，逐张走媒体通道出图（`ai.generateImage()` → `/api/ai/media/generate`，与图片生成节点同一条路），产物落 `assets/<本节点 id>/`，并在本节点右侧新建图片节点（`remote-imageNode`，label 为 `<资产编号> <名称>`），把画布节点 id 写回资产索引的 `nodeId`。资产卡的画幅按类别取标准档位（人物四视图整版/场景空镜 `16:9`、道具 `1:1`）：模型没给、给成非法形状（空串/中文），或给了非标准档位（`2:3`/`9:16`/`4:5`）都归一到标准档，被改写的卡记进 `warnings`，不套工程画幅。
 - 落盘写 `plan/assetIndex.json`（`{ version: "assetIndex-v1", cards }`）与 `plan/story.mtrack`（`normalizeProject` + `createClip` 组装）。两个文件任一已存在就直接拒绝，绝不覆盖；先写索引再写工程，工程写失败会删掉刚建的索引。不写 `global.model`——该字段是多轨派工用的视频模型，写进抽取用的文本模型会让派工报「所选模型不存在」。
 - 分镜的参考清单只留本次真的出了图的图片资产：出图失败的卡会从 `clips[].referenceIds` 里剔掉（校验器 V13 只看卡在不在索引里、不看 `nodeId`，失败卡留着会让多轨派工报「参考图未就绪」）；被剔掉、超过引擎上限（单镜图片参考 ≤9、承接镜 ≤3）、承接镜不足 10 秒都记进 `warnings`，不中断导入。
-- 原文里已经写好视频提示词的镜头，抽取时整段原样保留（六个官方段名与段序照抄，不改写成一句话）；落盘时按行首段名拆分进三段字段——正文进 `integratedMultimodalDescription`，`overall_soundscape:` / `non_diegetic_music:` 两段各进同名字段（段名不进字段，与多轨编辑器写入口径一致，免得工程每镜带两条「缺声音段」的 V11 warning）。段落要补写或改写时用 `clips` 按 `clipId` 覆盖。
+- 原文里已经写好视频提示词的镜头，抽取时整段原样保留（六个官方段名与段序照抄，不改写成一句话）；落盘时按行首段名拆分进六个驼峰字段——`subject_definitions:` / `summary:` / `retention_analysis:` / `detailed_description:` 分别落 `subjectDefinitions` / `summary` / `retentionAnalysis` / `detailedDescription`，`overall_soundscape:` / `non_diegetic_music:` 各自落 `overallSoundscape` / `nonDiegeticMusic`（段名不进字段，与多轨编辑器写入口径一致，免得工程每镜带「缺段」的 V11 warning）。段落要补写或改写时用 `clips` 按 `clipId` 覆盖。
 - 分镜的 `continuity` 默认按引擎口径「能承接就承接」：上一镜存在 + 本镜 ≥10 秒 + 参考 ≤3 才算承接（`context`），否则独立起拍（`shot`）；模型或 `clips` 显式给了值就照用。
 - 模型一律显式选择，不静默回落：无文本模型时面板首屏报错并禁用抽取；无图片模型时显式提示，取消勾选出图仍可只导入资产卡与分镜。**面板与 `node:importScript` 都不再默认列表第一个模型**——盲选的模型若密钥没配好，整条链路会一路挂到超时，比直接报错难查得多。
 - 本节点是「会话 Agent 与画布之间的契约工具」：资产卡与分镜已经定稿（会话里抽好、或从 `assets/assetCards.md` 整理出来）时直接传 `extraction`，节点纯校验落盘、一次模型都不调；只有散文要抽时才传 `path`/`text` + `model`。

@@ -1,3 +1,7 @@
+> **H3 口径声明**：本工作流视频生成仅支持 MiniMax-H3（H3 官方六段格式 + `<Picture N>` / `<Video N>` / `<Audio N>` 参考标记）；不接受其他视频模型或旧格式占位符。
+
+> **HISTORICAL（H3 迁移后口径更新）**：本文档写作于旧双花括号 ref 占位符与三字段提示词口径时期，正文中涉及的 `{{ref N}}` 占位符与 `integratedMultimodalDescription` 三字段存储已随 MiniMax H3 官方六段（`subject_definitions` / `summary` / `retention_analysis` / `detailed_description` / `overall_soundscape` / `non_diegetic_music`）与 `<Picture N>` / `<Video N>` / `<Audio N>` 参考标记口径全量迁移后作废；权威口径见 `docs/h3PromptAlignment.md`，本文件仅作历史追溯保留。
+
 # Agent 引导审计：多轨 / 分镜制作链路够不够 agent 自己走通
 
 - 审计日期：2026-10-21
@@ -188,7 +192,7 @@
 | 合成成片按钮 | `dispatchBar.vue` 「合成成片」；`multitrackEditor.vue` `handleComposite`；runbook §15.6 |
 | 合成路由 | `apps/server/src/routes/mtrack/composite.ts`；注册 `apps/server/src/router.ts`（自动生成） |
 | 工具与路由共用执行段 | `packages/tools/planOperator/src/compositeRun.ts` |
-| 整理本镜提示词（新增） | `apps/server/src/routes/mtrack/rewriteShot.ts`（POST，`providerId`+`modelId`+三段提示词，可选 `rules` 覆盖内置整理规则；返回 `{text, requiresReview:true}`，工程级 `generating` 时 409 拒绝）；入口 `clipEditor.vue` 「整理本镜提示词」→ `multitrackEditor.vue` `rewriteClipPrompt`（自动取第一个可用文本模型）→ **待采用区块**：`adoptRewrite` 按 `pending.clipId` 人工采用才写回 `prompt.integratedMultimodalDescription`，环境声/配乐不动；`rewriteBasisChanged` 守原文/时长/规则三者，变化即禁用采用；runbook §15.8 |
+[HISTORICAL] | 整理本镜提示词（新增） | `apps/server/src/routes/mtrack/rewriteShot.ts`（POST，`providerId`+`modelId`+三段提示词，可选 `rules` 覆盖内置整理规则；返回 `{text, requiresReview:true}`，工程级 `generating` 时 409 拒绝）；入口 `clipEditor.vue` 「整理本镜提示词」→ `multitrackEditor.vue` `rewriteClipPrompt`（自动取第一个可用文本模型）→ **待采用区块**：`adoptRewrite` 按 `pending.clipId` 人工采用才写回 `prompt.integratedMultimodalDescription`，环境声/配乐不动；`rewriteBasisChanged` 守原文/时长/规则三者，变化即禁用采用；runbook §15.8 |
 | 九宫格拆图建工程 | `packages/nodes/imageNode/src/components/imageGridSplit.vue` `writeSplitProject`（每格一镜 + `assetIndex` 每格一卡 + `referenceIds` 指向该格；`plan/story.mtrack` 与 `plan/assetIndex.json` 已存在则抛「已存在，未覆盖」）；runbook §15.7 |
 | 全片风格 / 系统提示词拼装位置 | `directDispatch.ts:101-106`：前拼到画面正文**开头**，不新增段落标题；两字段为空时输出逐字节一致（行号已按 ref2va 六段改造后的代码校正，原引 `:109-113`） |
 | 参考缩略图解析 | `multitrackEditor.vue` `resolveReferenceThumbnails`：`card.nodeId` 优先，为空回落 `findCardNodeIds` label 匹配，取并集去重 |

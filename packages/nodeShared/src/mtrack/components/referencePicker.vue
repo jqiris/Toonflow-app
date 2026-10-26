@@ -26,8 +26,9 @@
             :checked="pickedSet.has(item.cardId)"
             @change="toggle(item.cardId, ($event.target as HTMLInputElement).checked)"
           />
+          <span v-if="item.cardId && pickedSet.has(item.cardId)" class="refTag" :title="'提示词中写作 <Picture ' + (orderOf(item.cardId) + 1) + '>'"><Picture {{ orderOf(item.cardId) + 1 }}></span>
           <span v-else class="refBadge">非资产卡</span>
-          <span class="refName">{{ item.cardId && pickedSet.has(item.cardId) ? `图${orderOf(item.cardId) + 1} · ` : "" }}{{ item.name }}</span>
+          <span class="refName">{{ item.name }}</span>
         </label>
       </div>
       <!-- 画布卡片宿主：网格只列 in 端口连进来的来源，一条没连时给出明确的接法指引。 -->
@@ -67,7 +68,7 @@ import { ElMessageBox, ElOption, ElSelect } from "element-plus";
 import { clipModeLabels, resolveClipMode, type ClipMode } from "../mtrackProject";
 
 const props = defineProps<{
-  /** 本镜参考集合（cardId 数组）；顺序即提示词里 {{ref N}} 的 N。 */
+  /** 本镜参考集合（cardId 数组）；顺序即提示词里 <Picture N> 的 N。 */
   referenceIds: string[];
   /**
    * 网格条目，由宿主按形态解析好再传入（位次语义不变，勾选仍写 cardId）：
@@ -261,6 +262,19 @@ const modeHint = computed(() => {
   color: var(--el-text-color-secondary);
   background: var(--el-fill-color);
   font-size: 10px;
+}
+
+.refTag {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--el-bg-color);
+  background: var(--el-color-primary);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 10px;
+  letter-spacing: 0.02em;
 }
 
 .refThumb {

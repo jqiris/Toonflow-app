@@ -10,7 +10,7 @@
 
 1. **编号 / 声明式接线 / 硬校验三件事在 Toonflow 里都没有一等公民容器**。现有对应物分别是「节点标题 + Markdown 文本」「Agent 手工 `connectNodes` + `setPrompt`」「`canConnect` + 节点函数内联校验」，全部依赖 Agent 自觉。
 2. **唯一一等的确定性层是 `nodeTools.register`**：Zod 参数经 `parseAsync` 才执行，schema 转 Draft-7 供 Agent 查询，属于运行时业务校验（不属于测试代码）。这是植入「硬校验 guard」最自然的插槽。
-3. **结构化计划的落点是文本节点正文文件**（`content.md`），不是专用容器；`{{ref N}}` 的编号由 `data.referenceOrder[portId]` + 入边顺序决定，Agent 只能读、不能经工具写。
+[HISTORICAL] 3. **结构化计划的落点是文本节点正文文件**（`content.md`），不是专用容器；`{{ref N}}` 的编号由 `data.referenceOrder[portId]` + 入边顺序决定，Agent 只能读、不能经工具写。
 4. **媒体链路已就绪**：本机 FreeVideo（`/freevideo/agent/v1`，MiniMax-H3）作为媒体供应商接入，视频节点可直接使用；**ComfyUI 无需自研**，Toonflow 侧只面对供应商 HTTP 契约。
 5. **成本最低的落地方向**：新增一个 skill（规范化计划 + 接线契约）+ 一个 tool（`planOperator` 结构化存取 + 确定性校验）+ 一个节点函数 guard（`setPrompt` 前置校验）。三者都不需要改宿主代码，均可独立回滚。
 
@@ -79,7 +79,7 @@
   - **`nodeTools.register`**（`src/nodeTools.ts`）：必须在同步 `setup` 中调用；`name` 必须 `/^[a-z][a-zA-Z0-9]{0,63}$/`；`parameters` 必须是 Zod 对象 schema，经 `z.toJSONSchema(..., { target: "draft-07" })` 转给 Agent；执行前 `parseAsync`，保留默认值/转换/`refine`；注册表挂在共享 Vue Flow 实例的 `Symbol.for("toonflow.nodeTools")`，**不写入画布 JSON**；单次调用 120 s 超时。
   - **`setPrompt` 并非脚手架 API**，而是各生成节点自行注册的函数名约定；脚手架只提供注册与调用通道。
   - **`referenceOrder`**：`useNodeReferences`（`packages/nodeShared/src/useNodeReferences.ts`）从 `node.data.referenceOrder[handleId]` 读取键数组，键为 `encodeURIComponent(JSON.stringify([source, sourceHandle]))`；未列入的项按入边顺序追加。
-  - **`{{ref N}}`**：`referenceMentions` 为第 N 项生成 `{ name: "参考 N", value: "{{ref N}}" }`，编号基于排序后的 `refList`，文字与媒体共用同一编号空间。
+[HISTORICAL]   - **`{{ref N}}`**：`referenceMentions` 为第 N 项生成 `{ name: "参考 N", value: "{{ref N}}" }`，编号基于排序后的 `refList`，文字与媒体共用同一编号空间。
   - 其它：`useNode` 返回 `outputs/nodeEvent/files/ai/ffmpeg/config`；`nodeEvent.on("canConnect")` 仅调用 target 节点回调且必须同步；输出值固定 `{ dataType, value }`；`files` 走宿主工作区文件接口。
 - **插槽边界**：`packages/nodeScaffold` 只放"通用节点基础能力、构建配置、宿主接口"；插件专属逻辑放插件；跨插件共享放 `packages/nodeShared`（`@toonflow/node-shared`，子路径导入，如 `promptInput`、`referenceItem`、`useNodeReferences`、`useNodeGeneration`、`mediaHistory`、`showNodeError`）。
 
@@ -128,8 +128,8 @@
 | LocalStoryCanvas 做法（依据 `C:\workspace\super-ai\LocalStoryCanvas\资产卡格式规范.md`） | Toonflow 现有对应物（确切位置） | 缺口 |
 | --- | --- | --- |
 | **① 资产卡编号**：`C\d+ / SC\d+ / P\d+ / KF\d+ / S\d+`，字母状态后缀（`P01-A`/`P01-B`）属身份，全局唯一，重复即拒绝导入 | 节点 `label`（`renameNodes`，1–200 字符）、文本节点正文 `content.md`、`data.referenceOrder` 的边键 | **无编号字段**。`assetId` 目前只能落在标题或正文里，是**纯文字索引**：节点改名即失效，无唯一性检查，无法被程序检索；`canvas` 读取工具也不按编号过滤（`findCanvasNodes` 只按 `query` 名称/ID、`types`、`selectedOnly`） |
-| **② 声明式参考接线**：卡片字段 `身份参考：C01` / `结构参考：SC01` / `道具参考：P01`，优先级「显式 > 参考派生散文 > 正则兜底 > 不接线」，并带否定守卫与 backwards-only 规则 | `connectNodes({connections:[{source,sourceHandle,target,targetHandle}]})` + `setPrompt` 手写 `{{ref N}}`；`data.referenceOrder[portId]` 存排序 | **接线靠 Agent 手工完成**：先 `connectNodes`，再 `getCanvasEdges(direction:"incoming")` 读入边、`getCanvasNodes({dataKeys:["referenceOrder"]})` 读排序，最后 `setPrompt` 写 `{{ref N}}`。顺序、编号一致性、前置依赖（资产先出图）**全部是提示词纪律**（`packages/skills/canvas/references/videoProduction.md` 第 3 节）。`referenceOrder` 没有写入型 nodeTools，Agent 只能间接靠连线顺序影响排序；每端口连线数上限 ≤2 的规则存在于示例而非统一约束 |
-| **③ 程序化硬校验**：import 期拒绝重复编号；`build_asset_steps` 拓扑排序；执行期严格串行，依赖未完成即抛错暂停；守卫规则（存在性/backwards-only/后缀/少年闪回排除）在解析层确定性生效 | `nodeTools.register` 的 Zod `parseAsync`；`videoGenerationNode.startGeneration` 的 5 条内联断言；`nodeScaffold` 的 `validateConnection` 类型/方向检查；`apps/server/src/utils/workspace/files.ts` 工作区边界与文件锁 | **没有面向"制作计划"的确定性 guard**：无编号唯一性检查、无"目标资产存在且已出图"检查、无"提示词 `{{ref N}}` 与入边一一对应"检查、无拓扑依赖校验。现有校验只覆盖单节点参数合法性，且散落在节点源码，不可配置、不可复用 |
+[HISTORICAL] | **② 声明式参考接线**：卡片字段 `身份参考：C01` / `结构参考：SC01` / `道具参考：P01`，优先级「显式 > 参考派生散文 > 正则兜底 > 不接线」，并带否定守卫与 backwards-only 规则 | `connectNodes({connections:[{source,sourceHandle,target,targetHandle}]})` + `setPrompt` 手写 `{{ref N}}`；`data.referenceOrder[portId]` 存排序 | **接线靠 Agent 手工完成**：先 `connectNodes`，再 `getCanvasEdges(direction:"incoming")` 读入边、`getCanvasNodes({dataKeys:["referenceOrder"]})` 读排序，最后 `setPrompt` 写 `{{ref N}}`。顺序、编号一致性、前置依赖（资产先出图）**全部是提示词纪律**（`packages/skills/canvas/references/videoProduction.md` 第 3 节）。`referenceOrder` 没有写入型 nodeTools，Agent 只能间接靠连线顺序影响排序；每端口连线数上限 ≤2 的规则存在于示例而非统一约束 |
+[HISTORICAL] | **③ 程序化硬校验**：import 期拒绝重复编号；`build_asset_steps` 拓扑排序；执行期严格串行，依赖未完成即抛错暂停；守卫规则（存在性/backwards-only/后缀/少年闪回排除）在解析层确定性生效 | `nodeTools.register` 的 Zod `parseAsync`；`videoGenerationNode.startGeneration` 的 5 条内联断言；`nodeScaffold` 的 `validateConnection` 类型/方向检查；`apps/server/src/utils/workspace/files.ts` 工作区边界与文件锁 | **没有面向"制作计划"的确定性 guard**：无编号唯一性检查、无"目标资产存在且已出图"检查、无"提示词 `{{ref N}}` 与入边一一对应"检查、无拓扑依赖校验。现有校验只覆盖单节点参数合法性，且散落在节点源码，不可配置、不可复用 |
 | **④ 分镜头 → 视频节点映射**：一个片段 = 一个视频节点/一份多参提示词；KF 构图卡从提示词正文提取 `C01/SC01/P01` 做拓扑依赖 | `packages/skills/canvas/references/videoProduction.md` 的"一个片段的全部镜头 → 一个视频生成节点的提示词"；`v118workflow/references/{storyboardTable,storyboardPanel,storyboardImages,videoProduction}.md`；视频节点 `in` 端口 + `refList` → `images/videos/audios/firstFrame/lastFrame` | **映射无结构承载**：镜头表只是 Markdown；"哪一段 → 哪个节点"靠 `label`（如"场01·片段01·视频"）人工约定；缺少"片段号/镜号/参考编号"到 `nodeId` 的机器可读映射，重生成时无法定位"这段的节点" |
 
 **补充差距**：`packages/skills/*` 不参与任何编译检查；`storyboardTeam` 成员无画布写入能力；`data/agents` 为空说明团队包从未在本机安装——若要验证团队路径，需先 `bun run --cwd packages/teams/storyboardTeam build`（`NODE_ENV=dev`）。
@@ -152,7 +152,7 @@
 - 与 ComfyUI 的关系：FreeVideo 跑在 ComfyUI 进程内（端口 8188，`FreeVideo-engine/agent/token`，插件 `CinemaWorld` 目录下 `comfyui_freevideo` 注册 `/freevideo/agent` 路由）。**Toonflow 只认 agent HTTP 契约，不知道 ComfyUI 的存在**——这是关键分层结论。
 - **可复用**：`ai.generateVideo / generateImage`（`packages/nodeScaffold/src/nodeAi.ts` → `useNodeAi`）、节点侧 `generationInput` 映射、`mediaGeneration` 工具直出、`mediaPrice`/`mediaHistory`、`apps/server/src/utils/media/generation.ts` 落盘与计费。
 - **不自研**：ComfyUI 工作流编排、VAE identity 注入、`TextEncode` 参考接线、拓扑排序执行器。LocalStoryCanvas 的 `attach_identity_reference`、`configure_encoder`、`OBJECT_REFERENCE_RULE` 属于**引擎内部实现**，Toonflow 侧没有、也不应复制；Toonflow 只需产出正确的「提示词 + 有序参考素材」，由 FreeVideo 负责画质一致性。
-- **须注意**：`mode` 声明是"可选模式集合"，节点是按引用数量选模式的（`getMatchingModes`）；供应商侧 `images` 直接拼进 `media.references`（图片→视频→音频顺序），**参考序号与提示词 `{{ref N}}` 的对应关系由 Toonflow 的 `refList` 决定，供应商不做编号**。
+[HISTORICAL] - **须注意**：`mode` 声明是"可选模式集合"，节点是按引用数量选模式的（`getMatchingModes`）；供应商侧 `images` 直接拼进 `media.references`（图片→视频→音频顺序），**参考序号与提示词 `{{ref N}}` 的对应关系由 Toonflow 的 `refList` 决定，供应商不做编号**。
 
 ---
 
@@ -177,7 +177,7 @@
 | `packages/teamScaffold` | `createTeamConfig`、manifest 校验、打包、`/a2a` 路由与客户端 | 模型密钥、监听端口、自带 SDK 运行时 |
 
 ### 6.3 对方案设计的直接约束
-- 不给 `{{ref N}}` 编号增加写入型 nodeTools 之前，任何"声明式接线"最终仍要通过 `connectNodes` 落地——**所以校验必须在接线之后、生成之前执行**（`setPrompt` 或独立 guard 函数）。
+[HISTORICAL] - 不给 `{{ref N}}` 编号增加写入型 nodeTools 之前，任何"声明式接线"最终仍要通过 `connectNodes` 落地——**所以校验必须在接线之后、生成之前执行**（`setPrompt` 或独立 guard 函数）。
 - 任何"计划文件"必须是工作区内的普通文件（如 `plan/*.json`），受 `resolveWorkspacePath` + `writeAtomic` 约束；不得改画布 JSON。
 - 校验失败必须**抛出中文错误**（与 `videoGenerationNode` 的风格一致），由 Agent 读取后修正，而不是静默跳过。
 - 新增工具包必须自带 `readme.md`（构建期嵌入）、`package.json.version`（须非空），且 `configRules` 为纯 JSON。
@@ -190,7 +190,7 @@
 | --- | --- | --- |
 | 资产编号与计划结构化 | **S3 tool**（如 `packages/tools/planOperator/`）+ 工作区 `plan/storyboardPlan.json` | 工具负责 `create/read/validate`，Zod schema 固化 `assets[] / segments[] / shots[] / referenceBindings[]`；文件名小驼峰、目录小驼峰 |
 | 声明式参考接线 | **S3 tool** 输出"期望接线清单" + **S5 nodeTools** 在目标节点侧核对 | 工具不下发 `connectNodes`（权限过大），由 Agent 执行接线；guard 在 `setPrompt`/生成函数内比对期望与实际（入边 + `referenceOrder`） |
-| 程序化硬校验 | **S5 nodeTools guard** 为主，**S3 tool 的 `validate` action** 为辅 | 规则：编号唯一、目标存在、backwards-only、`{{ref N}}` 与 `refList` 一一对应、引用节点 `value !== undefined`、模式与素材数量匹配（复用现有 `matchingModes`） |
+[HISTORICAL] | 程序化硬校验 | **S5 nodeTools guard** 为主，**S3 tool 的 `validate` action** 为辅 | 规则：编号唯一、目标存在、backwards-only、`{{ref N}}` 与 `refList` 一一对应、引用节点 `value !== undefined`、模式与素材数量匹配（复用现有 `matchingModes`） |
 | 分镜头 → 视频节点映射 | **S1 skill** 约定命名与字段 + **S3 tool** 存映射表 `{ segmentId → nodeId }` | 增加"重生成"定位能力：按 `segmentId` 找到节点再调 `node:generateVideo` |
 | 审阅面板 | **S6 ext**（`resourceKind: "canvasNode"`）或 `packages/ext/<名>` 的 `file` 扩展 | 只读展示 + 导出，不承担校验权威 |
 | 多人协作分工 | **S2 team**（可选） | 若引入，成员 `tools` 白名单须显式列出 `nodeTools`/`connectNodes`，并声明"不得并发改同一画布" |

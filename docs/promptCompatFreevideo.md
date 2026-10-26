@@ -1,3 +1,5 @@
+> **DEPRECATED (H3 迁移后作废)**：本文档描述老双花括号 ref 占位符与三字段提示词格式，已随 MiniMax H3 官方六段（subject_definitions / summary / retention_analysis / detailed_description / overall_soundscape / non_diegetic_music）与 `<Picture N>` / `<Video N>` / `<Audio N>` 参考标记口径全量迁移后**作废**；权威口径见 `docs/h3PromptAlignment.md`，文件保留不删除，仅作历史追溯。
+
 # freevideo 路径的图片与视频格式规范（设计稿）
 
 > **状态：过程稿，方案未采纳（2026-10-23）。** 本轮最终落地的是「保留三字段存储 + 参考标记统一 `{{ref N}}`」，未做单串改造。本文档保留作为 master 基线与风险评估记录，文中的「单串」实现清单不作为执行依据；现行口径见 `packages/skills/assetCard/references/multitrackTemplate.md` §四 与 `generationRunbook.md` §四。

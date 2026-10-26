@@ -47,7 +47,15 @@ export interface MultitrackClip {
   ratio: string;
   resolution: string;
   generateAudio: boolean;
-  prompt: { integratedMultimodalDescription: string; overallSoundscape: string; nonDiegeticMusic: string };
+  /** H3 官方六段（段名与顺序逐字对齐 ref-en.txt）；无参考退化时只留 detailedDescription/overallSoundscape/nonDiegeticMusic。 */
+  prompt: {
+    subjectDefinitions: string;
+    summary: string;
+    retentionAnalysis: string;
+    detailedDescription: string;
+    overallSoundscape: string;
+    nonDiegeticMusic: string;
+  };
   referenceIds: string[];
   continuity: string;
   status: string;
@@ -149,9 +157,22 @@ export function validatePlan(input: ValidateInput): Finding[] {
     if (clipIds.has(clip.clipId)) findings.push({ rule: "V11", level: "error", message: `片段 id 重复：${clip.clipId}`, ref: clip.clipId });
     clipIds.add(clip.clipId);
     if (!/^S\d{3}$/.test(clip.clipId)) findings.push({ rule: "V11", level: "error", message: `片段 id 格式应为 S001：${clip.clipId}`, ref: clip.clipId });
-    if (!clip.prompt?.integratedMultimodalDescription?.trim()) findings.push({ rule: "V11", level: "error", message: `片段 ${clip.clipId} 缺少 integratedMultimodalDescription`, ref: clip.clipId });
-    if (!clip.prompt?.overallSoundscape?.trim()) findings.push({ rule: "V11", level: "warning", message: `片段 ${clip.clipId} 缺少 overallSoundscape`, ref: clip.clipId });
-    if (!clip.prompt?.nonDiegeticMusic?.trim()) findings.push({ rule: "V11", level: "warning", message: `片段 ${clip.clipId} 缺少 nonDiegeticMusic`, ref: clip.clipId });
+    // ACT: H3 官方六段契约：有参考时六段任一为空即报错（要求 subjectDefinitions/summary/retentionAnalysis 三分析段非空）；
+    // 无参考（退化）时不要求分析段，只要求 detailedDescription/overallSoundscape/nonDiegeticMusic 至少一段非空。
+    const clipPrompt = clip.prompt;
+    if (!clipPrompt) {
+      findings.push({ rule: "V11", level: "error", message: `片段 ${clip.clipId} 缺少 prompt 字段`, ref: clip.clipId });
+    } else {
+      const hasReferences = (clip.referenceIds ?? []).length > 0;
+      if (hasReferences) {
+        if (!clipPrompt.subjectDefinitions?.trim()) findings.push({ rule: "V11", level: "error", message: `片段 ${clip.clipId} 有参考但缺少 subjectDefinitions（H3 六段之一）`, ref: clip.clipId });
+        if (!clipPrompt.summary?.trim()) findings.push({ rule: "V11", level: "error", message: `片段 ${clip.clipId} 有参考但缺少 summary（H3 六段之一）`, ref: clip.clipId });
+        if (!clipPrompt.retentionAnalysis?.trim()) findings.push({ rule: "V11", level: "error", message: `片段 ${clip.clipId} 有参考但缺少 retentionAnalysis（H3 六段之一）`, ref: clip.clipId });
+      }
+      if (!clipPrompt.detailedDescription?.trim() && !clipPrompt.overallSoundscape?.trim() && !clipPrompt.nonDiegeticMusic?.trim()) {
+        findings.push({ rule: "V11", level: "error", message: `片段 ${clip.clipId} 提示词为空（detailedDescription / overallSoundscape / nonDiegeticMusic 全为空）`, ref: clip.clipId });
+      }
+    }
     if (!["pending", "generating", "generated", "accepted", "failed"].includes(clip.status)) {
       findings.push({ rule: "V11", level: "error", message: `片段 ${clip.clipId} 状态非法：${clip.status}`, ref: clip.clipId });
     }
@@ -221,36 +242,49 @@ export function validatePlan(input: ValidateInput): Finding[] {
     }
   }
 
-  // ---- V7：提示词参考标记：统一写 {{ref N}}，N 为参考顺序里的序号 ----
-  // 同一编号在正文里反复出现是正常写法，因此不查重号、也不要求每个编号都出现。
+  // ---- V7：H3 官方参考标记：统一写 <Picture N> / <Video N> / <Audio N>，各媒质独立编号；
+  // 旧的双花括号 ref 占位符（两花括号包 ref 数字）一律报错——不再有换算层；编号越界按媒质分组报错。
+  // 越界检查按 clip.referenceIds 的媒质分布分桶：sound 卡 → audio，其余卡 → image（video 卡当前并入 image 桶计数，
+  // 与 V8 同口径，MAX_VIDEO_REFERENCES 未被使用）。首帧指令注入的 <Picture 1> 不经过 prompt 字段，不参与本条。
   for (const clip of mtrack.clips) {
-    const refs = clip.referenceIds ?? [];
-    const prompt = clip.prompt ?? { integratedMultimodalDescription: "", overallSoundscape: "", nonDiegeticMusic: "" };
+    const prompt = clip.prompt ?? { subjectDefinitions: "", summary: "", retentionAnalysis: "", detailedDescription: "", overallSoundscape: "", nonDiegeticMusic: "" };
     const fields: Array<[string, string]> = [
-      ["integratedMultimodalDescription", prompt.integratedMultimodalDescription ?? ""],
+      ["subjectDefinitions", prompt.subjectDefinitions ?? ""],
+      ["summary", prompt.summary ?? ""],
+      ["retentionAnalysis", prompt.retentionAnalysis ?? ""],
+      ["detailedDescription", prompt.detailedDescription ?? ""],
       ["overallSoundscape", prompt.overallSoundscape ?? ""],
       ["nonDiegeticMusic", prompt.nonDiegeticMusic ?? ""],
     ];
-    const range = refs.length ? `1..${refs.length}` : "空（本镜没有参考）";
+    const referenceIds = clip.referenceIds ?? [];
+    const audioRefs = referenceIds.filter(id => cardById.get(id)?.kind === "sound");
+    const pictureRefs = referenceIds.filter(id => cardById.get(id)?.kind !== "sound");
+    // ACT: 卡片体系（CardKind）尚无 video 类型，视频参考与图片同桶计数——<Video N> 也拿图片数当上限。
+    const videoRefs = pictureRefs;
+    const pictureLimit = pictureRefs.length;
+    const videoLimit = videoRefs.length;
+    const audioLimit = audioRefs.length;
     for (const [field, text] of fields) {
       if (!text) continue;
-      // 行内媒体标签不是本项目的参考写法：生成侧按 {{ref N}} 换算，尖括号会被当普通文本透传。
-      for (const matched of text.matchAll(/<\s*(picture|video|audio)\s*(\d+)\s*>/gi)) {
+      // 双花括号 ref 占位符：不再换算、一律报错。
+      for (const matched of text.matchAll(/\{\{\s*ref\s*(\d+)\s*\}\}/gi)) {
         findings.push({
           rule: "V7",
           level: "error",
-          message: `片段 ${clip.clipId} 的 ${field} 含 ${matched[0]}：参考标记统一写 {{ref N}}，N 为参考顺序里的序号（本镜范围为 ${range}）`,
+          message: `片段 ${clip.clipId} 的 ${field} 含旧版双花括号参考标记 ${matched[0]}：H3 官方格式只写 <Picture N> / <Video N> / <Audio N>，各媒质独立编号`,
           ref: clip.clipId,
         });
       }
-      // ref 两侧空白均可省略：{{ref1}}、{{ref 1}}、{{ ref1 }}、{{ REF 1 }} 都命中。
-      for (const matched of text.matchAll(/\{\{\s*ref\s*(\d+)\s*\}\}/gi)) {
-        const n = Number(matched[1]);
-        if (n < 1 || n > refs.length) {
+      // <Picture N> / <Video N> / <Audio N>：合法形态；编号按媒质分组越界即报错。
+      for (const matched of text.matchAll(/<\s*(picture|video|audio)\s*(\d+)\s*>/gi)) {
+        const kind = matched[1].toLowerCase() as "picture" | "video" | "audio";
+        const n = Number(matched[2]);
+        const limit = kind === "picture" ? pictureLimit : kind === "video" ? videoLimit : audioLimit;
+        if (n < 1 || n > limit) {
           findings.push({
             rule: "V7",
             level: "error",
-            message: `片段 ${clip.clipId} 的 ${field} 含越界参考标记 {{ref ${n}}}：本镜参考编号范围为 ${range}`,
+            message: `片段 ${clip.clipId} 的 ${field} 含越界参考标记 ${matched[0]}：本镜该媒质参考共 ${limit} 项（Picture=${pictureLimit} / Video=${videoLimit} / Audio=${audioLimit}）`,
             ref: clip.clipId,
           });
         }

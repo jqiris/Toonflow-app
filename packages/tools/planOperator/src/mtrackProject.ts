@@ -7,8 +7,12 @@
  * 写（mtrackUpdate）不经过本文件的归一，直接在原始 JSON 上 patch，避免丢字段。
  */
 
+/** H3 官方六段提示词（段名与顺序逐字对齐 ref-en.txt，camelCase 落盘），与 packages/nodeShared/src/mtrack/mtrackProject.ts 的 ClipPrompt 同形。 */
 export interface MtrackClipPrompt {
-  integratedMultimodalDescription: string;
+  subjectDefinitions: string;
+  summary: string;
+  retentionAnalysis: string;
+  detailedDescription: string;
   overallSoundscape: string;
   nonDiegeticMusic: string;
 }
@@ -73,8 +77,12 @@ function readNumber(value: unknown, fallback: number): number {
 
 function readPrompt(value: unknown): MtrackClipPrompt {
   const source = isRecord(value) ? value : {};
+  // H3 六段：缺字段一律按空字符串补齐，与 nodeShared/mtrackProject 的 ClipPrompt 口径一致。
   return {
-    integratedMultimodalDescription: readString(source.integratedMultimodalDescription),
+    subjectDefinitions: readString(source.subjectDefinitions),
+    summary: readString(source.summary),
+    retentionAnalysis: readString(source.retentionAnalysis),
+    detailedDescription: readString(source.detailedDescription),
     overallSoundscape: readString(source.overallSoundscape),
     nonDiegeticMusic: readString(source.nonDiegeticMusic),
   };

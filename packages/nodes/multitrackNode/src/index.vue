@@ -14,6 +14,7 @@
         <span class="cardTitle">镜头创作工作台</span>
         <el-button class="nodrag nopan" size="small" text :icon="IconMaximize" title="全屏编辑" aria-label="全屏编辑" @pointerdown.stop @click.stop="openFullscreen">全屏编辑</el-button>
       </div>
+      <div class="h3Hint" title="视频生成仅支持 MiniMax-H3">仅支持 MiniMax-H3</div>
       <div v-if="refList.length || agentCreated" class="assetRow nodrag nopan nowheel">
         <el-tag v-if="agentCreated" class="agentTag" size="small" type="info">agent 添加</el-tag>
         <referenceItem v-model="refList" @preview="setReferencePreview" @remove="removeReference" />
@@ -357,7 +358,10 @@ const clipPatchSchema = z.strictObject({
   resolution: z.string().optional(),
   generateAudio: z.boolean().optional(),
   prompt: z.strictObject({
-    integratedMultimodalDescription: z.string(),
+    subjectDefinitions: z.string(),
+    summary: z.string(),
+    retentionAnalysis: z.string(),
+    detailedDescription: z.string(),
     overallSoundscape: z.string(),
     nonDiegeticMusic: z.string(),
   }).optional(),
@@ -478,19 +482,31 @@ nodeTools.register({
       // 画布实况只在镜已派工（有视频节点）时才有意义；未派工时位次就是 referenceIds 顺序本身。
       const incoming = clipNodeId ? await readIncomingSources(call, clipNodeId, signal) : [];
       const actualOrder = clipNodeId ? await readActualOrder(call, clipNodeId, signal) : undefined;
+      // H3 六段参考标记按媒质独立编号：<Picture N> 只在 picture 桶（非 sound 卡）内计数，<Audio N> 只在 sound 卡内计数；
+      // <Video N> 当前 CardKind 无 video 类型，与 picture 同桶（与 planValidator V7/V8 口径一致）。
+      const expectedMedia = clip.referenceIds.map(cardId => {
+        const kind = cardList.find(item => item.id === cardId)?.kind;
+        return kind === "sound" ? "audio" : "picture";
+      });
+      const mediaRef = (media: "audio" | "picture", ordinal: number) => `<${media === "audio" ? "Audio" : "Picture"} ${ordinal}>`;
       const items = clip.referenceIds.map((cardId, index) => {
         const card = cardList.find(item => item.id === cardId);
         const picked = resolved.find(item => item.cardId === cardId)?.picked;
         const actualIndex = picked && actualOrder ? actualOrder.findIndex(item => item.nodeId === picked.nodeId && item.sourceHandle === picked.sourceHandle) : -1;
+        const media = expectedMedia[index];
+        const mediaOrdinal = expectedMedia.slice(0, index + 1).filter(kind => kind === media).length;
         return {
           expectedIndex: index + 1,
-          expectedRef: `{{ref ${index + 1}}}`,
+          expectedRef: mediaRef(media, mediaOrdinal),
           cardId,
           kind: card?.kind ?? "",
           nodeId: picked?.nodeId ?? null,
           sourceHandle: picked?.sourceHandle ?? null,
           connected: Boolean(picked) && incoming.some(item => item.nodeId === picked!.nodeId && item.sourceHandle === picked!.sourceHandle),
-          ...(actualIndex >= 0 ? { actualIndex: actualIndex + 1, actualRef: `{{ref ${actualIndex + 1}}}` } : {}),
+          ...(actualIndex >= 0 ? {
+            actualIndex: actualIndex + 1,
+            actualRef: mediaRef(expectedMedia[actualIndex], expectedMedia.slice(0, actualIndex + 1).filter(kind => kind === expectedMedia[actualIndex]).length),
+          } : {}),
         };
       });
       const pickedKeys = new Set(resolved.flatMap(item => item.picked ? [`${item.picked.nodeId}:${item.picked.sourceHandle}`] : []));
@@ -543,7 +559,7 @@ async function readIncomingSources(call: CanvasCall, nodeId: string, signal?: Ab
 }
 
 /**
- * 视频节点上生效的参考顺序（{{ref N}} 的真源）；节点没有引用函数（已删除/非视频节点）时返回 undefined。
+ * 视频节点上生效的参考顺序（<Picture N>/<Video N>/<Audio N> 各自媒质编号的真源）；节点没有引用函数（已删除/非视频节点）时返回 undefined。
  * ACT: 与 planValidator V15 的对账口径差别说清：V15 收的 snapshot.referenceOrder 载荷约定为
  * `assets/<卡号>/...` 路径形态（normalizeSourceId 靠正则从路径里提卡号），本函数返回的
  * { nodeId, sourceHandle } 画布节点 id 形态不适用该正则，直接喂给 V15 会逐条误报不一致。
@@ -684,7 +700,7 @@ nodeTools.register({
 
 nodeTools.register({
   name: "rewritePrompt",
-  description: "整理单镜提示词（UI「整理提示词」等价物）：只调文本模型，不改工程、不写编辑器的待采用区块，返回 { text, requiresReview }。clipId 缺省取当前选中镜；rules 覆盖内置整理规则（≤20000 字）。结果需用户确认后由 agent 自行用 node:editProject 写回本镜 prompt.integratedMultimodalDescription；生成中整理会返回服务端 409 原文，错误原样抛出、不重试",
+  description: "整理单镜提示词（UI「整理提示词」等价物）：只调文本模型，不改工程、不写编辑器的待采用区块，返回 { text, requiresReview }。clipId 缺省取当前选中镜；rules 覆盖内置整理规则（≤20000 字）。整理稿按 H3 官方六段（subject_definitions / summary / retention_analysis / detailed_description / overall_soundscape / non_diegetic_music）输出；结果需用户确认后由 agent 自行用 node:editProject 写回本镜 prompt 六段（H3 官方段名与顺序）；生成中整理会返回服务端 409 原文，错误原样抛出、不重试",
   parameters: z.strictObject({ clipId: clipIdSchema.optional(), rules: z.string().max(20000).optional() }),
   async execute(args, { signal }) {
     signal?.throwIfAborted();

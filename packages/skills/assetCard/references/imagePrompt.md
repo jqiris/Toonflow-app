@@ -1,5 +1,7 @@
 # 资产设定图提示词规范
 
+> **视频提示词已切换到 H3 官方格式，图片规范独立。**
+
 > **前提（必读）**：FreeVideo 官方指南只定义了 **五个视频任务**——`t2va`（文生视频）、`i2va`（图生视频）、`fl2va`（首尾帧视频）、`l2va`（末帧视频）、`ref2va`（参考生视频），**图片生成没有官方提示词规范**。因此本文件是 **Toonflow 自定规范**，不是 FreeVideo 官方标准，不得在文档、界面或回答里说成「官方要求」。
 > 硬约束来源（实测代码）：`packages/providers/src/media/freevideo.ts:225-230`（模型 `freevideo-image` 的尺寸与比例）、`:246`（参考图上限）、`:69-80`（像素推导）。
 > 字段与编号从哪来：[资产卡模板](assetCardTemplate.md)；参考接线怎么解析：[参考接线解析规则](referenceResolution.md)；生成流程：[逐分镜生成 SOP](generationRunbook.md)。

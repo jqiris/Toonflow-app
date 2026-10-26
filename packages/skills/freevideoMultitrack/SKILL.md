@@ -1,7 +1,9 @@
 ---
 name: freevideoMultitrack
-description: 把分镜稿与资产稿接成多轨工程、逐镜生成并合成成片的完整链路：先出分镜稿 + 资产稿（文本层，人物 C01/场景 SC01/道具 P01/声音 S01），再用画布上的「导入资产与分镜」节点（`remote-assetImportNode`，工具 `node:importScript`）导入剧本/分镜正文、抽取卡片与分镜、结构校对并可选批量出资产图，把资产图节点连到多轨节点的 in 端口，然后创建/绑定多轨工程 plan/story.mtrack，在多轨界面「参考素材」里只从连线上的资产卡打勾（勾选位次即 `{{ref N}}`），最后逐镜派工生成、人工验收并合成。用户要按我们自己的资产卡与分镜规范做多轨视频、要检查这条链路缺什么、要续接上一镜、要合成成片，或要写资产卡/分镜提示词时使用。
+description: 把分镜稿与资产稿接成多轨工程、逐镜生成并合成成片的完整链路：先出分镜稿 + 资产稿（文本层，人物 C01/场景 SC01/道具 P01/声音 S01），再用画布上的「导入资产与分镜」节点（`remote-assetImportNode`，工具 `node:importScript`）导入剧本/分镜正文、抽取卡片与分镜、结构校对并可选批量出资产图，把资产图节点连到多轨节点的 in 端口，然后创建/绑定多轨工程 plan/story.mtrack，在多轨界面「参考素材」里只从连线上的资产卡打勾（勾选位次即官方 `<Picture N>` / `<Video N>` / `<Audio N>` 的编号基数），最后逐镜派工生成、人工验收并合成。用户要按我们自己的资产卡与分镜规范做多轨视频、要检查这条链路缺什么、要续接上一镜、要合成成片，或要写资产卡/分镜提示词时使用。
 ---
+
+> **H3 口径声明**：本工作流视频生成仅支持 MiniMax-H3（H3 官方六段格式 + `<Picture N>` / `<Video N>` / `<Audio N>` 参考标记）；不接受其他视频模型或旧格式占位符。
 
 # FreeVideo 资产卡 → 多轨生成
 
@@ -24,7 +26,7 @@ description: 把分镜稿与资产稿接成多轨工程、逐镜生成并合成�
 1. **资产卡是 `assets/assetCards.md` 里的数据行，不是画布节点类型。** 画布上的图片生成节点只是执行载体，靠 `label` 精确等于卡 id 对齐；`planOperator build/assemble` 就是按 `id` 写 `label`。改掉 label 等于剪断参考线。
 2. **`mode=image` 时 `referenceIds[0]` 必须是首帧卡，而且只放一张。** 这是当前实现的隐式约定（`mediaDispatch.ts` 单图链路下发 `startFrameOptional`），不是协议字段；不要去找 `startFramePath` 之类的东西。多图请用 `mode=ref`。
 3. **换视频模型 = 改工程 `global.model`（`providerId` + `modelId`），不支持逐镜换模型。** `MtrackClip` 没有模型字段。
-4. **参考位次就是 `referenceIds` 的顺序**：`referenceIds[0]`（数组第一项）对应 `{{ref 1}}`，第二项对应 `{{ref 2}}`，以此类推。**`referenceIds` 由多轨界面的「参考素材」从连线上打勾产生，agent 不预先写**：那个清单只列本节点 `in` 端口连线上的资产卡、每镜上限 4 张（`packages/nodeShared/src/mtrack/components/referencePicker.vue:33-41`、`:114`），勾选顺序就是位次（`:144`）。提示词里只写 `{{ref N}}`；`<Picture N>` / `<Video N>` / `<Audio N>` 是 wire 层在下发前按参考媒体类型换算出来的结果，**不手写尖括号标记**。`node:setReferenceOrder` 只在手工接线、需要临时改位次时用，不是普遍前置。
+4. **参考位次就是 `referenceIds` 里同类型资产的位次**：作者直接写官方 `<Picture N>` / `<Video N>` / `<Audio N>`，每类独立从 1 起、位次取自该类型资产在 `referenceIds` 数组中的先后（同类型去重后按出现顺序）。例如 `referenceIds: ["C01(IMAGE)", "A01(AUDIO)", "C03(IMAGE)"]` 对应 `<Picture 1>` / `<Audio 1>` / `<Picture 2>`。**`referenceIds` 由多轨界面的「参考素材」从连线上打勾产生，agent 不预先写**：那个清单只列本节点 `in` 端口连线上的资产卡、每镜上限 4 张（`packages/nodeShared/src/mtrack/components/referencePicker.vue:33-41`、`:114`），勾选顺序决定位次（`:144`）。引擎下发不再换算、不再代写任何一段，正文里出现旧「双花括号 ref 占位符」会被 `composeClipRequest` 判 error。`node:setReferenceOrder` 只在手工接线、需要临时改位次时用，不是普遍前置。
 5. **`continuity` 只有 `shot`（独立起拍/切镜）和 `context`（承接上一镜）**；首镜必须 `shot`；`context` 要求上一镜已成功生成且 `attempts` 里留有 `jobId`，本镜时长至少 10 秒、参考素材合计 ≤3（图片/视频/音频同口径，`mediaDispatch.ts` 的 `composeClipRequest` 在拼装续接请求时拦截，校验器侧同口径规则是 V16）。独立镜的参考上限有两个口径，别混：**校验器允许 9 张图**（V8，`planValidator.ts` 的 `MAX_IMAGE_REFERENCES`），而**多轨界面勾选到 4 就点不动**（`referencePicker.vue` 硬编码）；出资产图的图片参考另有 ≤4 的上限（`freevideo-image` 侧）。**什么时候该用 `context`、什么时候必须用 `shot`，见阶段门 5 的「衔接判定」，不要按场景编号机械决定。**
 6. **`status=accepted` 只能由人在多轨界面点验收。** Agent 的写入路径只收 `pending/generating/generated/failed`，不要试图标 accepted 去凑合成条件。
 7. **本技能不做采样、LoRA、种子、CFG 这类参数。** 要换的只有模型、画幅、分辨率、时长、音频开关这些工程字段。
@@ -70,7 +72,7 @@ description: 把分镜稿与资产稿接成多轨工程、逐镜生成并合成�
 
 通用节点工具（不是多轨专属，也不是 nodeScaffold 直接提供：nodeScaffold 只管 `nodeTools` 注册表，`getReferenceOrder` / `setReferenceOrder` 由 `packages/nodeShared/src/useNodeReferences.ts` 的 `useNodeReferences` 注册，所以只出现在调用了它的节点上——audio / video / image / director3d / text / multitrack）：`node:getReferenceOrder` / `node:setReferenceOrder` 取/设某节点 in 端口的参考顺序，手工接线时用；`assemble` 与派工链内部也调它。
 
-编辑器内部另有两个函数（不是 agent 工具，用来读懂报错）：`composeClipRequest`（`packages/nodeShared/src/mtrack/mediaDispatch.ts`，把一镜组装成一份生成请求，`{{ref N}}` 在此换算成 `<Picture N>`）、`submitClipTask` / `waitClipTask` / `cancelClipTasks`（`packages/nodeShared/src/mtrack/mediaTask.ts`，提交与轮询 `/api/ai/media/generate`）。agent 侧等价入口是 `node:dispatchGenerate`。
+编辑器内部另有三个函数（不是 agent 工具，用来读懂报错）：`buildPromptText`（`packages/nodeShared/src/mtrack/mediaDispatch.ts`，按六段顺序拼装非空字段并注入首帧指令）、`composeClipRequest`（同一文件，组装生成请求，校验 `<Picture N>` / `<Video N>` / `<Audio N>` 越界并拒绝旧「双花括号 ref 占位符」）、`submitClipTask` / `waitClipTask` / `cancelClipTasks`（`packages/nodeShared/src/mtrack/mediaTask.ts`，提交与轮询 `/api/ai/media/generate`）。agent 侧等价入口是 `node:dispatchGenerate`。
 
 ## 3 阶段门
 
@@ -151,9 +153,12 @@ description: 把分镜稿与资产稿接成多轨工程、逐镜生成并合成�
   "referenceIds": ["C01", "SC01"],
   "continuity": "shot",
   "prompt": {
-    "integratedMultimodalDescription": "subject_definitions: <Subject 1> = C01（<名称>，用途：character），来源 {{ref 1}}；<Subject 2> = SC01（<名称>，用途：scene），来源 {{ref 2}}\nsummary: <本镜画面与动作，一两句>\nretention_analysis: <Subject 1> (appears in [Shot 1]): fully_preserved - <保留的外貌/服装/空间结构特征>\ndetailed_description: [Shot 1] <画面与动作：{{ref 1}} 是身份、{{ref 2}} 是空间> <d>[Chinese]台词原句</d>",
-    "overallSoundscape": "<环境声与动作声>",
-    "nonDiegeticMusic": "<配乐，没有就留空>"
+    "subjectDefinitions": "subject_definitions:\n<Subject 1> is the character in <Picture 1>, wearing <服装>...",
+    "summary": "summary:\n[reference generation] <本镜画面与动作，一两句>",
+    "retentionAnalysis": "retention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - <保留的外貌/服装/空间结构特征, match <Picture 1>>",
+    "detailedDescription": "detailed_description:\n[Shot 1] <画面与动作：Subject 1 from <Picture 1> 是身份、Subject 2 from <Picture 2> 是空间> <d>[Chinese]台词原句</d>",
+    "overallSoundscape": "overall_soundscape:\n<环境声与动作声>",
+    "nonDiegeticMusic": "non_diegetic_music:\n<配乐，没有就留空>"
   }
 }
 ```
@@ -168,15 +173,15 @@ description: 把分镜稿与资产稿接成多轨工程、逐镜生成并合成�
 - `clipId` 形如 `S001`，递增；`seconds` 整数 2–60（建议 4–15）；`resolution` 只有 `768P` / `2K`。
 - `referenceIds` 上限分三层，别混：**校验器 V8 拦图片 ≤9、音频 ≤1**（视频参考与图片同桶计数，V8 不校验视频）；**供应商 freevideo 单请求参考 ≤4**（`freevideo.ts` 的 `maxImageReferences = 4`，多轨界面「参考素材」勾选上限同源，勾到 4 就点不动）；**续接镜（`context`）合计 ≤3**（引擎 `continue_from` 限制，V16 + 派工组装双重拦）。「视频 ≤1」只是供应商模式声明（`videoReference:1`），不是校验器拦的；`mode` 取 `ref`（多图参考）/ `image`（单图首帧）/ `text`（纯文）；`continuity` 只有 `shot` / `context`。
 - 台词写进 `<d>[Chinese]原句</d>`，演绎说明写在标签外；说话者用 `(S1)`/`(S2)` 并在跨镜保持一致。
-- **六段官方结构必须保留**（MiniMax-H3 ref2va，顺序不变）：`subject_definitions`（首段，用 `<Subject N>` 定义被引用的主体/场景/道具，来源写 `{{ref N}}` 指位）/ `summary` / `retention_analysis` / `detailed_description` 进 `integratedMultimodalDescription`，`overall_soundscape` / `non_diegetic_music` 各进自己的字段（不要连字段名一起写进去，下发改写时会补段名）。参考标记只写 `{{ref N}}`，**不写 `<Picture N>` 这类尖括号标记**——尖括号是下发时由 wire 层按媒体类型换算出来的。导入节点的抽取**原样保留正文里已有的六段**，不会把镜改成一句画面描述；只有缺段才补；要在导入时改写某一镜，用它的 `clips` 参数按 `clipId` 覆盖 `{ prompt, seconds?, referenceIds?, continuity? }`，`clipId` 不在本次分镜里、`prompt` 为空、或引用了不存在/仅文字的资产都会直接报错。
+- **六段官方结构必须保留**（MiniMax-H3 ref2va，顺序不变，一一对应六个驼峰字段）：`subject_definitions` → `prompt.subjectDefinitions`（用 `<Subject N>` 定义被引用的主体/场景/道具，来源用官方 `<Picture N>` / `<Video N>` / `<Audio N>` 指位）、`summary` → `prompt.summary`、`retention_analysis` → `prompt.retentionAnalysis`、`detailed_description` → `prompt.detailedDescription`、`overall_soundscape` → `prompt.overallSoundscape`、`non_diegetic_music` → `prompt.nonDiegeticMusic`。每段字段首行必须写官方段名（如 `subject_definitions:`），段间空一行。参考标记一律写官方 `<Picture N>` / `<Video N>` / `<Audio N>`（每类独立从 1 起），不再写「双花括号 ref 占位符」。导入节点的抽取**原样保留正文里已有的六段**，不会把镜改成一句画面描述；只有缺段才补；要在导入时改写某一镜，用它的 `clips` 参数按 `clipId` 覆盖 `{ prompt, seconds?, referenceIds?, continuity? }`，`clipId` 不在本次分镜里、`prompt` 为空、或引用了不存在/仅文字的资产都会直接报错。
 - 每镜围绕一个清楚的戏剧节拍或主要变化；逐镜交代初态、刺激与反应、动作与动线、对白与表演、末态与承接。
 - 每镜 `referenceIds` 里的卡 id 必须在资产卡里能找到；人物在画内还是画外要标明。
 
 校验顺序：
 1. 读 `assets/assetCards.md` 原文，传给 `planOperator({ action: "parse", markdown })`；有 error 就改卡，直到 0 条。
-2. `planOperator({ action: "validate", snapshot })` 校验工程；重点看 V7（`{{ref N}}` 越界判 error，尖括号 `<Picture N>` 写进正文同样判 error）、V8（图片 ≤9 / 音频 ≤1，校验器只拦这两个，**不单独校验视频参考（视频并入图片桶计数）**；供应商层 freevideo 单请求参考 ≤4、续接合计 ≤3 是引擎/界面限制，不在 V8）、V11（结构完整，含首镜必须 `shot` 与 `continuity` 取值）、V12（`seconds` 2–60 整数、`resolution` 合法）、V15（`referenceIds` 顺序与画布 `referenceOrder` 一致）、V16（续接镜参考合计 ≤3、时长 ≥10 秒）。**error 清零前不要进下一阶段门。**
+2. `planOperator({ action: "validate", snapshot })` 校验工程；重点看 V7（`<Picture N>` / `<Video N>` / `<Audio N>` 按媒质分组各自独立查越界，正文出现「双花括号 ref 占位符」一律判 error）、V8（图片 ≤9 / 音频 ≤1，校验器只拦这两个，**不单独校验视频参考（视频并入图片桶计数）**；供应商层 freevideo 单请求参考 ≤4、续接合计 ≤3 是引擎/界面限制，不在 V8）、V11（结构完整，含首镜必须 `shot` 与 `continuity` 取值）、V12（`seconds` 2–60 整数、`resolution` 合法）、V15（`referenceIds` 顺序与画布 `referenceOrder` 一致）、V16（续接镜参考合计 ≤3、时长 ≥10 秒）。**error 清零前不要进下一阶段门。**
 
-**通过判据**：`parse` 零 error + `validate` 零 error；资产卡和分镜在同一次交付里完成；每镜有 `seconds`/`prompt`/`referenceIds`/`continuity`；每镜引用的卡 id 都能在资产卡里找到；**每镜 `integratedMultimodalDescription` 已按六段写好**（`subject_definitions` 作首段，后接 `summary` / `retention_analysis` / `detailed_description`，段首自己写），`overallSoundscape` / `nonDiegeticMusic` 两字段各有内容且不写段名。
+**通过判据**：`parse` 零 error + `validate` 零 error；资产卡和分镜在同一次交付里完成；每镜有 `seconds`/`prompt`/`referenceIds`/`continuity`；每镜引用的卡 id 都能在资产卡里找到；**每镜六个驼峰字段（`subjectDefinitions` / `summary` / `retentionAnalysis` / `detailedDescription` / `overallSoundscape` / `nonDiegeticMusic`）已按六段写好**，每段字段首行写官方段名，内容用英文。
 
 ### 阶段 3 导入资产与分镜节点：抽取 → 校对 → 批量出资产
 
@@ -188,7 +193,7 @@ description: 把分镜稿与资产稿接成多轨工程、逐镜生成并合成�
 4. **资产图之间的参考**（同一角色的状态卡、卡引用别的卡）才在这一门用 `connectNodes` + `node:setReferenceOrder` 排位次；那是资产出图内部的参考，与阶段门 4 的多轨参考是两回事。
 5. 已有 `assets/assetCards.md`、只想单独建索引时才走旧路径：`planOperator({ action: "build", snapshot })` 校验 V1–V16 并写 `plan/assetIndex.json` + `plan/assetReport.json`（有 error 会直接拒绝，先把 `validate` 清零）。
 
-**通过判据**：`plan/assetIndex.json` 与 `plan/story.mtrack` 存在；每张要用的卡都有 `nodeId`；**每镜 `integratedMultimodalDescription` 仍含官方四段段首**（被抽取覆盖成一句描述的镜必须补回，或用 `clips` 覆盖）；**并且人眼确认资产图合格**。
+**通过判据**：`plan/assetIndex.json` 与 `plan/story.mtrack` 存在；每张要用的卡都有 `nodeId`；**每镜六个驼峰字段仍各含官方段首**（被抽取覆盖成一句描述的镜必须补回，或用 `clips` 覆盖）；**并且人眼确认资产图合格**。
 
 > **导入完还要绑工程**：导入只落盘，多轨节点 `node.data.projectPath` 仍是空的——不跑 `node:bindProject({ mode: "open", path: "plan/story.mtrack" })` 就读不到 `clips` 与「参考素材」（下一门第 2 步就是它，漏掉会表现为「工程是空的」）。出图有失败卡时先看 `node:importStatus` 的 `failed[]`，补图后再往下走；长任务中途查进度也用它（别反复重跑，重跑会被独占写拦下）。**卡片与分镜在会话里已经定稿成结构化数据时，用 `node:importScript` 的 `extraction` 整批落盘**——抽取本来就该由会话 Agent 用它确认可用的模型完成，节点只负责契约校验与写盘，Agent 侧调模型受 120 秒硬顶限制。
 
@@ -198,8 +203,8 @@ description: 把分镜稿与资产稿接成多轨工程、逐镜生成并合成�
 
 1. **连线**：`connectNodes` 把每个已出图的资产节点接到多轨节点的 `in` 端口（`source` 是资产节点 id、`targetHandle` 固定 `"in"`）。只连这次真正要用的素材；连线只承载素材，不承载剧情。
 2. **创建/绑定工程**：`node:bindProject({ mode: "open", path: "plan/story.mtrack" })` 打开阶段门 3 已写好的工程；只有确实还没有工程时才 `mode: "new"`（exclusive，绝不覆盖）。
-3. **打勾**：在多轨界面的「参考素材」里逐镜勾选要用的资产卡——**这个清单只列 `in` 端口连线上的来源，没连线的不给勾**（一条都没连时界面直接给接法指引）；**勾选顺序就是 `referenceIds`，也就是 `{{ref N}}` 的位次**；断线的旧引用**不进这个网格**（没有勾选框），界面只在提示条里点名并给一次「清掉旧引用」（写回前二次确认，`referencePicker.vue:38-41`、`:127-136`）；被置灰、看得见却勾不上的是**连了线但对不上资产卡**的来源。取消勾选或清掉旧引用都会同步改写正文里的 `{{ref N}}`（`multitrackEditor.vue` 的 `remapPromptReferences`：删掉的标记连同多余空格一起归一），改完要重新核对段首与位次。agent 不预先写 `referenceIds`。
-4. **核对断点**：`node:readReferenceMap` 一次读全「镜 → 资产卡 → 画布节点 → `{{ref N}}` 位次」四段映射链：`missingCardIds` 非空是真断点（此时派工会报「参考图未就绪」），`unconnectedCardIds` 是有产出但没连上，`orphanSources` 是多连。断点先补：没出图就回阶段门 3，没连线就补 `connectNodes`。
+3. **打勾**：在多轨界面的「参考素材」里逐镜勾选要用的资产卡——**这个清单只列 `in` 端口连线上的来源，没连线的不给勾**（一条都没连时界面直接给接法指引）；**勾选顺序就是 `referenceIds`，也就是官方 `<Picture N>` / `<Video N>` / `<Audio N>` 的位次基数**；断线的旧引用**不进这个网格**（没有勾选框），界面只在提示条里点名并给一次「清掉旧引用」（写回前二次确认，`referencePicker.vue:38-41`、`:127-136`）；被置灰、看得见却勾不上的是**连了线但对不上资产卡**的来源。取消勾选或清掉旧引用都会同步改写正文里的官方参考标记（`multitrackEditor.vue` 的 `remapPromptReferences`：删掉的标记连同多余空格一起归一），改完要重新核对段首与位次。agent 不预先写 `referenceIds`。
+4. **核对断点**：`node:readReferenceMap` 一次读全「镜 → 资产卡 → 画布节点 → 官方参考位次」四段映射链：`missingCardIds` 非空是真断点（此时派工会报「参考图未就绪」），`unconnectedCardIds` 是有产出但没连上，`orphanSources` 是多连。断点先补：没出图就回阶段门 3，没连线就补 `connectNodes`。
 
 **通过判据**：工程已绑定；每镜要用的资产都在连线上且已勾选；`node:readReferenceMap` 的 `missingCardIds` 为空。**这一门没做完就派工，等于把同一个检查让派工再拦一次。**
 
@@ -224,7 +229,7 @@ description: 把分镜稿与资产稿接成多轨工程、逐镜生成并合成�
 
 派工前必查：`node:readReferenceMap`（缺 `missingCardIds` 就是真断点，派工会报「参考图未就绪」）。断点先补：资产节点没产出就回阶段门 3 出图，没连线就补 `connectNodes`。
 
-派工时 `referenceIds` 的位次就是 `{{ref N}}` 的编号：正文只写 `{{ref N}}`，尖括号由 wire 层按媒体类型换算；正文里出现 `<Picture N>`/`<Video N>`/`<Audio N>` 会被 V7 判 error。
+派工时 `referenceIds` 的位次就是官方 `<Picture N>` / `<Video N>` / `<Audio N>` 的编号基数：正文一律写官方尖括号标记（每类独立从 1 起），旧「双花括号 ref 占位符」会被 `composeClipRequest` 判 error。
 
 两条生成路径，二选一，**绝不同时**：
 
@@ -276,7 +281,7 @@ description: 把分镜稿与资产稿接成多轨工程、逐镜生成并合成�
 | --- | --- | --- |
 | 画风 | 23 款图文画风库 + 分项词文件 | 只写 `global.style` 一段风格词，没有图库 |
 | 资产稿 | 支持「导入已有资产编号/人物卡」的解析入口 | 画布「导入资产与分镜」节点（`node:importScript`）从剧本/分镜正文抽取卡片与分镜、可选批量出资产图，并独占写 `plan/assetIndex.json` + `plan/story.mtrack`；但**不认外部资产编号直接复用**，编号与字段一律按本链路口径重出 |
-| 分镜 | 分镜表文档（D/E 编号、初态/刺激/动作/对白/末态），可交 Word | `plan/story.mtrack` 的 `clips`；台词进 `<d>`，事件/初末态写进 `integratedMultimodalDescription` |
+| 分镜 | 分镜表文档（D/E 编号、初态/刺激/动作/对白/末态），可交 Word | `plan/story.mtrack` 的 `clips`；台词进 `<d>`，事件/初末态写进 `detailedDescription`（`detailed_description:` 段） |
 | 采样参数 | 提及模型/模式/时长/分辨率选择 | 只有 `global.model` / `ratio` / `resolution` / `seconds` / `generateAudio`，不碰采样、LoRA、种子 |
 | 衔接 | 能承接就承接 + 计划状态 | `continuity` 两态（`shot` / `context`）——**默认 `context`（同段落同空间接着上一镜），例外按阶段门 5 的「衔接判定」**；`context` 靠上一镜 `jobId` |
 | 验收 | 成片检查标准 | 人在界面点 accepted，再 `composite` |

@@ -65,7 +65,7 @@
 4. **素材排他**：写了 `<Picture N>` 的资产，正文**禁止**再详细描述其外貌，否则模型会混淆（**LSC 口径**；本仓库不采用——官方 `ref-en.txt` §0/§5.3 要求写出被引用特征，见 assetCard runbook §四）。
 5. **说话人 ID**：`(S1)`、`(S2)` 全片唯一，对白必须 `<d>[语言] 内容</d>`。
 
-> **Toonflow 侧对应**：`<Picture N>` ↔ `{{ref N}}`（`useNodeReferences` 的编号），`reference_ids` 顺序 ↔ `data.referenceOrder` + 入边顺序。这是两套系统唯一需要严格对齐的地方。
+[HISTORICAL] > **Toonflow 侧对应**：`<Picture N>` ↔ `{{ref N}}`（`useNodeReferences` 的编号），`reference_ids` 顺序 ↔ `data.referenceOrder` + 入边顺序。这是两套系统唯一需要严格对齐的地方。
 
 ---
 
@@ -119,5 +119,5 @@
 | 单段时长 | 1–15 秒（节点限制），推荐 4–6 | **2–60 秒逐秒**，更宽 |
 | 参考数量 | 由工作流决定 | 图 ≤4 / 视频 ≤1 / 音频 ≤1，超限会被逼到首尾帧模式 |
 | 首尾帧续接 | 尾帧续写（latent） | `startFrameOptional`：1 张作尾帧，2 张按序首/尾 |
-| 提示词标记 | `<Picture N>` | `{{ref N}}` |
+[HISTORICAL] | 提示词标记 | `<Picture N>` | `{{ref N}}` |
 | 合成 | ffmpeg concat | 同样可 ffmpeg concat，但需统一规格 |

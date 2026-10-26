@@ -259,6 +259,8 @@
 
 ## 9. 对 Toonflow 落地的直接启示（供 t3 方案引用）
 
+> **H3 对齐结论（2026-10-26）**：本报告的 LSC 对照研究主体保留不变；涉及提示词格式与参考标记的启示已全量迁移到 H3 官方六段格式与 `<Picture N>` / `<Video N>` / `<Audio N>` 参考标记口径，权威口径见 `docs/h3PromptAlignment.md`。
+
 1. **先搬确定性层**：M1–M3、M6–M9、M11–M13、M15 与模型无关，可在 Toonflow 的 tool（`packages/tools/<name>`）+ node guard（`nodeTools.register`）中实现，**不碰节点源码也能覆盖大部分**。
 2. **`segments[].reference_ids` 的顺序语义必须等价复刻**：Toonflow 视频节点的 `data.referenceOrder[portId]` + 入边顺序就是 Picture 序号；移植时要把“参考顺序 = Picture 编号”写进接线契约，并要求出图前逐位比对（M12）。
 3. **`system_prompt` 拼接顺序照搬**：项目级模板 + 段级“本段图片引用顺序”说明 + 平台规则，三者顺序决定模型是“按素材还原”还是“照文字重画”。

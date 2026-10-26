@@ -1257,7 +1257,7 @@ async function rewriteClipPrompt(rules: string) {
   // 请求发出这一刻的快照：正文、原文画面描述、时长与规则一起定格，之后用户再改就由一致性守卫拦下旧稿。
   const prompt = { ...clip.prompt };
   const trimmedRules = rules.trim();
-  const basis: RewriteBasis = { text: prompt.integratedMultimodalDescription, seconds: clip.seconds, rules: trimmedRules };
+  const basis: RewriteBasis = { text: prompt.detailedDescription, seconds: clip.seconds, rules: trimmedRules };
   rewriteBusy.value = true;
   try {
     const { text } = await requestRewrite(clip, rules);
@@ -1292,9 +1292,9 @@ function adoptRewrite(text: string) {
   rewritePending.value = null;
   if (index < 0) return ElMessage.warning("这一镜已不存在，整理结果已丢弃");
   const clip = clips.value[index];
-  // ACT: 整理稿只覆盖画面正文段，环境声与配乐原样保留（展开 ...clip.prompt 再盖一个字段）。
-  // 单框编辑时三段同框，若这里整组覆盖，采用一次就会把用户写好的两个声音段抹掉。
-  clips.value[index] = { ...clip, prompt: { ...clip.prompt, integratedMultimodalDescription: value } };
+  // ACT: 整理稿只覆盖 detailed_description（H3 主字段），其余五段原样保留（展开 ...clip.prompt 再盖一个字段）。
+  // 六段分栏编辑时若这里整组覆盖，采用一次就会把用户写好的其他五段抹掉。
+  clips.value[index] = { ...clip, prompt: { ...clip.prompt, detailedDescription: value } };
   ElMessage.success("已采用整理结果");
 }
 
@@ -1310,35 +1310,15 @@ function updateRewriteDraft(text: string) {
 }
 
 /**
- * 参考位次变了（取消勾选或改序）就把正文里的 `{{ref N}}` 按新位次重排；
- * 被取消的那张图对应的引用整段移除并清理残留标点，避免派工时编号指到别的素材
- * （与 LSC remapPromptReferences 同义）。越界编号原样保留，交给派工前的校验提示。
+ * ACT: H3 官方格式只用 <Picture N> / <Video N> / <Audio N>，各媒质独立编号，用户自己书写；
+ * 旧的双花括号 ref 占位符没有换算层（composeClipRequest 遇到就报错），
+ * 因此参考位次变化时不需要在正文里做重排 —— 用户自己核对正文里的标记即可。
  */
-function remapPromptReferences(prompt: MtrackClip["prompt"], previous: string[], next: string[]) {
-  const rewrite = (text: string) => (text ? text
-    .replace(/\{\{\s*ref\s*(\d+)\s*\}\}/gi, (mention, n: string) => {
-      const cardId = previous[Number(n) - 1];
-      if (!cardId) return mention;
-      const index = next.indexOf(cardId);
-      return index === -1 ? "" : `{{ref ${index + 1}}}`;
-    })
-    .replace(/[ 	]{2,}/g, " ")
-    .replace(/[ 	]+([，。；、！？）】])/g, "$1")
-    .replace(/([（【])[ 	]+/g, "$1")
-    .replace(/[ 	]+$/gm, "") : text);
-  prompt.integratedMultimodalDescription = rewrite(prompt.integratedMultimodalDescription);
-  prompt.overallSoundscape = rewrite(prompt.overallSoundscape);
-  prompt.nonDiegeticMusic = rewrite(prompt.nonDiegeticMusic);
-}
-
 function onPatch(patch: Partial<MtrackClip>) {
   const index = selectedIndex.value;
   if (index < 0) return;
   const current = clips.value[index];
   const prompt = { ...current.prompt, ...(patch.prompt ?? {}) };
-  if (patch.referenceIds && patch.referenceIds.join("|") !== current.referenceIds.join("|")) {
-    remapPromptReferences(prompt, current.referenceIds, patch.referenceIds);
-  }
   clips.value[index] = { ...current, ...patch, prompt };
   selectedId.value = clips.value[index].clipId;
 }

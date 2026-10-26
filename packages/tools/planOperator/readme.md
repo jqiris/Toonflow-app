@@ -71,7 +71,7 @@
 | V4 | error | 构图卡 `KF*` 必须至少一个母版参考，不得无参考出图 |
 | V5 | — | **未实现**；原恒假的占位代码块已删除，该处只产出 V9 warning |
 | V6 | — | **未实现**（画布入边数与参考数的一致性并入 V15，且 V15 需传 `snapshot`） |
-| V7 | error | 参考标记统一写 `{{ref N}}`，N 为参考顺序里的序号（本镜范围 `1..referenceIds.length`）。提示词三字段（`integratedMultimodalDescription`/`overallSoundscape`/`nonDiegeticMusic`）里出现行内媒体标签 `<Picture N>`/`<Video N>`/`<Audio N>` **一律 error**（尖括号标记会被生成侧当普通文本透传，不是本项目的参考写法）；`{{ref N}}` 越界（N < 1 或 N > 参考数）也是 **error**。两条分支都没有 warning 路径。同一编号反复出现是正常写法：不查重号、也不要求每个编号都出现。匹配大小写与内部空白不敏感（`{{\s*ref\s*(\d+)\s*}}` / `<\s*(picture|video|audio)\s*(\d+)\s*>`） |
+| V7 | error | H3 官方参考标记：提示词六段（`subjectDefinitions`/`summary`/`retentionAnalysis`/`detailedDescription`/`overallSoundscape`/`nonDiegeticMusic`）里写作者直接写 `<Picture N>` / `<Video N>` / `<Audio N>`，各媒质独立编号。旧版双花括号 ref 占位符 `{{ref N}}`（匹配 `\{\{\s*ref\s*(\d+)\s*}}`）**一律 error**，不再有换算层。合法标记按媒质分组越界（N < 1 或 N > 本镜该媒质参考数）也是 **error**：`picture` 上限 = 本镜非 sound 卡数，`video` 上限 = 同 picture 桶（当前 CardKind 无 video 类型，与 V8 同口径），`audio` 上限 = 本镜 sound 卡数。尖括号标记匹配大小写与内部空白均不敏感（`<\s*(picture|video|audio)\s*(\d+)\s*>`）。首帧指令注入的 `<Picture 1>` 不经过 prompt 字段，不参与本条。同一编号反复出现是正常写法：不查重号、也不要求每个编号都出现。与 `docs/h3PromptAlignment.md` §7 契约一致 |
 | V8 | error | 片段图片参考 ≤9、音频参考 ≤1（视频参考与图片同桶计数，过滤器只排除 `kind === "sound"` 的卡）。**图片上限 9 是校验器口径**（MiniMax H3 独立镜头引擎上限）；freevideo 供应商层另有更严的拦截：单请求参考图 ≤4（`packages/providers/src/media/freevideo.ts` 的 `maxImageReferences`），`continuity="context"` 续接镜头合计 ≤3（由 V16 拦）。三处口径各管各层，校验器放行 ≠ 供应商放行 |
 | V9 | warning | 文本类卡仍声明了参考 |
 
