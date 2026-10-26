@@ -26,7 +26,7 @@
             :checked="pickedSet.has(item.cardId)"
             @change="toggle(item.cardId, ($event.target as HTMLInputElement).checked)"
           />
-          <span v-if="item.cardId && pickedSet.has(item.cardId)" class="refTag" :title="refTagTitle(item.cardId)"><span class="refTagText">&lt;Picture {{ orderOf(item.cardId) + 1 }}&gt;</span></span>
+          <span v-if="item.cardId && pickedSet.has(item.cardId)" class="refTag" :title="refTagTitle(item.cardId)">&lt;Picture {{ orderOf(item.cardId) + 1 }}&gt;</span>
           <span v-else class="refBadge">非资产卡</span>
           <span class="refName">{{ item.name }}</span>
         </label>
