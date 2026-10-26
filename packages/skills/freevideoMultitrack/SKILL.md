@@ -209,9 +209,9 @@ description: 把分镜稿与资产稿接成多轨工程、逐镜生成并合成�
 
 > **导入后发现问题的纠错回路（不必也不该整体回滚重导）**：`plan/` 两文件被独占写锁死，重导要先清文件且会话 Agent 没有删工作区文件的工具——所以「发现不对」的第一反应不是推倒重来，而是就地修：
 > - **分镜内容错**（提示词/时长/衔接/顺序/缺镜多镜）→ `node:editProject` 的 `patch`/`add`/`remove`/`move`/`duplicate`/`setGlobal`（整批原子、CAS 防覆盖），或 `planOperator mtrackUpdate`；改完回 `validate` 清零。
-> - **单张资产图不满意** → 直接在资产图片节点上 `node:setPrompt` + `node:generateImage` 重出；出图失败的卡补一张即可——派工按 label 兜底找节点（`findCardNodeIds` 认「`<卡号> <名称>`」前缀），不要求回填索引 `nodeId`。
+> - **单张资产图不满意** → 注意资产图落的是 `remote-imageNode`（只持图，函数是 `setImage`/`splitGrid`/`createPanorama`/`capturePanorama`/`generateMultiAngle`，**没有 `setPrompt`/`generateImage`**）。重出的正确走法：新建一个 `remote-imageGenerationNode` → `node:setPrompt`（改好的正文）+ `node:generateImage` → 把产物用 `node:setImage` 写回原资产节点（label 保持 `<卡号> <名称>`）；或直接 `deleteNodes` 删掉旧资产节点、补一张带正确 label 的新图节点（换了节点就要按阶段门 4 重新连线并在「参考素材」重新打勾——`setImage` 写回原节点不丢连线，是首选走法）。出图失败的卡补一张即可——派工按 label 兜底找节点（`findCardNodeIds` 认「`<卡号> <名称>`」前缀），不要求回填索引 `nodeId`。
 > - **label 漂了**（派工认不出卡）→ `renameNodes` 改回 `<卡号> <名称>` 或 `node:editProject patch` 修 clip，不必重导。
-> - **卡片正文/关联错** → 改 `assets/assetCards.md`（卡片稿，Agent 可写）并用 `node:setPrompt` 同步对应节点；`refs` 关联缺漏用 `connectNodes` 补基卡→本卡线、`deleteEdges` 拆错线。
+> - **卡片正文/关联错** → 改 `assets/assetCards.md` 留准原稿（Agent 可写）；注意已导入的工程不会回头读它——资产图节点只持图不存提示词，要换图按上条走生成节点（提示词从改好的卡片稿抄进 `setPrompt`）。`refs` 关联缺漏用 `connectNodes` 补基卡→本卡线、`deleteEdges` 拆错线。
 > - **残留/多余节点**（取消导入后半截建好的图节点）→ `node:importStatus` 的 `placedNodeIds` 给清单，画布工具 `deleteNodes` 直接清（单次 ≤64，连带删边）。
 > - **整条工程作废**（口径全错才走到这一步）→ 请用户从文件树删除/改名 `plan/story.mtrack` 与 `plan/assetIndex.json`（经 MCP `workspaceFiles` 接入的可 rename/remove），连带清 `assets/<导入节点 id>/` 里要弃的图与画布节点，再重新导入。删节点是画布操作、Agent 可代做；删工作区文件是用户动作——这条边界别弄反。
 
