@@ -114,7 +114,7 @@ export interface MtrackClip {
   assetPath: string | null;
   attempts: ClipAttempt[];
   notes?: string;
-  /** 本镜系统提示词：非空时派工替换 global.systemPrompt，留空沿用全片；与 notes（纯备注，不参与下发）无关。 */
+  /** 本镜系统提示词预留位：当前派工链路（composeClipRequest 不消费 global）不把本字段或 global.systemPrompt 注入视频提示词，保留是写入口/留底；与 notes（纯备注，不参与下发）无关。 */
   systemPromptOverride?: string;
 }
 

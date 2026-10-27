@@ -42,7 +42,7 @@ export interface MtrackClip {
   assetPath: string | null;
   attempts: MtrackClipAttempt[];
   notes?: string;
-  /** 本镜系统提示词（可选）：非空时派工替换 global.systemPrompt；与 notes（纯备注）无关。 */
+  /** 本镜系统提示词（可选）：预留写入口，当前派工链路不消费（视频下发不含 global.systemPrompt 与本字段）；与 notes（纯备注）无关。 */
   systemPromptOverride?: string;
 }
 

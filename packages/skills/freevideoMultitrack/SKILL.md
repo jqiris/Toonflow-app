@@ -89,14 +89,14 @@ description: 把分镜稿与资产稿接成多轨工程、逐镜生成并合成�
 问最少的三件事（能沿用就别重复问）：
 
 - 画幅：`9:16` / `16:9` / `1:1` / `4:3` / `3:4`
-- 风格：一段可复用的风格词，写进 `global.style`，会前缀到**每一镜**提示词最前面。模板（按题材删改，别只写「电影感」）：`<画法/成像> + <材质与光线> + <色彩与影调> + <镜头质感与颗粒> + <统一排除项>`
+- 风格：一段可复用的风格词，写进 `global.style`。两条链路消费方式不同，如实区分：**资产出图自动拼**——导入节点出资产图时逐张把 `global.style` 前缀到卡提示词、`global.systemPrompt` 并入「全片约束：」句（已实现）；**视频派工不自动拼**——`global` 字段对六段视频提示词不做注入（H3 官方六段格式不允许自由前缀），写稿时必须把风格词与全片硬约束**逐镜写进** `subject_definitions` / `retention_analysis` / `detailed_description` 本体（见阶段门 2 的写入义务）。`global` 因此是全片母版留底 + 资产出图的消费点。模板（按题材删改，别只写「电影感」）：`<画法/成像> + <材质与光线> + <色彩与影调> + <镜头质感与颗粒> + <统一排除项>`
 - 单镜时长区间：建议 **4–15 秒**（超了拆镜，不加速不吞字）
 
 **单镜时长怎么定**：先按自然口语把台词念一遍估时长，把语气停顿和**并行**动作算进去——能同时发生的动作不重复累加，必须先后发生的不重叠凑时长；台词过长时在**自然语意节点**拆成两镜，不加速、不吞字、不改台词标点；每镜预留约 0.5–1 秒收尾让动作或表情自然落定，这段不被台词占满。声明时长不一定精确落地（freevideo 实测会吸附到帧档：6s→6.583s、10s→10.125s），成片总长以实测为准。
 
 写入有两个口，按当时有没有工程选：**还没有工程**（默认路径）——把这三个定调值作为 `ratio` / `style` / `systemPrompt` 参数交给阶段门 3 的 `node:importScript`，由它写进新建工程的 `global`，**不要为了写 `global` 先建一个空工程**；**已经有工程**——`node:editProject({ operations: [{ type: "setGlobal", ratio, style, systemPrompt, model? }] })`。
 
-- `global.systemPrompt` 放全片硬约束（如「所有人物同一套服装」「不出现现代物件」「无字幕无水印」）。
+- `global.systemPrompt` 放全片硬约束（如「所有人物同一套服装」「不出现现代物件」「无字幕无水印」）。同样只在资产出图时自动拼进提示词；视频侧不自动注入，这些约束必须逐镜写进六段本体才算落地。
 - `model` 形如 `{ providerId, modelId }`，不确定就先不传，用画布节点上已配的视频模型。
 
 **通过判据**：`ratio` / `style` / `systemPrompt` 三个值说定并经用户确认（工程已存在时 `global.ratio` / `global.style` 要有值）；单镜时长区间说定。
@@ -182,6 +182,7 @@ description: 把分镜稿与资产稿接成多轨工程、逐镜生成并合成�
 - 台词写进 `<d>[Chinese]原句</d>`，演绎说明写在标签外；说话者用 `(S1)`/`(S2)` 并在跨镜保持一致。
 - **音色卡（`S`）保证跨镜声音一致**：每个说话人各建一张 `S` 卡，**有旁白的也必须给旁白单独建一张**；卡正文写一句稳定音色描述，此后每一镜提示词里该说话人（含旁白）**逐字复用同一句**（软约束，辅助手段——文字不保证强一致，没有真实音频绑定时跨切镜音色仍可能飘，如实告知）。同一角色跨阶段年龄或明确状态变化导致声线不同时，基于该角色音色卡建后缀衍生卡（`S01-A`），不覆盖基卡；视觉资产变化不自动改声音身份。提示词正文用 `(S1)` 指位时，与 `S` 卡的对应关系写进全片约束或该镜正文。
 - **六段官方结构必须保留**（MiniMax-H3 ref2va，顺序不变，一一对应六个驼峰字段）：`subject_definitions` → `prompt.subjectDefinitions`（用 `<Subject N>` 定义被引用的主体/场景/道具，来源用官方 `<Picture N>` / `<Video N>` / `<Audio N>` 指位）、`summary` → `prompt.summary`、`retention_analysis` → `prompt.retentionAnalysis`、`detailed_description` → `prompt.detailedDescription`、`overall_soundscape` → `prompt.overallSoundscape`、`non_diegetic_music` → `prompt.nonDiegeticMusic`。每段字段首行必须写官方段名（如 `subject_definitions:`），段间空一行。参考标记一律写官方 `<Picture N>` / `<Video N>` / `<Audio N>`（每类独立从 1 起），不再写「双花括号 ref 占位符」。导入节点的抽取**原样保留正文里已有的六段**，不会把镜改成一句画面描述；只有缺段才补；要在导入时改写某一镜，用它的 `clips` 参数按 `clipId` 覆盖 `{ prompt, seconds?, referenceIds?, continuity? }`，`clipId` 不在本次分镜里、`prompt` 为空、或引用了不存在/仅文字的资产都会直接报错。
+- **风格与背景一致性写入义务**：视频派工不注入 `global.style` / `global.systemPrompt`（阶段门 1），一致性全靠逐镜写进六段本体。每镜三处沿用**同一句**风格词与时代/世界观约束并逐字复用（与锚点同纪律，改一个字就是另一个锚点）：`subjectDefinitions` 定义主体/场景/道具时、`retentionAnalysis` 写保留项时、`detailedDescription` 描述画面与动作时。剧情实体文字（招牌、信件、书页、包装原有印刷）若入画，在 `detailedDescription` 写「保留并清晰可读，不新增、不改写、不重绘」；不得写「画面无文字」把招牌抹白——禁的是字幕、标题等后期型文字和 AI 自行新增/改写，不是实体资产文字。
 - 每镜围绕一个清楚的戏剧节拍或主要变化；逐镜交代初态、刺激与反应、动作与动线、对白与表演、末态与承接。
 - 每镜 `referenceIds` 里的卡 id 必须在资产卡里能找到；人物在画内还是画外要标明。
 

@@ -136,16 +136,16 @@
                 <summary class="nestedSummary">公共约束与系统提示词</summary>
                 <div class="advancedSection">
                   <label class="fieldColumn">
-                    <span class="fieldLabel">全片风格（渲染时拼到画面正文开头）</span>
+                    <span class="fieldLabel">全片风格（自动拼进资产出图；视频提示词不自动拼，写稿时逐镜带入）</span>
                     <el-input type="textarea" :rows="2" :modelValue="project?.global.style ?? ''" @input="onGlobalPatch({ style: String($event) })" />
                   </label>
                   <label class="fieldColumn">
-                    <span class="fieldLabel">系统提示词（全片共用）</span>
+                    <span class="fieldLabel">系统提示词（全片共用，当前不进视频下发）</span>
                     <el-input type="textarea" :rows="3" :modelValue="project?.global.systemPrompt ?? ''" @input="onGlobalPatch({ systemPrompt: String($event) })" />
                   </label>
                   <label class="fieldColumn">
-                    <span class="fieldLabel">本镜头的系统提示词（留空沿用全片）</span>
-                    <!-- 本镜覆盖走协议字段 clip.systemPromptOverride，派工时经 effectiveGlobal 覆盖 global.systemPrompt 后由 buildPromptText 前拼，空值自然回落到全片。
+                    <span class="fieldLabel">本镜头的系统提示词（预留写入口，当前不进视频下发）</span>
+                    <!-- 本镜覆盖走协议字段 clip.systemPromptOverride：buildPromptText 只拼六段、不前拼，composeClipRequest 也不消费 global——两者当前都不进视频下发，字段保留是写入口/留底。
                          notes 是纯备注字段，不参与提示词下发（agent 有 notes 写入口，当提示词读会有注入隐患）。 -->
                     <el-input type="textarea" :rows="2" :modelValue="selectedClip?.systemPromptOverride ?? ''" :disabled="!selectedClip" @input="onPatch({ systemPromptOverride: String($event) })" />
                   </label>
@@ -1636,8 +1636,8 @@ function writeClipRun(clipId: string, patch: Partial<MtrackClip>, attempt?: { no
 }
 
 /**
- * 本镜的系统提示词覆盖位（高级设置 · 公共约束）：clip.systemPromptOverride 有值时替换全片 systemPrompt 下发，
- * 留空沿用全片。notes 一律不参与下发（纯备注字段）。
+ * 本镜的系统提示词覆盖位（高级设置 · 公共约束）：换算出的有效 global 随派工传入 composeClipRequest，但该参数当前不被消费——
+ * 本字段与全片 systemPrompt 都不进视频下发，保留是写入口/留底。notes 一律不参与下发（纯备注字段）。
  * schema 与 composeClipRequest 签名都不动，只在调用方换算有效 global。
  */
 function effectiveGlobal(clip: MtrackClip): MtrackProject["global"] | undefined {

@@ -153,18 +153,19 @@ const extractionSystemPrompt = `你是短剧/漫剧的资产与分镜抽取器�
 原文明确出现同一角色状态变化（换装、变身、持续伤势）或同一道具状态变化（新变旧、受损）时，基础态卡与衍生态卡各自单独列出；衍生卡把基卡编号写进 refs 数组（如 "refs":["C01"]，同前缀、基卡必须列在衍生卡之前），prompt 基于基卡只改声明的状态项、其余部分逐字保留，并在散文里写明引用基卡（如「与 C01 同一张脸，换装」）；出图时本节点会以基卡的本次成图作参考图并自动连线。
 
 输出 JSON 结构：
-{"style":"全片统一风格词","systemPrompt":"全片统一约束，例如排除项：文字、水印、多余手指",
+{"style":"全片统一风格词（画风媒介/材质光线/色调/质感，资产出图时逐张沿用）","systemPrompt":"全片统一约束，例如：无字幕无水印、不出现现代物件；剧情实体文字（招牌/信件/书页/包装印刷）按原文保留并清晰可读，禁止的是新增或改写文字",
  "assets":[{"id":"C01","name":"淳于棼（青年）","kind":"character","prompt":"面向文生图的画面描述：年龄、外貌、发型、服装、气质，并写明是四视图整版（① 半身像 ② 正面全身 ③ 90° 侧面 ④ 背面全身）；场景卡写空间结构、材质、光线且强调空镜无人；道具卡写形制、材质、磨损","negativePrompt":"可选","ratio":"16:9","textOnly":false,"refs":[]},{"id":"C01-A","name":"淳于棼（换装）","kind":"character","prompt":"以参考图 1 为同一人物的身份锚点，重绘同一角色的四视图整版：面部结构、发际线与参考图 1 完全一致，仅更换服装为……","refs":["C01"]}],
  "shots":[{"title":"分镜标题","seconds":5,"prompt":"该镜提示词：原文给过就整段原样保留（六个官方段首齐全），原文没给才写一句话画面描述","referenceIds":["C01","SC01"],"mode":"ref","continuity":"shot"}]}
 
 要求：
 1. 资产只能来自原文可见信息，不臆造角色、场景或道具。
-2. 分镜 prompt 的取法：原文里已经写出这一镜的视频提示词时，整段原样保留——不要改写成一句话、不要删段、不要调换段序；原文没给提示词时，才写一句话画面描述，用中文、面向文生图，写静态画面，不写运镜与音效。资产卡 prompt 一律按上面的字段口径新写。
-3. 每个分镜的 referenceIds 只能引用本次 assets 里出现的 id，且只放需要画面参考的资产（角色/场景/道具）；S 类声音卡不要写进 referenceIds，它们只出现在提示词正文里；没有可用资产时留空数组。
-4. shots 按原文顺序输出，seconds 取 2–15 的整数；多个分镜用同一张卡时重复引用同一 id。
-5. 不要输出 KF 构图卡，只出上面四类资产卡与分镜。
-6. 原文里出现的视频提示词段落（段首为 subject_definitions、summary、retention_analysis、detailed_description、overall_soundscape、non_diegetic_music 这些官方段名）就是这一镜 prompt 的正文，必须整段原样落进对应分镜的 prompt 字段，段名、顺序、换行都照抄，不要压缩、不要改写成描述句、不要丢掉任何一段。
-7. continuity 能承接就承接：同一段落、同一空间里延续上一镜画面与动作时写 "context"；换场、时间跳转、需要重新构图或独立起拍，以及首镜、不足 10 秒、参考多于 3 个时写 "shot"。引擎对 context 的硬限制是至少 10 秒、参考合计最多 3 个，写错会被校验拦下。`;
+2. style 是一段可复用的全片风格词（画风媒介、材质光线、色调、质感），systemPrompt 是全片统一硬约束；这两项本节点会逐张并入每张资产图的提示词，画风与时代一致性靠它们兜底，不要留空。剧情里该出现的实体文字（招牌、信件、书页、包装原有印刷）在对应卡的 prompt 里写明「保留并清晰可读」，systemPrompt 排除的是字幕/水印/后期叠加文字，不是把真实招牌抹成空白。
+3. 分镜 prompt 的取法：原文里已经写出这一镜的视频提示词时，整段原样保留——不要改写成一句话、不要删段、不要调换段序；原文没给提示词时，才写一句话画面描述，用中文、面向文生图，写静态画面，不写运镜与音效。资产卡 prompt 一律按上面的字段口径新写。
+4. 每个分镜的 referenceIds 只能引用本次 assets 里出现的 id，且只放需要画面参考的资产（角色/场景/道具）；S 类声音卡不要写进 referenceIds，它们只出现在提示词正文里；没有可用资产时留空数组。
+5. shots 按原文顺序输出，seconds 取 2–15 的整数；多个分镜用同一张卡时重复引用同一 id。
+6. 不要输出 KF 构图卡，只出上面四类资产卡与分镜。
+7. 原文里出现的视频提示词段落（段首为 subject_definitions、summary、retention_analysis、detailed_description、overall_soundscape、non_diegetic_music 这些官方段名）就是这一镜 prompt 的正文，必须整段原样落进对应分镜的 prompt 字段，段名、顺序、换行都照抄，不要压缩、不要改写成描述句、不要丢掉任何一段。
+8. continuity 能承接就承接：同一段落、同一空间里延续上一镜画面与动作时写 "context"；换场、时间跳转、需要重新构图或独立起拍，以及首镜、不足 10 秒、参考多于 3 个时写 "shot"。引擎对 context 的硬限制是至少 10 秒、参考合计最多 3 个，写错会被校验拦下。`;
 
 /** 抽取结果的契约：模型返回与 Agent 直接传入的结构化结果共用它，不另立口径。 */
 export const extractionSchema = z.object({
@@ -305,6 +306,9 @@ export async function generateAssetImages(options: {
   model: AssetImportModel;
   directory: string;
   assetDirectory: string;
+  /** 全片风格词/统一约束：并入每张资产图的提示词（画风与时代一致性的自动落点）。 */
+  style?: string;
+  systemPrompt?: string;
   createImageNode(item: { path: string; mimeType: string; label: string; refs?: { id: string; nodeId: string }[] }): Promise<string>;
   signal?: AbortSignal;
   onProgress?(event: AssetImportProgress): void;
@@ -348,6 +352,10 @@ export async function generateAssetImages(options: {
       const body = asset.prompt.trim();
       if (!body) throw new Error("没有提示词，无法出图");
       const label = `${asset.id} ${asset.name}`.trim();
+      // ACT: 全片定调值在这里兑现——style 前缀到每张资产图（同一批图同一画风），systemPrompt 并进排除/约束句
+      //（「无字幕无水印」「不出现现代物件」这类全片硬约束逐张生效，不靠卡片各自重抄）。
+      const stylePrefix = options.style?.trim() ? `${options.style.trim()}，` : "";
+      const globalConstraint = options.systemPrompt?.trim() ? `\n全片约束：${options.systemPrompt.trim()}` : "";
       const images = await options.ai.generateImage({
         directory: options.directory,
         providerId: options.model.providerId,
@@ -355,7 +363,7 @@ export async function generateAssetImages(options: {
         // ACT: 引擎任务名按「分类-编号-时间戳」拼，编号从 label 取（freevideo.ts jobLabel 认 C01/SC01/P02/KF1/S001）；不传就退回旧的「生成方式-提示词主题」。
         label,
         // ACT: 媒体通道没有负面提示词字段（mediaGenerationSchema.sharedFields 只有 prompt），负面词只能并进正向提示。
-        prompt: asset.negativePrompt?.trim() ? `${body}\n避免出现：${asset.negativePrompt.trim()}` : body,
+        prompt: `${stylePrefix}${body}${asset.negativePrompt?.trim() ? `\n避免出现：${asset.negativePrompt.trim()}` : ""}${globalConstraint}`,
         outputDirectory: options.assetDirectory,
         ratio: picked.ratio,
         ...(baseRefs.length ? { images: baseRefs.map(ref => ({ path: ref.path, mimeType: ref.mimeType })) } : {}),
@@ -617,6 +625,9 @@ export async function importAssets(options: AssetImportInput): Promise<AssetImpo
     if (!options.imageModel) throw new Error("没有可用的图片模型，请先在设置中添加图片模型");
     const directory = (await options.workspace.list()).directory;
     attempted = new Set(drawable.map(asset => asset.id));
+    // ACT: 与落盘 writePlanFiles 同一优先级（显式参数 > 抽取结果），出图与工程 global 拿到的是同一份定调值。
+    const style = options.style ?? extraction.style;
+    const systemPrompt = options.systemPrompt ?? extraction.systemPrompt;
     const images = await generateAssetImages({
       ai: options.ai,
       workspace: options.workspace,
@@ -624,6 +635,8 @@ export async function importAssets(options: AssetImportInput): Promise<AssetImpo
       model: options.imageModel,
       directory,
       assetDirectory: options.assetDirectory,
+      style,
+      systemPrompt,
       createImageNode: options.createImageNode,
       signal: options.signal,
       onProgress: options.onProgress,

@@ -26,7 +26,7 @@
   "global": {
     "ratio": "9:16",
     "style": "写实电影质感，自然光，胶片颗粒",
-    "systemPrompt": "…（可选：全片规则，渲染时拼到画面正文开头（段首），不新增段落标题；为空则完全不出现）",
+    "systemPrompt": "…（可选：全片规则留底；资产出图时由导入节点逐张并入卡提示词，视频派工不注入，写稿时须逐镜写进六段本体）",
     "model": { "providerId": "freevideo", "modelId": "MiniMax-H3" }
   },
   "clips": [
@@ -74,8 +74,8 @@
 | `updatedAt` | string | ✅ | ISO 8601 带时区 | **写者每次保存必须刷新**，冲突判定见 §五 |
 | `global` | object | ✅ | 见下 | 全片默认值，`clips[]` 同名项覆盖它 |
 | `global.ratio` | string | ✅ | `9:16`/`16:9`/`1:1`/`4:3`/`3:4` | 默认画幅 |
-| `global.style` | string | ✅ | 非空 | 风格统一词 |
-| `global.systemPrompt` | string | 否 | — | 可选的规则段，渲染时拼到画面正文开头（段首），不新增段落标题；`style`/`systemPrompt` 为空时完全不出现，输出与不填时逐字节一致 |
+| `global.style` | string | ✅ | 非空 | 风格统一词：资产出图时由导入节点逐张前拼进卡提示词；视频派工不注入（见 §四），母版留底 |
+| `global.systemPrompt` | string | 否 | — | 全片规则段：资产出图时由导入节点逐张并入「全片约束：」句；视频派工**不注入**（buildPromptText 只拼 clip.prompt 六段、composeClipRequest 不消费 global），写稿时须逐镜把约束写进六段本体 |
 | `global.model` | object | ✅ | `{ providerId, modelId }` | 本工程目标模型；默认 `{ "freevideo", "MiniMax-H3" }` |
 | `clips` | array | ✅ | ≥1，`clipId` 唯一 | 片段数组，**顺序 = 合成顺序** |
 
@@ -104,7 +104,7 @@
 | `assetPath` | string\|null | ✅ | 工作区相对路径 | 产出视频；必须**真实可读**，否则该镜只能记 `failed`。也是**历史版本的身份**（见 §三）；`generated`/`accepted` 时不得为 `null`（V13） |
 | `attempts` | object[] | ✅ | 追加写，9 字段 `{ at, nodeId, status, error?, jobId?, assetPath?, signature?, index?, parentJobId? }` | 每次尝试留痕，重生成不覆盖历史；`jobId` 供续接，`assetPath` 是本次尝试的产物路径；`signature` / `index` / `parentJobId` 只在**成功**那一条写，记录落盘那一刻的参数签名、时间线位置与续接来源（父镜 `continuationJobId`），供编辑器的待更新判定比对（generationRunbook §15.9·5）。其中 `status === "succeeded"` 的记录按**产物路径**去重（旧记录回退用 `nodeId`）即该镜的**视频版本列表**（旧→新，见 §三 重生成口径） |
 | `notes` | string | 否 | — | 自由备注，**不参与提示词下发**（agent 可写，界面只作备注读；当系统提示词读会有提示词注入隐患） |
-| `systemPromptOverride` | string | 否 | — | 本镜系统提示词：非空时派工替换 `global.systemPrompt`，留空沿用全片；additive 可选字段 |
+| `systemPromptOverride` | string | 否 | — | 本镜系统提示词**预留写入口**：当前派工链路不消费（视频下发不含 `global.systemPrompt` 与本字段），保留是写入口/留底；additive 可选字段 |
 
 > 字段名一律小驼峰（AGENTS.md）；`clips[]` 内允许的键以上表为限，不自行新增字段——新增字段会让旧版工具与编辑器直接校验失败。
 
@@ -223,7 +223,7 @@ non_diegetic_music:
 A low guzheng and xiao motif, sparse.
 ```
 
-`global.style` / `global.systemPrompt` **不再由 buildPromptText 拼成「全片风格 / 全片约束」前缀**（旧行为）；这两项改由服务端通道另行下发，不占官方六段位置，也不在 wire 提示词文本里出现。要求 wire 提示词严格以 `subject_definitions:` 开头（或退化时以 `detailed_description:` 开头）的场合不需要留空它们，直接写即可。
+`global.style` / `global.systemPrompt` **不进视频提示词**：六段文本不含这两项，派工链路（`composeClipRequest` → `buildPromptText`）也不注入它们——这两项只在资产出图时由导入节点逐张拼进卡提示词。要求 wire 提示词严格以 `subject_definitions:` 开头（或退化时以 `detailed_description:` 开头）的场合不用担心它们占位，但风格词与全片硬约束的视频侧一致性由写稿人逐镜写进六段本体（见 `freevideoMultitrack` 技能阶段门 1–2 的写入义务），不会有任何机制替你补。
 
 - 没有参考的片段只写画面正文段（`detailedDescription`），其余五段可留空；下发时是退化的三段（`detailed_description:` + `overall_soundscape:` + `non_diegetic_music:`）。
 - 画布参考区把资产插进镜头时，mention chip 写入的也是官方 `<Picture N>` / `<Video N>` / `<Audio N>`（N 按类型位次），与手写同一套口径，画布链路不需要额外处理。
