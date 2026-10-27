@@ -38,6 +38,7 @@ export async function listMediaModels(): Promise<MediaModel[]> {
     return [{
       providerId: provider.id, providerLabel: provider.label, modelId: model.id, label: model.label, type: model.type,
       supportsPrice: "supportsPrice" in provider && provider.supportsPrice === true,
+      rules: model.rules,
       mode: model.mode, durationResolutionMap: model.durationResolutionMap, audio: model.audio,
       ...(model.type === "audio" ? { voices: model.voices } : {}),
       ...(model.type === "image" ? {
@@ -111,6 +112,20 @@ async function assetBytes(asset: MediaAsset, mediaType: "image" | "video" | "aud
 
 async function prepareRequest<T>(directory: string | undefined, mediaType: "image" | "video" | "audio", request: MediaGenerationRequest,
   read: (cwd: string, reference: MediaReference, type: string, signal?: AbortSignal) => Promise<T>, signal?: AbortSignal) {
+  // ACT: 仅向已适配引用映射的内置供应商传递，其他第三方适配器仍接收原有公共参数。
+  const referenceOrder = mediaType === "video" && ["tfRouter", "apiMart", "metaso", "compshare"].includes(request.providerId) ? request.referenceOrder : undefined;
+  if (referenceOrder) {
+    const media = { image: request.images, video: request.videos, audio: request.audios };
+    for (const [index, reference] of referenceOrder.entries()) {
+      const available = reference.type === "text" || ("index" in reference
+        ? Number.isSafeInteger(reference.index) && reference.index >= 0 && !!media[reference.type]?.[reference.index]
+        : !!request[reference.type]);
+      if (!available) invalid(`参考 ${index + 1} 指向的素材不存在，请重新选择引用`);
+    }
+    for (const match of request.prompt.matchAll(/\{\{ref (\d+)\}\}/g)) {
+      if (!referenceOrder[Number(match[1]) - 1]) invalid(`引用标记 ${match[0]} 没有对应素材，请重新选择引用`);
+    }
+  }
   const references = async (items: MediaReference[] | undefined, type: string) => {
     if (!items?.length) return items ? [] : undefined;
     if (!directory) invalid("参考媒体需要工作目录");
@@ -121,12 +136,13 @@ async function prepareRequest<T>(directory: string | undefined, mediaType: "imag
   };
   const images = await references(request.images, "image");
   if (mediaType === "audio") return {
-    type: "audio" as const, model: request.modelId, text: request.prompt, images, audios: await references(request.audios, "audio"),
+    type: "audio" as const, model: request.modelId, text: request.prompt, images, audios: await references(request.audios, "audio"), other: request.other,
     voice: request.voice, speed: request.speed, volume: request.volume, pitch: request.pitch, language: request.language, format: request.format, sampleRate: request.sampleRate,
   };
-  if (mediaType === "image") return { type: "image" as const, model: request.modelId, prompt: request.prompt, images, ratio: request.ratio, size: request.size };
+  if (mediaType === "image") return { type: "image" as const, model: request.modelId, prompt: request.prompt, images, ratio: request.ratio, size: request.size, other: request.other };
   return {
-    type: "video" as const, model: request.modelId, prompt: request.prompt, images,
+    type: "video" as const, model: request.modelId, prompt: request.prompt, images, other: request.other,
+    ...(referenceOrder ? { referenceOrder } : {}),
     videos: await references(request.videos, "video"), audios: await references(request.audios, "audio"),
     firstFrame: (await references(request.firstFrame ? [request.firstFrame] : undefined, "image"))?.[0],
     lastFrame: (await references(request.lastFrame ? [request.lastFrame] : undefined, "image"))?.[0],
@@ -144,7 +160,11 @@ async function configuredProvider(request: MediaGenerationRequest, mediaType: "i
 async function preparePriceRequest(directory: string | undefined, mediaType: "image" | "video" | "audio", request: MediaGenerationRequest, signal?: AbortSignal) {
   const deadline = AbortSignal.timeout(5000);
   const combined = signal ? AbortSignal.any([signal, deadline]) : deadline;
-  try { return await prepareRequest(directory, mediaType, request, readPriceReference, combined); }
+  try {
+    const prepared = await prepareRequest(directory, mediaType, request, readPriceReference, combined);
+    if (prepared.type === "video") delete prepared.referenceOrder;
+    return prepared;
+  }
   catch (error) {
     signal?.throwIfAborted();
     if (deadline.aborted) throw new Error("读取参考媒体信息超时，请稍后重试");

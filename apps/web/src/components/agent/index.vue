@@ -40,13 +40,14 @@ import { translate } from "@toonflow/i18n/vue";
 import { ElMessage } from "element-plus";
 import { useWorkspaceStore } from "@/stores/workspace";
 import useWorkspaceFiles from "@/lib/workspaceFiles";
+import { stopAgent } from "@/lib/agentControl";
 import type { AgentConversation, AgentHistory } from "./types";
 import type { AgentEvent, AgentSubAgent } from "@toonflow/server/agent/types";
 import agentMenu from "./menu.vue";
 import conversation from "./conversation.vue";
 
 const visible = defineModel<boolean>({ default: false });
-type OpenConversation = { key: number; name: string; file?: string; parentFile?: string; subAgents: AgentSubAgent[]; session: AgentConversation | null };
+type OpenConversation = { key: number; name: string; file?: string; parentFile?: string; runId?: string; retiredRunIds: Set<string>; subAgents: AgentSubAgent[]; session: AgentConversation | null };
 // ACT: 会话实例保留到工作区关闭，让切换后的回复继续接收流式内容。
 const conversations = ref<OpenConversation[]>([]);
 const conversationKey = ref(0);
@@ -58,6 +59,7 @@ const name = computed(() => {
 });
 const sessionFile = computed(() => selectedConversation.value?.file);
 const workspaceStore = useWorkspaceStore();
+let projectDirectory = workspaceStore.project?.directory;
 const history = ref<AgentHistory[]>([]);
 const loading = ref(false);
 const historyLoading = ref(false);
@@ -74,7 +76,7 @@ function showConversation(session: AgentConversation | null, activate = true) {
     return existing;
   }
   const key = ++nextConversationKey;
-  const item = { key, name: session?.name || "新对话", file: session?.file, parentFile: session?.parentFile, subAgents: session?.subAgents ?? [], session };
+  const item = { key, name: session?.name || "新对话", file: session?.file, parentFile: session?.parentFile, runId: session?.runId, retiredRunIds: new Set<string>(), subAgents: session?.subAgents ?? [], session };
   conversations.value.push(item);
   if (activate) conversationKey.value = key;
   return conversations.value[conversations.value.length - 1]!;
@@ -100,28 +102,51 @@ function deliverEvent(item: OpenConversation, event: AgentEvent) {
 
 function receiveAgentEvent(event: AgentEvent) {
   if (event.type === "subAgent") {
+    const child = conversations.value.find(item => item.file === event.agent.file);
+    if (event.agent.runId && child?.retiredRunIds.has(event.agent.runId)) return;
+    const currentRunId = child && (conversationRefs.get(child.key)?.getRunId() ?? child.runId);
+    if (currentRunId && event.agent.runId && currentRunId !== event.agent.runId) return;
     const parent = conversations.value.find(item => item.file === event.agent.parentFile);
     if (!parent) return;
     const current = parent.subAgents.find(agent => agent.file === event.agent.file);
     if (current) Object.assign(current, event.agent);
     else parent.subAgents.push(event.agent);
-    if (event.agent.status === "running" && !conversations.value.some(item => item.file === event.agent.file)) {
+    if (event.agent.status === "running" && !current && !child) {
       showConversation({ ...event.agent, parentFile: parent.file, messages: [], running: true }, false);
     }
     return;
   }
   if (event.type === "subAgentEvent") {
     const child = conversations.value.find(item => item.file === event.file);
+    if (!child) {
+      receiveAgentEvent(event.event);
+      return;
+    }
+    const currentRunId = conversationRefs.get(child.key)?.getRunId();
+    if (currentRunId) setConversationRun(child, currentRunId);
+    if (child.retiredRunIds.has(event.runId)) return;
+    if (event.event.type === "session") {
+      if (event.event.file !== event.file || event.event.runId !== event.runId) return;
+      setConversationRun(child, event.runId);
+    } else if (child.runId && child.runId !== event.runId) return;
     if (event.event.type === "error") {
-      const agent = conversations.value.find(item => item.file === child?.parentFile)?.subAgents.find(agent => agent.file === event.file);
+      const agent = conversations.value.find(item => item.file === child.parentFile)?.subAgents.find(agent => agent.file === event.file);
       if (agent?.status === "running") Object.assign(agent, { status: "cancelled", result: event.event.message });
     }
-    if (child) deliverEvent(child, event.event);
+    if (event.event.type === "done" || event.event.type === "error") {
+      child.retiredRunIds.add(event.runId);
+      child.runId = undefined;
+    }
+    deliverEvent(child, event.event);
     return;
   }
   if (event.type === "report") {
     const parent = conversations.value.find(item => item.file === event.parentFile);
     if (parent) deliverEvent(parent, event);
+  }
+  if (event.type === "agentMessage") {
+    const recipient = conversations.value.find(item => item.file === event.toFile);
+    if (recipient) deliverEvent(recipient, event);
   }
 }
 
@@ -139,10 +164,19 @@ function updateConversationName(item: OpenConversation, prompt: string) {
 
 function setSessionFile(item: OpenConversation, file: string) {
   item.file = file;
+  const runId = conversationRefs.get(item.key)?.getRunId();
+  if (runId) setConversationRun(item, runId);
   if (item.parentFile) return;
   if (!history.value.some(entry => entry.file === file)) {
     history.value.unshift({ file, name: item.name, modified: new Date().toISOString(), messageCount: 0 });
   }
+}
+
+function setConversationRun(item: OpenConversation, runId: string) {
+  // 已结束的 runId 保留到会话关闭，拒绝另一条转发流的迟到事件。
+  if (item.retiredRunIds.has(runId)) return;
+  if (item.runId && item.runId !== runId) item.retiredRunIds.add(item.runId);
+  item.runId = runId;
 }
 
 async function newConversation() {
@@ -282,7 +316,24 @@ async function removeConversation(file: string) {
   }
 }
 
+function stopProject(directory = projectDirectory) {
+  if (!directory) return;
+  const stops = [...conversationRefs.values()].map(view => view.beginProjectStop());
+  void stopAgent(directory, stops.flatMap(stop => stop.runIds)).then(() => {
+    for (const stop of stops) stop.finish(true);
+  }).catch(error => {
+    for (const stop of stops) stop.finish(false);
+    ElMessage.error(error instanceof Error ? error.message : "停止生成失败，请重试");
+  });
+}
+
+function pageHide() {
+  stopProject();
+}
+
 watch(() => workspaceStore.project?.directory, directory => {
+  if (projectDirectory && projectDirectory !== directory) stopProject(projectDirectory);
+  projectDirectory = directory;
   requestId++;
   history.value = [];
   conversations.value = [];
@@ -293,11 +344,16 @@ watch(() => workspaceStore.project?.directory, directory => {
   historyLoading.value = false;
   showConversation(null);
   if (visible.value && directory) void loadHistory(true);
-}, { immediate: true });
+}, { immediate: true, flush: "sync" });
 watch(visible, active => {
   if (active && !initialized.value) void loadHistory(true);
 });
-onBeforeUnmount(() => { requestId++; });
+window.addEventListener("pagehide", pageHide);
+onBeforeUnmount(() => {
+  requestId++;
+  stopProject();
+  window.removeEventListener("pagehide", pageHide);
+});
 
 </script>
 

@@ -57,6 +57,7 @@
 
 <script setup lang="ts">
 import axios from "axios";
+import { t, translate } from "@toonflow/i18n/vue";
 import { onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import { ElMessage } from "element-plus";
 import { IconArrowLeft, IconHeart, IconBookmark, IconShare, IconTopologyStar3, IconCopy, IconX } from "@tabler/icons-vue";
@@ -176,13 +177,13 @@ async function cloneProject() {
   try {
     const parentDirectory = await directoryPicker.value?.chooseDirectory();
     if (!parentDirectory || signal.aborted) return;
-    cloneStatus.value = "正在下载项目…";
+    cloneStatus.value = translate("正在下载项目…");
     const { downloadUrl } = await tf.getExploreDownload(project.id, { signal });
     signal.throwIfAborted();
     const { directory } = await useWorkspaceFiles(parentDirectory).cloneProject({ url: downloadUrl, name: project.title }, signal);
-    cloneStatus.value = `已下载到 ${directory}`;
+    cloneStatus.value = t`已下载到 ${directory}`;
     await workspace.addProject(directory, project.title);
-    cloneStatus.value = `已添加到项目列表 · ${directory}`;
+    cloneStatus.value = t`已添加到项目列表 · ${directory}`;
     ElMessage.success("项目已克隆并添加到项目列表");
   } catch (error) {
     if (!signal.aborted) cloneError.value = errorMessage(error, "克隆项目失败");

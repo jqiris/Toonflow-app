@@ -25,6 +25,7 @@ const webViewSdkVersion = "1.0.4191.47";
 const webViewSdkDir = join(nsisDir, `webViewSdk${webViewSdkVersion}`);
 const webViewCore = join(webViewDir, "Microsoft.Web.WebView2.Core.dll");
 const runningChecker = join(nsisDir, "checkRunning.exe");
+const updateHelper = resolve("build/desktop/protocol/updateHelper.exe");
 const initializeInstallScript = join(nsisDir, "initializeInstall.js");
 
 mkdirSync(webViewDir, { recursive: true });
@@ -122,7 +123,7 @@ try {
   // ACT: NSIS 仅打包原始 tar，安装时释放应用并保留它作为增量更新基线。
   const archive = await file(join(artifactDir, manifest.artifact.file)).arrayBuffer();
   await write(tarFile, Bun.zstdDecompressSync(archive));
-  await $`${makensis} /INPUTCHARSET UTF8 /DwebView2Dir=${webViewDir} /DrunningChecker=${runningChecker} /DappIcon=${appIcon} /DappVersion=${
+  await $`${makensis} /INPUTCHARSET UTF8 /DwebView2Dir=${webViewDir} /DrunningChecker=${runningChecker} /DupdateHelper=${updateHelper} /DappIcon=${appIcon} /DappVersion=${
     desktopConfig.app.version
   } /DappIdentifier=${desktopConfig.app.identifier} /DappTar=${tarFile} /DappHash=${manifest.hash} /DoutputFile=${outputFile} /DinitializeInstallScript=${initializeInstallScript} ${join(installerDir, "installer.nsi")}`;
   console.log(`NSIS 安装包：${outputFile}`);

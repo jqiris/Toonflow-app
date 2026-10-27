@@ -15,7 +15,7 @@ const rules = [
   },
 ] as const;
 
-const version = "2.0.0";
+const version = "2.0.1";
 
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("APIMart 响应格式错误");
@@ -26,6 +26,41 @@ function mediaUrl(input: MediaInput) {
   if (input.type === "url") return input.url;
   const data = input.type === "binary" ? Buffer.from(input.data).toString("base64") : input.data;
   return data.startsWith("data:") ? data : `data:${input.mimeType};base64,${data}`;
+}
+
+type ReferencedVideoRequest = VideoRequest & {
+  referenceOrder?: ({ type: "image" | "video" | "audio"; index: number } | { type: "firstFrame" | "lastFrame" | "text" })[];
+};
+
+function videoPrompt(request: ReferencedVideoRequest, mode: VideoMode) {
+  const model = request.model.toLowerCase();
+  const isFrames = mode === "startEndRequired" || mode === "endFrameOptional" || mode === "startFrameOptional";
+  return request.prompt.replace(/\{\{ref (\d+)\}\}/g, (marker, number: string) => {
+    const reference = request.referenceOrder?.[Number(number) - 1];
+    if (!reference) throw new Error(`引用标记 ${marker} 缺少素材映射，请更新视频节点或提供 referenceOrder`);
+    if (reference.type === "text") return `参考 ${Number(number)}`;
+    if (!model.includes("seedance") && !model.includes("doubao") && !model.startsWith("wan3.") && !model.startsWith("minimax-h3")) {
+      throw new Error(`当前模型尚不支持转换引用标记 ${marker}，请按供应商协议编写提示词`);
+    }
+    if (reference.type === "firstFrame" || reference.type === "lastFrame") {
+      if (!isFrames || !request[reference.type]) throw new Error(`引用标记 ${marker} 对应的首尾帧未提交`);
+      return reference.type === "firstFrame" ? "首帧" : "尾帧";
+    }
+    if (!("index" in reference)) throw new Error(`引用标记 ${marker} 的素材类型无效`);
+    const media = { image: request.images, video: request.videos, audio: request.audios };
+    const frameImage = reference.type === "image" && isFrames && !request.firstFrame && !request.lastFrame;
+    const included = Array.isArray(mode) || (reference.type === "image" && mode === "singleImage") || (frameImage && reference.index < 2);
+    if (!included || !Number.isSafeInteger(reference.index) || reference.index < 0 || !media[reference.type]?.[reference.index]) {
+      throw new Error(`引用标记 ${marker} 对应的素材未提交，请重新选择引用`);
+    }
+    if (frameImage) return reference.index === 0 ? "首帧" : "尾帧";
+    // APIMart 与 MiniMax H3 API 示例均按媒体类型计数：视频与音频同传时仍引用 Audio 1。
+    const labels = model.startsWith("minimax-h3") ? { image: "Image ", video: "Video ", audio: "Audio " }
+      : model.startsWith("wan3.") ? { image: "图", video: "视频", audio: "音频" }
+      : model.includes("seedance-2.5") ? { image: "@图片", video: "@视频", audio: "@音频" }
+      : { image: "图片", video: "视频", audio: "音频" };
+    return `${labels[reference.type]}${reference.index + 1}`;
+  });
 }
 
 function getBaseUrl(isOverseas: string | undefined) {
@@ -71,9 +106,8 @@ async function uploadImage(context: ProviderContext, apiKey: string, baseUrl: st
 }
 
 /** Seedance 私有素材需先提交审核，通过后才能作为参考素材使用。 */
-async function reviewSeedanceAssets(context: ProviderContext, apiKey: string, baseUrl: string, urls: string[], signal: AbortSignal): Promise<string[]> {
-  if (urls.length > 20) throw new Error(`单次最多提交20个素材，当前提交了${urls.length}个`);
-  const assets = urls.map((url) => ({ url, name: `image_${Date.now()}` }));
+async function reviewSeedanceAsset(context: ProviderContext, apiKey: string, baseUrl: string, url: string, signal: AbortSignal): Promise<string> {
+  if (url.startsWith("asset://")) return url;
   const submitResponse = await context.tool.fetch(`${baseUrl}/seedance2/private-avatar`, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -81,7 +115,7 @@ async function reviewSeedanceAssets(context: ProviderContext, apiKey: string, ba
       group: { name: `toonflow-seedance-group-${Date.now()}`, description: "ToonFlow自动创建的Seedance素材组" },
       project_name: "default",
       asset_type: "Image",
-      assets,
+      assets: [{ url, name: `image_${Date.now()}` }],
     }),
     signal,
   });
@@ -99,15 +133,15 @@ async function reviewSeedanceAssets(context: ProviderContext, apiKey: string, ba
     const queryData = object(await queryResponse.json());
     const taskData = object(queryData.data);
     const status = taskData.status;
-    if (status === "completed" || status === "failed") {
+    if (status === "failed") throw new Error(context.tool.errorMessage(taskData) || "素材审核失败");
+    if (status === "completed") {
       const result = object(taskData.result ?? {});
-      const usableAssets = Array.isArray(result.usable_assets) ? result.usable_assets : [];
-      const assetUrls = usableAssets.map((asset: any) => asset?.asset_url).filter(Boolean);
-      if (!assetUrls.length) {
-        const error = (taskData.error as { message?: unknown } | undefined)?.message;
-        throw new Error(context.tool.errorMessage?.(taskData) || (typeof error === "string" ? error : "素材审核失败"));
-      }
-      return assetUrls;
+      const usableAssets = Array.isArray(result.usable_assets) ? result.usable_assets : [{ asset_url: result.asset_url }];
+      if (usableAssets.length !== 1 || Array.isArray(result.failed_assets) && result.failed_assets.length) throw new Error("素材审核未返回唯一通过的素材，已停止生成");
+      const asset = object(usableAssets[0]);
+      if (typeof asset.asset_url !== "string" || !asset.asset_url.startsWith("asset://") || asset.asset_url.length <= 8
+        || asset.status !== undefined && asset.status !== "Active") throw new Error("素材审核未返回有效素材地址，已停止生成");
+      return asset.asset_url;
     }
     await wait(signal, 3000);
   }
@@ -202,7 +236,9 @@ export default {
     { id: "gemini-3.1-flash-image-preview", label: "Nano banana2", type: "image", mode: ["text", "singleImage", "multiReference"] },
   ] satisfies ProviderModel[],
   async processMedia(request: ImageRequest | VideoRequest | AudioRequest) {
+    const isSeedanceVideo = /^(?:doubao-)?seedance-2[.-]/i.test(request.model);
     const adjust = async (input: MediaInput, label: string) => {
+      if (isSeedanceVideo && input.type === "url" && /^asset:\/\/[^/?#\s]+$/.test(input.url)) return input;
       const info = await this.tool.media.inspectImage(input);
       if (info.height >= 300 && info.height <= 6000) return input;
       const height = Math.min(6000, Math.max(300, info.height));
@@ -266,11 +302,17 @@ export default {
     });
     return [{ mediaType: "image", type: "url", url }];
   },
-  async generateVideo(request: VideoRequest): Promise<MediaAsset[]> {
+  async generateVideo(request: ReferencedVideoRequest): Promise<MediaAsset[]> {
     const apiKey = this.config.apiKey?.trim();
     if (!apiKey) throw new Error("请填写 API Key");
     const baseUrl = getBaseUrl(this.config.isOverseas);
     const lowerName = request.model.toLowerCase();
+    const mode = request.mode ?? (request.firstFrame || request.lastFrame ? "startFrameOptional"
+      : request.videos?.length || request.audios?.length ? [] : request.images?.length ? "singleImage" : "text");
+    const prompt = videoPrompt(request, mode);
+    if (Array.isArray(mode) && (lowerName.includes("doubao") || lowerName.includes("seedance")) && (request.images?.length ?? 0) > 20) {
+      throw new Error(`单次最多提交20个素材，当前提交了${request.images!.length}个`);
+    }
     // ACT: 单次生成最多等待 30 分钟。
     const signal = AbortSignal.any([AbortSignal.timeout(30 * 60_000), ...(this.signal ? [this.signal] : [])]);
 
@@ -282,33 +324,36 @@ export default {
       ...(request.firstFrame ? [{ url: await uploadImage(this, apiKey, baseUrl, request.firstFrame, signal), role: "first_frame" }] : []),
       ...(request.lastFrame ? [{ url: await uploadImage(this, apiKey, baseUrl, request.lastFrame, signal), role: "last_frame" }] : []),
     ];
-    const mode =
-      request.mode ?? (frames.length ? "startFrameOptional" : videoUrls.length || audioUrls.length ? [] : imageUrls.length ? "singleImage" : "text");
     const isFrames = mode === "startEndRequired" || mode === "endFrameOptional" || mode === "startFrameOptional";
     const frameImages = frames.length ? frames : imageUrls.map((url, index) => ({ url, role: index === 0 ? "first_frame" : "last_frame" }));
 
     const body: Record<string, unknown> = {
       model: request.model,
-      prompt: request.prompt,
+      prompt,
       duration: request.duration,
       resolution: request.resolution,
       size: request.ratio,
     };
 
     if (lowerName.includes("wan")) {
-      if (isFrames && frameImages.length >= 2) {
+      if (isFrames && frameImages.length) {
         body.image_with_roles = frameImages.map(({ url, role }) => ({ role, url }));
       } else if (Array.isArray(mode)) {
         body.generation_type = "reference";
         if (imageUrls.length) body.image_urls = imageUrls;
         if (videoUrls.length) body.video_urls = videoUrls;
         if (audioUrls.length) body.audio_urls = audioUrls;
+      } else if (mode === "singleImage" && imageUrls.length) {
+        body.generation_type = "reference";
+        body.image_urls = imageUrls;
       }
     } else if (lowerName.includes("doubao") || lowerName.includes("seedance")) {
       if (typeof request.generateAudio === "boolean") body.generate_audio = request.generateAudio;
       if (Array.isArray(mode)) {
         if (imageUrls.length) {
-          const reviewedUrls = await reviewSeedanceAssets(this, apiKey, baseUrl, imageUrls, signal);
+          // ACT: 批量审核响应没有原素材标识；逐项审核保留图片编号，任一失败即停止。
+          const reviewedUrls: string[] = [];
+          for (const url of imageUrls) reviewedUrls.push(await reviewSeedanceAsset(this, apiKey, baseUrl, url, signal));
           body.image_with_roles = reviewedUrls.map((url) => ({ role: "reference_image", url }));
         }
         if (videoUrls.length) body.video_urls = videoUrls;

@@ -175,7 +175,7 @@ let polling = false;
 let timer: ReturnType<typeof setInterval> | undefined;
 
 function errorMessage(cause: unknown) {
-  return axios.isAxiosError<{ message?: string }>(cause) ? cause.response?.data?.message || cause.message : cause instanceof Error ? cause.message : "操作失败，请重试";
+  return axios.isAxiosError<{ message?: string }>(cause) ? cause.response?.data?.message || cause.message : cause instanceof Error ? cause.message : translate("操作失败，请重试");
 }
 
 async function copyConnectionInfo(value: string) {

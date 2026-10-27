@@ -41,6 +41,7 @@
 </template>
 
 <script setup lang="ts">
+import { translate } from "@toonflow/i18n/vue";
 import axios from "axios";
 import { computed, defineAsyncComponent, onMounted, onBeforeUnmount, ref, shallowRef, type Component } from "vue";
 import { ElMessage } from "element-plus";
@@ -152,8 +153,8 @@ async function deleteProvider(provider: MediaProvider) {
       return { mediaProviderConfigs: current };
     });
   } catch (error) {
-    const message = axios.isAxiosError(error) ? error.response?.data?.message || error.message : error instanceof Error ? error.message : "删除失败，请重试";
-    ElMessage.error(deleted ? `供应商已删除，连接配置未清理：${message}` : message);
+    const message = axios.isAxiosError(error) ? error.response?.data?.message || error.message : error instanceof Error ? error.message : translate("删除失败，请重试");
+    ElMessage.error(deleted ? `供应商已删除，但相关连接配置清理失败：${message}` : message);
   } finally { deletingFile.value = ""; }
 }
 

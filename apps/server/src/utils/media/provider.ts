@@ -21,10 +21,12 @@ const providerTranspiler = new Bun.Transpiler({ loader: "ts", target: "bun", def
 const providerIdSchema = z.string().max(96).regex(/^[a-z][a-zA-Z0-9]*$/)
   .refine(value => !/^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(value), "供应商 ID 不能是系统保留文件名");
 export const mediaProviderFileSchema = z.string().refine(value => value.endsWith(".ts") && providerIdSchema.safeParse(value.slice(0, -3)).success, "供应商文件名无效");
+const providerRulesSchema = z.array(z.record(z.string(), z.json()));
 export const mediaModelsSchema = z.array(z.object({
   id: z.string().min(1).max(200).refine(value => !!value.trim()),
   label: z.string().min(1).max(200).refine(value => !!value.trim()),
   type: z.enum(["text", "image", "video", "audio"]),
+  rules: providerRulesSchema.optional(),
 }).catchall(z.json())).max(2000).refine(models => new Set(models.map(model => model.id)).size === models.length, "模型 ID 不能重复");
 
 function invalid(message: string, status = 400): never {
@@ -207,7 +209,7 @@ function parseProvider(source: string) {
   }).safeParse(modelsUrl).success) invalid("模型列表地址须为不含凭据或片段的 HTTP URL");
   const models = mediaModelsSchema.safeParse(value("models") ?? [], validationOptions());
   if (!models.success) invalid(models.error.issues.map(issue => translateMessage(issue.message)).join("; "));
-  const rules = z.array(z.record(z.string(), z.json())).safeParse(value("rules") ?? []);
+  const rules = providerRulesSchema.safeParse(value("rules") ?? []);
   if (!rules.success) invalid("供应商 rules 必须为表单配置对象数组");
   return { object, modelProperty: entries.get("models"), id: id as string, label, icon, version: version?.trim(), readme, modelsUrl: modelsUrl as string | undefined, rules: rules.data, models: models.data,
     supportsPrice: entries.has("getPrice") || id === tfRouter.id, supportsBalance: entries.has("getBalance") || id === tfRouter.id };

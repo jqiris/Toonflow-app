@@ -28,7 +28,7 @@
     <template #topRightActions>
       <el-button :icon="IconPencil" :disabled="uploading || lighting?.generating || multiAngle?.generating || panorama?.busy || !previewUrl || gridSplit?.splitting" text title="标记" aria-label="标记" @click.stop="startEditor('mark')" />
     </template>
-    <div class="imageContent nopan">
+    <div class="imageContent nopan" :class="{ empty: !outputFile }">
       <imageEditor
         v-if="previewUrl"
         ref="editor"
@@ -41,15 +41,14 @@
       <input ref="fileInput" class="fileInput" type="file" accept="image/*" aria-label="选择图片" :disabled="uploading || lighting?.generating || multiAngle?.generating || panorama?.busy" @change="uploadImage" />
       <el-button
         v-if="!outputFile"
-        class="uploadButton"
+        class="nodrag nopan"
+        :icon="IconUpload"
         text
         :loading="uploading"
         title="上传图片"
         aria-label="上传图片"
         @dblclick.stop
-        @click="fileInput?.click()">
-        <icon-upload v-if="!uploading" :size="48" stroke="1.5" />
-      </el-button>
+        @click.stop="fileInput?.click()">上传</el-button>
     </div>
     <template v-if="lightingVisible || multiAngleVisible || editor?.mode === 'inpaint'" #bottom>
       <div v-if="lightingVisible" ref="lightingTarget" />
@@ -223,19 +222,19 @@ function showError(error: unknown, fallback: string) {
 .imageContent {
   min-height: 144px;
 
-  .fileInput {
-    display: none;
+  .nodeSkeleton.resized & {
+    height: 100%;
+    min-height: 0;
   }
 
-  .uploadButton {
-    width: 100%;
-    height: 144px;
-    padding: 0;
-    color: var(--el-text-color-placeholder);
+  &.empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
 
-    &:hover {
-      color: var(--el-color-primary);
-    }
+  .fileInput {
+    display: none;
   }
 }
 </style>

@@ -15,7 +15,7 @@
     @selectPlan="data.selectedPlanId = $event" @loadModels="loadModels" @generate="generate" @editInstruction="setPrompt" @close="editing = false">
     <template #input>
       <referenceItem v-if="refList.length" v-model="refList" @preview="setReferencePreview" @remove="removeReference" />
-      <promptInput v-model="promptModel" v-model:text="prompt" :references="referenceMentions" />
+      <promptInput v-model="promptModel" v-model:text="prompt" :references="referenceMentions" :materials="materialMentions" :selectMaterial="selectMaterialReference" :selectAsset="selectAssetReference" />
     </template>
   </sceneEditor>
 </template>
@@ -69,7 +69,7 @@ const data = computed(() => node.data as typeof node.data & {
   anchors?: CameraAnchor[];
   selectedPlanId?: string;
 });
-const { refList, referenceMentions, setReferencePreview, removeReference } = useNodeReferences();
+const { refList, referenceMentions, materialMentions, selectMaterialReference, selectAssetReference, setReferencePreview, removeReference } = useNodeReferences();
 const promptModel = computed({ get: () => data.value.promptModel ?? [], set: (value: PromptModel) => { data.value.promptModel = value; } });
 const anchors = computed({ get: () => data.value.anchors ?? [], set: (value: CameraAnchor[]) => { data.value.anchors = value; } });
 const prompt = computed({ get: () => data.value.prompt ?? "", set: (value: string) => { data.value.prompt = value; } });
@@ -422,6 +422,11 @@ async function generate() {
   background: var(--el-fill-color-light);
   border-radius: var(--el-border-radius-base);
   &:focus-visible { outline: 2px solid var(--el-color-primary); outline-offset: 2px; }
+
+  .nodeSkeleton.resized & {
+    height: 100%;
+    aspect-ratio: auto;
+  }
 
   .scenePreview {
     display: block;

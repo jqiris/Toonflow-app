@@ -4,9 +4,9 @@
     <div v-if="selected" class="mentionPreview">
       <p class="mentionSource">{{ sourceLabel(selected) }}</p>
       <p v-if="loading || error" :role="error ? 'alert' : 'status'">{{ loading ? '正在读取…' : error }}</p>
-      <img v-else-if="previewUrl && ['IMAGE', 'MASK'].includes(selected.dataType)" :src="previewUrl" :alt="selected.label" @error="error = '无法预览该图片'" />
-      <video v-else-if="previewUrl && selected.dataType === 'VIDEO'" :src="previewUrl" controls playsinline preload="metadata" @error="error = '无法预览该视频'" />
-      <audio v-else-if="previewUrl && selected.dataType === 'AUDIO'" :src="previewUrl" controls preload="metadata" @error="error = '无法预览该音频'" />
+      <img v-else-if="previewUrl && ['IMAGE', 'MASK'].includes(selected.dataType)" :src="previewUrl" :alt="selected.label" @error="error = translate('无法预览该图片')" />
+      <video v-else-if="previewUrl && selected.dataType === 'VIDEO'" :src="previewUrl" controls playsinline preload="metadata" @error="error = translate('无法预览该视频')" />
+      <audio v-else-if="previewUrl && selected.dataType === 'AUDIO'" :src="previewUrl" controls preload="metadata" @error="error = translate('无法预览该音频')" />
       <p v-else-if="selected.dataType === 'FILE'" class="fileName"><icon-file :size="20" />{{ selected.label }}</p>
       <template v-else>
         <pre>{{ textValue.slice(0, 12000) }}</pre>
@@ -19,6 +19,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { t, translate } from "@toonflow/i18n/vue";
 import axios from "axios";
 import { IconAt, IconFile } from "@tabler/icons-vue";
 import type { AgentMention } from "@toonflow/server/agent/types";
@@ -41,7 +42,7 @@ const textValue = computed(() => {
 });
 
 function sourceLabel(mention: AgentMention) {
-  return mention.source.kind === "asset" ? `全局素材 / ${mention.source.path}`
+  return mention.source.kind === "asset" ? t`全局素材 / ${mention.source.path}`
     : `${mention.source.canvasName} / ${mention.source.nodeName} / ${mention.source.outputName}（${mention.source.nodeId}）`;
 }
 

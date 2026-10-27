@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { chainMethods, executeRemoteFfmpeg, queryMethods, runMethods } from "@toonflow/ffmpeg/remote";
+import { chainMethods, queryMethods, runMethods } from "@toonflow/ffmpeg/remote";
 import type { ToolPlugin } from "@toonflow/tools-scaffold/runtime";
 
 const configSchema = z.strictObject({});
@@ -32,12 +32,11 @@ const plugin: ToolPlugin = {
   validateConfig: config => configSchema.parse(config),
   createTools(context) {
     async function execute(request: z.infer<typeof processSchema>, signal?: AbortSignal) {
-      const ffmpeg = await context.ffmpeg(signal);
       let details: unknown;
       let error: Error | undefined;
       let filenames: unknown;
-      // ACT: 复用节点已有的 JSON 调用桥接，不在工具层重写参数、输出位置或原生执行规则。
-      await executeRemoteFfmpeg(ffmpeg, {
+      // ACT: 宿主在 Worker 中执行 JSON 调用，不在工具层重写参数、输出位置或原生执行规则。
+      await context.executeFfmpeg({
         directory: context.cwd,
         requestId: crypto.randomUUID(),
         options: request.options ?? {},

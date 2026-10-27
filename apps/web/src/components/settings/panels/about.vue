@@ -41,6 +41,10 @@
           </template>
         </div>
       </div>
+      <div v-if="isLocalDesktop" class="autoUpdateSetting">
+        <span>自动更新</span>
+        <el-switch :modelValue="desktopAutoUpdate" size="small" :loading="autoUpdateSaving" :disabled="!actualPlatform.isLocalDesktop" aria-label="自动更新" @change="(value) => saveAutoUpdate(value === true)" />
+      </div>
       <div v-if="!isMobile && snapshot?.hash" class="buildInfo">
         <span>构建标识</span>
         <code>{{ snapshot.hash }}</code>
@@ -212,7 +216,7 @@ import { translate, t } from "@toonflow/i18n/vue";
 import { computed, defineAsyncComponent, onMounted, onBeforeUnmount, ref } from "vue";
 import axios from "axios";
 import { ElMessage } from "element-plus";
-import { isMobile, isDesktop, isRemoteConnection } from "@/lib/platform";
+import { actualPlatform, isMobile, isLocalDesktop, isRemoteConnection } from "@/lib/platform";
 import { QRCode } from "tdesign-vue-next";
 import {
   IconRefresh,
@@ -231,6 +235,7 @@ import logoUrl from "@toonflow/assets/logo.svg";
 import tf, { type TfSponsor } from "@/lib/tf";
 import { saveSettings } from "@/stores/settings";
 import {
+  desktopAutoUpdate,
   desktopUpdateSource as updateSource,
   desktopUpdateCustomUrl as customUpdateUrl,
   desktopUpdateSnapshot as snapshot,
@@ -239,15 +244,17 @@ import {
   desktopUpdateChecking,
   hasDesktopUpdate,
   runDesktopUpdate,
+  startDesktopUpdate,
 } from "@/stores/desktopUpdate";
 
 const messageMarkdown = defineAsyncComponent(() => import("@/components/messageMarkdown.vue"));
 const repositoryUrl = "https://github.com/HBAI-Ltd/Toonflow-app";
 const communityUrl = "https://work.weixin.qq.com/u/vc36adcc89845edcbe?v=5.0.3.63936&bb=85b8d228e8";
 const clientBuild = ref<{ version: string; channel: string }>();
-const currentVersion = computed(() => isDesktop && isRemoteConnection
+const currentVersion = computed(() => actualPlatform.isDesktop && actualPlatform.isRemoteConnection
   ? clientBuild.value?.version || "" : snapshot.value?.version || import.meta.env.appVersion);
 const sourceSaving = ref(false);
+const autoUpdateSaving = ref(false);
 const checking = computed(() => desktopUpdateChecking.value);
 const working = computed(() => !!action.value);
 const updateInProgress = computed(() => working.value || !!snapshot.value?.updating);
@@ -290,9 +297,9 @@ onMounted(async () => {
 });
 
 onMounted(async () => {
-  if (!isDesktop) return;
+  if (!actualPlatform.isDesktop) return;
   try {
-    if (isRemoteConnection) {
+    if (actualPlatform.isRemoteConnection) {
       const { data } = await axios.get<{ data: { version: string; channel: string } }>("/api/desktop/update", { signal: controller.signal, timeout: 10000 });
       clientBuild.value = data.data;
       return;
@@ -321,7 +328,7 @@ function openUpdate() {
 }
 
 async function saveUpdateSource(source: string) {
-  if (isRemoteConnection) return;
+  if (actualPlatform.isRemoteConnection) return;
   if (source === updateSource.value || sourceSaving.value || working.value) return;
   if (source !== "official" && source !== "github" && (source !== "custom" || !customUpdateUrl.value)) return;
   sourceSaving.value = true;
@@ -331,6 +338,19 @@ async function saveUpdateSource(source: string) {
     ElMessage.error(getUpdateError(error));
   } finally {
     sourceSaving.value = false;
+  }
+}
+
+async function saveAutoUpdate(enabled: boolean) {
+  if (!actualPlatform.isLocalDesktop || autoUpdateSaving.value || enabled === desktopAutoUpdate.value) return;
+  autoUpdateSaving.value = true;
+  try {
+    await saveSettings(() => ({ desktopAutoUpdate: enabled }));
+    if (enabled) void startDesktopUpdate().catch(() => {});
+  } catch (error) {
+    ElMessage.error(getUpdateError(error));
+  } finally {
+    autoUpdateSaving.value = false;
   }
 }
 
@@ -345,10 +365,6 @@ function formatBytes(bytes: number) {
 async function runUpdate(nextAction: "read" | "check" | "download" | "apply") {
   if (working.value || sourceSaving.value) return;
   updateError.value = "";
-  if (!isDesktop) {
-    updateError.value = "请在桌面客户端中检查更新。";
-    return;
-  }
   try {
     await runDesktopUpdate(nextAction);
     if (snapshot.value?.channel === "dev") updateError.value = "开发版本不提供更新检查，请使用正式桌面客户端。";
@@ -437,6 +453,16 @@ async function runUpdate(nextAction: "read" | "check" | "download" | "apply") {
     }
 
     &.updateCard {
+      .autoUpdateSetting {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-top: 8px;
+        color: var(--el-text-color-primary);
+        font-size: 13px;
+      }
+
       .cardHeader {
         .updateCopy {
           flex: 1;

@@ -1,3 +1,4 @@
+import { translate } from "@toonflow/i18n/vue";
 import axios from "axios";
 import { computed, onScopeDispose, ref, watch } from "vue";
 import type { ProviderBalance } from "@toonflow/providers";
@@ -66,7 +67,7 @@ export function refreshProviderBalance(providerId: string, signal?: AbortSignal)
         // 服务重启后的旧 ID 不得留在批量订阅中，避免一个失败账户拖垮整组通知。
         entry.accountId = "";
         entry.error = axios.isAxiosError<{ message?: string }>(error)
-          ? error.response?.data?.message || error.message : error instanceof Error ? error.message : "余额查询失败，请重试";
+          ? error.response?.data?.message || error.message : error instanceof Error ? error.message : translate("余额查询失败，请重试");
       }
     } finally {
       if (balanceRequests.get(providerId) === request) {
@@ -172,7 +173,7 @@ export function useProviderBalances() {
       if (!controller.signal.aborted) scheduleSubscribe();
     } catch (error) {
       if (!controller.signal.aborted) {
-        for (const entry of providerBalances.value) entry.error = error instanceof Error ? error.message : "余额查询失败，请重试";
+        for (const entry of providerBalances.value) entry.error = error instanceof Error ? error.message : translate("余额查询失败，请重试");
         retryConnection();
       }
     } finally {

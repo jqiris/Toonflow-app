@@ -1,4 +1,5 @@
 import axios from "axios";
+import { translate } from "@toonflow/i18n/vue";
 import type { NodeHandle } from "@toonflow/nodes-scaffold/connection";
 import { customProviders, settings } from "@/stores/settings";
 
@@ -99,7 +100,7 @@ function requestOptions({ apiKey, signal }: TfRequestOptions = {}) {
   return { signal, timeout: 20000, headers: { Authorization: `Bearer ${key}` } };
 }
 
-function responseData<T>(response: TfResponse<T>, fallback = "TF-Router 请求失败"): T {
+function responseData<T>(response: TfResponse<T>, fallback = translate("TF-Router 请求失败")): T {
   if (!response || typeof response !== "object" || typeof response.code !== "number") throw new Error("TF-Router 响应格式不正确");
   if (response.code !== 200) throw new Error(response.message || fallback);
   return response.data;
@@ -140,7 +141,7 @@ export default {
   async getExploreProjects(params: TfExploreParams, options?: Pick<TfRequestOptions, "signal">): Promise<TfExplorePage> {
     if (!Number.isSafeInteger(params.limit) || params.limit < 1 || params.limit > 50) throw new Error("每页数量必须为 1 至 50 的整数");
     const { data } = await client.post<TfResponse<TfExplorePage>>("/v1/explore/getProjects", params, exploreOptions(options));
-    const page = responseData(data, "加载探索项目失败");
+    const page = responseData(data, translate("加载探索项目失败"));
     if (!page || !Array.isArray(page.list) || page.list.length > params.limit
       || (page.nextCursor !== null && (typeof page.nextCursor !== "string" || !page.nextCursor.trim()))) throw new Error("探索分页响应格式不正确");
     if (!Array.isArray(page.categories) || page.categories.some(item => !item || typeof item.id !== "string" || !item.id.trim()
@@ -153,7 +154,7 @@ export default {
   async getExploreProject(projectId: string, options?: Pick<TfRequestOptions, "signal">): Promise<TfExploreDetail> {
     validateExploreId(projectId);
     const { data } = await client.post<TfResponse<TfExploreDetail>>("/v1/explore/getProject", { projectId }, exploreOptions(options));
-    const project = responseData(data, "加载作品详情失败");
+    const project = responseData(data, translate("加载作品详情失败"));
     validateExploreProject(project);
     if (project.id !== projectId || typeof project.description !== "string"
       || !isExploreUrl(project.videoUrl, true) || !isExploreUrl(project.shareUrl)) throw new Error("作品详情响应格式不正确");
@@ -164,7 +165,7 @@ export default {
   async setExploreReaction(projectId: string, action: "like" | "collection", active: boolean, options?: TfRequestOptions): Promise<TfExploreReaction> {
     validateExploreId(projectId);
     const { data } = await client.post<TfResponse<TfExploreReaction>>("/v1/explore/setReaction", { projectId, action, active }, requestOptions(options));
-    const reaction = responseData(data, "更新作品互动失败");
+    const reaction = responseData(data, translate("更新作品互动失败"));
     validateExploreReaction(reaction);
     return reaction;
   },
@@ -174,7 +175,7 @@ export default {
   async getExploreProcess(projectId: string, options?: Pick<TfRequestOptions, "signal">): Promise<TfExploreProcess> {
     validateExploreId(projectId);
     const { data } = await client.post<TfResponse<TfExploreProcess>>("/v1/explore/getProcess", { projectId }, exploreOptions(options));
-    const process = responseData(data, "加载制作过程失败");
+    const process = responseData(data, translate("加载制作过程失败"));
     if (!process || !Array.isArray(process.canvases) || !process.canvases.length) throw new Error("制作过程响应格式不正确");
     const canvasIds = new Set<string>();
     for (const canvas of process.canvases) {
@@ -236,14 +237,14 @@ export default {
   async getExploreDownload(projectId: string, options?: Pick<TfRequestOptions, "signal">): Promise<{ downloadUrl: string }> {
     validateExploreId(projectId);
     const { data } = await client.post<TfResponse<{ downloadUrl: string }>>("/v1/explore/getDownload", { projectId }, exploreOptions(options));
-    const download = responseData(data, "获取项目下载地址失败");
+    const download = responseData(data, translate("获取项目下载地址失败"));
     if (!isExploreUrl(download?.downloadUrl) || new URL(download.downloadUrl).protocol !== "https:") throw new Error("项目下载地址无效");
     return download;
   },
 
   async getSponsorList(options?: Pick<TfRequestOptions, "signal">): Promise<TfSponsor[]> {
     const { data } = await client.post<TfResponse<TfSponsor[]>>("/web/sponsor/getSponsorList", null, { signal: options?.signal, timeout: 20000 });
-    const sponsors = responseData(data, "加载赞助商失败");
+    const sponsors = responseData(data, translate("加载赞助商失败"));
     if (!Array.isArray(sponsors) || sponsors.some(item => !item || !Number.isSafeInteger(item.id) || item.id < 1
       || typeof item.name !== "string" || typeof item.logoUrl !== "string" || typeof item.readme !== "string")) throw new Error("赞助商响应格式不正确");
     return sponsors;
@@ -291,13 +292,13 @@ export default {
     if (!Number.isSafeInteger(params.page) || params.page < 1) throw new Error("页码必须为正整数");
     if (!Number.isSafeInteger(params.limit) || params.limit < 1 || params.limit > 50) throw new Error("每页数量必须为 1 至 50 的整数");
     const { data } = await client.post<TfResponse<{ list: TfPlugin[]; total: number }>>("/v1/plugin/getPlugin", params, requestOptions(options));
-    return responseData(data, "加载插件市场失败");
+    return responseData(data, translate("加载插件市场失败"));
   },
 
   async toggleCollection(pluginId: number, options?: TfRequestOptions): Promise<{ collected: boolean }> {
     if (!Number.isSafeInteger(pluginId) || pluginId < 1) throw new Error("插件 ID 必须为正整数");
     const { data } = await client.post<TfResponse<{ collected: boolean }>>("/v1/plugin/toggleCollection", { pluginId }, requestOptions(options));
-    const collection = responseData(data, "更新插件收藏失败");
+    const collection = responseData(data, translate("更新插件收藏失败"));
     if (typeof collection?.collected !== "boolean") throw new Error("插件收藏响应格式不正确");
     return collection;
   },

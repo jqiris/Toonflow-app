@@ -104,6 +104,7 @@ ComfyUI 接入分支（仅在我的资料或回答涉及 ComfyUI 时使用）
 运行约定：
 - 生成方法使用普通 async 方法而非箭头函数，通过 this.config.apiKey 取得用户配置，通过 this.signal 取得取消信号，通过 this.tool.fetch 发起请求。不得硬编码真实密钥或把鉴权信息写入日志、错误消息和返回结果。
 - 媒体供应商编辑界面按 rules 渲染、校验并保存全部表单字段，生成时通过 this.config 的同名字段读取。公开的接口地址等按已确认资料写入适配器；用户专属配置由表单填写，必填和格式要求在对应规则的 validate 中声明，不要求用户把额外密钥写进代码。
+- models 中每个模型可声明独立的 rules，使用 form-create JSON 字面量规则；图片、视频、音频节点会在设置弹层底部显示该表单，并将填写值传入 request.other，同样用于估价。field 为参数名，value 为默认值；仅声明实际支持的厂商专属参数，供应商仍须校验参数的合法性。
 - 宿主还提供 this.tool.hash 和 this.tool.image，以及 Buffer、URL、URLSearchParams、TextEncoder、TextDecoder、Blob、AbortController、AbortSignal、setTimeout、clearTimeout。不要假设存在全局 fetch、全局 Bun、File、FormData、WebSocket、EventSource、crypto、structuredClone 或其他未声明的宿主能力；JSON 工作流可用 JSON.parse(JSON.stringify(...)) 复制。模块顶层仅放声明，不发起请求、启动计时器或进行耗时操作。
 - await this.tool.ffmpeg() 返回绑定当前工作区的原生 @renmu/fluent-ffmpeg 工厂，使用 ffmpeg(input).videoFilters(...).on("error", ...).on("end", ...).save(output) 等原生链式调用，ffprobe 使用原生回调。显式文件路径只能在当前工作区内；原始参数、滤镜和清单中的间接 I/O 不由宿主解析，不能用它们访问工作区外文件。输出可能覆盖已有文件，必须使用新的文件名；运行取消由调用方监听 this.signal 并调用 command.kill，准备期间已取消时不能再启动进程。没有工作目录的调试上下文不能使用。仅在确实需要时调用；未安装时抛出 code 为 FFMPEG_REQUIRED 的错误，宿主前端会询问下载。继续向上抛出此错误，不自行安装或自动重试完整生成请求，以免重复计费。不再提供字节转换或 JSON 计划接口。
 - 请求和轮询都必须响应取消；为长任务设置有限超时，并在等待时正确清理计时器与取消监听。检查 HTTP 状态、响应结构、任务失败状态和最终结果，抛出可理解的中文错误。不能只返回任务 ID，异步厂商需要在方法内部等待任务完成。

@@ -92,7 +92,7 @@
 </p>
 <p align="center">
   <img src="https://ziadoua.github.io/m3-Markdown-Badges/badges/TypeScript/typescript2.svg" alt="TypeScript" height="28" />&nbsp;
-  <img src="https://img.shields.io/badge/Bun-1.3.14-14151A?style=for-the-badge&logo=bun&logoColor=white" alt="Bun 1.3.14" />&nbsp;
+  <img src="https://img.shields.io/badge/Bun-1.4.3-14151A?style=for-the-badge&logo=bun&logoColor=white" alt="Bun 1.4.3" />&nbsp;
   <img src="https://img.shields.io/badge/Vue-3-42B883?style=for-the-badge&logo=vuedotjs&logoColor=white" alt="Vue 3" />&nbsp;
   <img src="https://img.shields.io/badge/Desktop-Electrobun-8257E5?style=for-the-badge" alt="Electrobun" />
 </p>
@@ -324,7 +324,7 @@ sudo spctl --master-disable
 
 ### 4.2 Docker 安装
 
-先安装 Git、[Docker Engine](https://docs.docker.com/engine/install/) 和 Docker Compose；Windows / macOS 可使用 Docker Desktop 的 Linux 容器模式。仓库提供 [Dockerfile](./Dockerfile)、[Compose 配置](./compose.yaml) 和 [构建排除规则](./.dockerignore)，基于 Bun 1.3.14 构建，镜像内包含 FFmpeg。
+先安装 Git、[Docker Engine](https://docs.docker.com/engine/install/) 和 Docker Compose；Windows / macOS 可使用 Docker Desktop 的 Linux 容器模式。仓库提供 [Dockerfile](./Dockerfile)、[Compose 配置](./compose.yaml) 和 [构建排除规则](./.dockerignore)，基于 Bun 1.4.3 构建，镜像内包含 FFmpeg。
 
 <details>
 <summary><strong>展开 Docker 安装步骤</strong></summary>
@@ -368,7 +368,7 @@ docker compose start
 
 ### 4.3 服务器安装
 
-适用于直接在 Linux 服务器上运行 Web 与 Server。以下以 Ubuntu / Debian 为例，使用项目指定的 [Bun 1.3.14](https://bun.sh/docs/installation)。
+适用于直接在 Linux 服务器上运行 Web 与 Server。以下以 Ubuntu / Debian 为例，使用项目指定的 [Bun 1.4.3](https://bun.sh/docs/installation)。
 
 <details>
 <summary><strong>展开服务器安装步骤</strong></summary>
@@ -378,7 +378,7 @@ docker compose start
 ```sh
 sudo apt-get update
 sudo apt-get install -y git curl unzip ffmpeg
-curl -fsSL https://bun.com/install | bash -s "bun-v1.3.14"
+curl -fsSL https://bun.com/install | bash -s "bun-v1.4.3"
 export PATH="$HOME/.bun/bin:$PATH"
 bun --version
 ```

@@ -184,7 +184,7 @@ function errorMessage(error: unknown) {
     ? error.response?.data?.message || error.message
     : error instanceof Error
     ? error.message
-    : "操作失败，请重试";
+    : translate("操作失败，请重试");
 }
 
 async function loadDocument(document: DocumentState, name: "agents" | "memory", discardChanges = false) {

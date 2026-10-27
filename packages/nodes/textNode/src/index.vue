@@ -8,7 +8,7 @@
     :downloadName="`${nodeProps.label || '文本'}.md`"
     :bottomWidth="660"
     @fullscreen="fullscreen = true; editing = true">
-    <div class="textContent" :class="{ empty: !outputs.text.value.trim() }">
+    <div class="textContent" :class="{ empty: !outputs.text.value.trim(), resized }">
       <el-alert v-if="documentState.error" :title="documentState.error" type="error" :closable="false" showIcon>
         <el-button text size="small" :disabled="generating || textReloading" @click="editing = true">查看并复制当前正文</el-button>
         <el-button text size="small" :disabled="generating" :loading="textReloading" @click="reloadText">重新读取磁盘</el-button>
@@ -80,6 +80,7 @@ const editing = ref(false);
 const fullscreen = ref(false);
 const downloadUrl = ref("");
 const documentContext = inject<NodeDocumentContext | undefined>("nodeDocument", undefined);
+const resized = computed(() => !documentContext?.targets.has(node.id) && typeof node.style === "object" && !!node.style.height);
 watch([() => outputs.value.text.value, () => node.selected || !!documentContext?.targets.has(node.id)], ([text, visible], _previous, onCleanup) => {
   downloadUrl.value = "";
   if (!visible || !text.trim()) return;
@@ -279,6 +280,21 @@ nodeTools.register({
 
 .textContent {
   min-height: 110px;
+
+  &.resized {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+
+    .textPreview {
+      flex: 1;
+      min-height: 0;
+      max-height: none;
+    }
+
+    .editButton { flex-shrink: 0; }
+  }
 
   &.empty {
     display: flex;

@@ -103,9 +103,10 @@
                     <span class="projectTime">最近打开 {{ new Date(project.lastOpenedAt).toLocaleString(locale, { hour12: false }) }}</span>
                   </span>
                 </button>
-                <div class="projectActions">
-                  <el-button circle :icon="IconEdit" :disabled="creating || opening" :aria-label="`重命名项目 ${project.name}`" title="重命名" @click="renameProject(project)" />
-                  <el-button circle plain type="danger" :icon="IconTrash" :disabled="creating || opening" :aria-label="`移除项目 ${project.name}`" title="从列表移除，不删除文件" @click="workspaceStore.removeProject(project.directory)" />
+                <div class="projectActions" :class="{ exporting: exportingDirectory === project.directory }">
+                  <el-button circle :icon="IconFileZip" :loading="exportingDirectory === project.directory" :disabled="creating || opening || !!exportingDirectory" :aria-label="`打包导出项目 ${project.name}`" title="打包导出 ZIP" @click="exportProject(project)" />
+                  <el-button circle :icon="IconEdit" :disabled="creating || opening || exportingDirectory === project.directory" :aria-label="`重命名项目 ${project.name}`" title="重命名" @click="renameProject(project)" />
+                  <el-button circle plain type="danger" :icon="IconTrash" :disabled="creating || opening || exportingDirectory === project.directory" :aria-label="`移除项目 ${project.name}`" title="从列表移除，不删除文件" @click="workspaceStore.removeProject(project.directory)" />
                 </div>
               </el-card>
             </div>
@@ -132,7 +133,7 @@ import { getReadableFileMimeType, readableFileAccept } from "@toonflow/server/do
 import {
   IconQrcode, IconDeviceDesktop, IconHome, IconCompass,
   IconArrowUp, IconPlus, IconLoader2,
-  IconFolder, IconEdit,
+  IconFolder, IconEdit, IconFileZip,
   IconTrash, IconPaperclip,
 } from "@tabler/icons-vue";
 import modelPopover from "@/components/modelPopover.vue";
@@ -144,6 +145,7 @@ import { useWorkspaceStore, type Project } from "@/stores/workspace";
 import { hasDesktopUpdate } from "@/stores/desktopUpdate";
 import { deviceHubEnabled, mobileConnection, mobileConnectionLabel } from "@/lib/mobile";
 import useWorkspaceFiles from "@/lib/workspaceFiles";
+import saveFile from "@/lib/saveFile";
 import { waitForControlValue } from "@/lib/mcpControl";
 import settings from "@/components/settings/index.vue";
 import assetLibraryDialog from "./assetLibraryDialog.vue";
@@ -169,6 +171,7 @@ const router = useRouter();
 const pageLifetime = new AbortController();
 const creating = ref(false);
 const opening = ref(false);
+const exportingDirectory = ref("");
 const promptWorkspacePicker = ref<InstanceType<typeof workspacePicker>>();
 const relocationPicker = ref<InstanceType<typeof workspacePicker>>();
 const prompt = ref("");
@@ -359,7 +362,7 @@ function addAttachments(files: File[]) {
       continue;
     }
     if (mimeType === "text/plain" && file.size > 400000) {
-      ElMessage.warning("文本附件不能超过 400000 字节");
+      ElMessage.warning("文本附件不能超过 400 KB（400000 字节），请缩减内容后重试。");
       continue;
     }
     if (promptAttachments.value.length >= 20) {
@@ -419,6 +422,27 @@ async function openProject(project: Project) {
       ? err.response?.data.message || "无法打开项目，请重试"
       : err instanceof Error ? err.message : "无法打开项目，请重试");
   } finally { opening.value = false; }
+}
+
+async function exportProject(project: Project) {
+  if (creating.value || opening.value || exportingDirectory.value) return;
+  const directory = project.directory;
+  exportingDirectory.value = directory;
+  try {
+    let name = project.name.replace(/[<>:"/\\|?*\x00-\x1f\x7f-\x9f]/g, "_").slice(0, 120).replace(/[. ]+$/, "");
+    if (!name || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name)) name = "Toonflow";
+    const files = useWorkspaceFiles(directory);
+    await saveFile(() => files.exportZip(pageLifetime.signal), `${name}.zip`);
+  } catch (error) {
+    if (pageLifetime.signal.aborted) return;
+    let message = error instanceof Error ? error.message : translate("导出项目失败，请重试");
+    if (axios.isAxiosError(error)) {
+      const data = error.response?.data instanceof Blob
+        ? await error.response.data.text().then(JSON.parse).catch(() => null) : error.response?.data;
+      if (typeof data?.message === "string") message = data.message;
+    }
+    ElMessage.error(message);
+  } finally { exportingDirectory.value = ""; }
 }
 
 async function renameProject(project: Project) {
@@ -697,7 +721,7 @@ async function createProject(fromPrompt = true) {
               position: relative;
               border-radius: calc(var(--ui-radius) * 3);
               border-color: var(--el-border-color-light);
-              background: var(--el-bg-color-overlay);
+              background: color-mix(in srgb, var(--el-bg-color-overlay) 70%, transparent);
               box-shadow: 0 12px 36px rgb(0 0 0 / 6%), inset 0 1px 0 color-mix(in srgb, var(--el-text-color-primary) 4%, transparent);
               transition: border-color 0.2s, box-shadow 0.2s;
 
@@ -861,6 +885,7 @@ async function createProject(fromPrompt = true) {
               position: relative;
               border-radius: calc(var(--ui-radius) * 2.5);
               border-color: var(--el-border-color-lighter);
+              background: color-mix(in srgb, var(--el-bg-color-overlay) 70%, transparent);
               box-shadow: var(--el-box-shadow-lighter);
 
               &:focus-within {
@@ -932,7 +957,7 @@ async function createProject(fromPrompt = true) {
                   margin-top: auto;
                   padding: 12px 16px;
                   border-top: 1px solid var(--el-border-color-lighter);
-                  background: var(--el-fill-color-extra-light);
+                  background: transparent;
 
                   .projectName {
                     overflow: hidden;
@@ -966,7 +991,7 @@ async function createProject(fromPrompt = true) {
                 }
               }
 
-              &:hover .projectActions, &:focus-within .projectActions { opacity: 1; pointer-events: auto; }
+              &:hover .projectActions, &:focus-within .projectActions, .projectActions.exporting { opacity: 1; pointer-events: auto; }
 
               @media (hover: none), (any-pointer: coarse) {
                 .projectActions { opacity: 1; pointer-events: auto; }

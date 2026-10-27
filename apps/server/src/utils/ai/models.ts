@@ -24,7 +24,7 @@ export async function fetchProviderModels({ apiUrl, protocol, apiKey }: { apiUrl
   const signal = AbortSignal.timeout(30000);
   while (true) {
     const response = await fetch(url, { headers, signal, redirect: "error" });
-    if (!response.ok) throw new Error(t`获取模型列表失败（HTTP ${response.status}），请检查 API 地址、协议和密钥`);
+    if (!response.ok) throw new Error(t`模型列表获取失败（HTTP ${response.status}），请检查 API 地址、连接协议和密钥是否正确。`);
     const result = z.object({
       data: z.array(modelSchema),
       has_more: z.boolean().optional(), last_id: z.string().nullable().optional(),
@@ -32,13 +32,13 @@ export async function fetchProviderModels({ apiUrl, protocol, apiKey }: { apiUrl
     const items = result.data;
     for (const item of items) {
       const id = item.id?.trim();
-      if (!id) throw new Error("模型列表包含无效的模型 ID");
+      if (!id) throw new Error("获取到的模型列表包含无效的模型 ID，无法正常加载。");
       models.set(id, { id, label: item.display_name || item.displayName || id, contextWindow: item.inputTokenLimit, maxOutputTokens: item.outputTokenLimit });
     }
     const cursor = protocol === "anthropic-messages" && result.has_more ? result.last_id : undefined;
-    if (protocol === "anthropic-messages" && result.has_more && !cursor) throw new Error("模型列表缺少分页游标");
+    if (protocol === "anthropic-messages" && result.has_more && !cursor) throw new Error("模型列表缺少分页游标，无法继续获取后续模型。");
     if (!cursor) break;
-    if (cursors.has(cursor)) throw new Error("模型列表分页游标重复");
+    if (cursors.has(cursor)) throw new Error("模型列表返回了重复的分页游标，已停止获取后续模型。");
     cursors.add(cursor);
     url.searchParams.set("after_id", cursor);
   }

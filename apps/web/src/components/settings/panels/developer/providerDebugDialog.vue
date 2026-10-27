@@ -123,7 +123,7 @@ import { ElMessage } from "element-plus";
 import { IconFolderOpen, IconRefresh, IconPlus, IconX, IconMusic, IconDownload, IconPlayerPlay, IconPlayerStop } from "@tabler/icons-vue";
 import type { Provider } from "@toonflow/providers";
 import { invalidateNodeModels } from "@toonflow/nodes-scaffold/nodeAi";
-import { isDesktop } from "@/lib/platform";
+import { actualPlatform } from "@/lib/platform";
 
 type DebugProvider = { id: string; label: string; rules: Rule[]; models: Provider["models"] };
 type DebugLog = { id: number; method: string; url: string; state: string; status?: number; duration?: number; request?: string; response?: string; error?: string };
@@ -181,7 +181,7 @@ function showError(error: unknown) {
 }
 
 async function readSource(): Promise<SourceFile> {
-  if (isDesktop) {
+  if (actualPlatform.isDesktop) {
     const { data } = await axios.post<{ data: SourceFile }>("/api/desktop/providerFile/read", { token: desktopToken.value }, { headers: desktopHeaders, signal: controller?.signal });
     return data.data;
   }
@@ -216,7 +216,7 @@ async function selectFile() {
   errorMessage.value = "";
   controller = new AbortController();
   try {
-    if (isDesktop) {
+    if (actualPlatform.isDesktop) {
       const { data } = await axios.post<{ data: { token: string; name: string } | null }>("/api/desktop/providerFile/select", {}, { headers: desktopHeaders, signal: controller.signal });
       if (!data.data) return;
       desktopToken.value = data.data.token;

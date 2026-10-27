@@ -1,5 +1,5 @@
 <template>
-  <assetBrowser v-if="visible && expanded" v-model:folder="folder" v-model:searchQuery="searchQuery" v-model:newFolderName="newFolderName" :entries="entries" :loading="loading" :newFolderParent="newFolderParent" :folderSaving="folderSaving" :mediaKind="mediaKind" :assetUrl="assetUrl" @startFolder="startFolder" @saveFolder="saveFolder" @cancelFolder="cancelFolder" @preview="openPreview" @menu="openItemMenu" @drag="startAssetDrag" />
+  <assetBrowser v-if="visible && expanded" v-model:folder="folder" v-model:searchQuery="searchQuery" v-model:newFolderName="newFolderName" :entries="entries" :loading="loading" :newFolderParent="newFolderParent" :folderSaving="folderSaving" :mediaKind="mediaKind" :assetUrl="assetUrl" :canSelect="canSelect" :selecting="selecting" @select="emit('select', $event)" @startFolder="startFolder" @saveFolder="saveFolder" @cancelFolder="cancelFolder" @preview="openPreview" @menu="openItemMenu" @drag="startAssetDrag" />
   <el-card v-else-if="visible" class="assetLibrary" shadow="never" :bodyStyle="{ padding: '8px' }" role="region" aria-label="素材库" @dblclick.stop>
     <div class="libraryToolbar">
       <el-input v-model="searchQuery" class="searchInput" :prefixIcon="IconSearch" placeholder="搜索素材" aria-label="搜索素材" clearable @keydown.esc.stop="searchQuery = ''" />
@@ -33,7 +33,7 @@
         <el-button text :icon="IconX" aria-label="关闭音频预览" @click="previewAsset = undefined" />
       </div>
       <el-alert v-if="previewError" :title="previewError" type="error" :closable="false" showIcon />
-      <audio v-else :key="previewAsset.url" :src="previewAsset.url" :aria-label="previewAsset.name" controls preload="metadata" @error="previewError = '音频无法播放，文件可能已损坏或当前浏览器不支持其编码。'" />
+      <audio v-else :key="previewAsset.url" :src="previewAsset.url" :aria-label="previewAsset.name" controls preload="metadata" @error="previewError = translate('音频无法播放，文件可能已损坏或当前浏览器不支持其编码。')" />
     </div>
   </el-card>
 
@@ -44,14 +44,14 @@
   <el-dialog :modelValue="previewAsset?.kind === 'video'" :title="previewAsset?.name" width="min(800px, calc(100vw - 32px))" alignCenter appendToBody destroyOnClose @update:modelValue="previewAsset = undefined">
     <div v-if="previewAsset?.kind === 'video'" class="assetPreview">
       <el-alert v-if="previewError" :title="previewError" type="error" :closable="false" showIcon />
-      <video v-else :key="previewAsset.url" class="previewVideo" :src="previewAsset.url" :aria-label="previewAsset.name" controls playsinline preload="metadata" @error="previewError = '视频无法播放，文件可能已损坏或当前浏览器不支持其编码。'" />
+      <video v-else :key="previewAsset.url" class="previewVideo" :src="previewAsset.url" :aria-label="previewAsset.name" controls playsinline preload="metadata" @error="previewError = translate('视频无法播放，文件可能已损坏或当前浏览器不支持其编码。')" />
     </div>
   </el-dialog>
 
   <el-dialog v-if="expanded" :modelValue="previewAsset?.kind === 'audio'" :title="previewAsset?.name" width="min(560px, calc(100vw - 32px))" alignCenter appendToBody destroyOnClose @update:modelValue="previewAsset = undefined">
     <div v-if="previewAsset?.kind === 'audio'" class="assetPreview">
       <el-alert v-if="previewError" :title="previewError" type="error" :closable="false" showIcon />
-      <audio v-else :key="previewAsset.url" class="previewAudio" :src="previewAsset.url" :aria-label="previewAsset.name" controls preload="metadata" @error="previewError = '音频无法播放，文件可能已损坏或当前浏览器不支持其编码。'" />
+      <audio v-else :key="previewAsset.url" class="previewAudio" :src="previewAsset.url" :aria-label="previewAsset.name" controls preload="metadata" @error="previewError = translate('音频无法播放，文件可能已损坏或当前浏览器不支持其编码。')" />
     </div>
   </el-dialog>
 
@@ -95,6 +95,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import axios from "axios";
+import { translate } from "@toonflow/i18n/vue";
 import { ElMessage, ElTree, type InputInstance, type TreeNodeData } from "element-plus";
 import { IconChevronRight, IconDots, IconEye, IconFile, IconFolder, IconFolderOpen, IconFolderPlus, IconMusic, IconPhoto, IconSearch, IconVideo, IconX } from "@tabler/icons-vue";
 import type { NodeOutput } from "@toonflow/nodes-scaffold/values";
@@ -108,7 +109,8 @@ import assetBrowser from "./assetBrowser.vue";
 type AssetEntry = { name: string; path: string; type: "file" | "directory"; children?: AssetEntry[]; draft?: boolean };
 type AssetOutput = { label: string; output: NodeOutput };
 
-const props = defineProps<{ directory?: string; expanded?: boolean }>();
+const props = defineProps<{ directory?: string; expanded?: boolean; canSelect?: (entry: AssetEntry) => boolean; selecting?: boolean }>();
+const emit = defineEmits<{ select: [entry: AssetEntry] }>();
 const visible = defineModel<boolean>({ default: false });
 const saveVisible = ref(false);
 const saving = ref(false);

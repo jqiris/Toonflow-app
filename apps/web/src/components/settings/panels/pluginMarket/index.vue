@@ -548,7 +548,7 @@ watch(
       })
     );
     if (controller.signal.aborted) return;
-    installedPlugins.value = results.flat();
+    installedPlugins.value = results.flat().sort((left, right) => (right.installedAt ?? 0) - (left.installedAt ?? 0));
     loading.value = false;
   },
   { immediate: true }
@@ -698,7 +698,7 @@ async function installFile(event: Event) {
       : /\.(zip|md|tar|tar\.gz|tgz)$/i.test(file.name)
       ? "skill"
       : undefined;
-    if (!type) throw new Error("请选择文件扩展 ext-*.umd.js、Agent .agent.zip、节点 .umd.js、工具 .tool.js 或技能 .zip、.md、.tar、.tar.gz、.tgz 文件");
+    if (!type) throw new Error("不支持这个安装文件。支持的格式：文件扩展 ext-*.umd.js；Agent .agent.zip；节点 .umd.js；工具 .tool.js；技能 .zip、.md、.tar、.tar.gz、.tgz。");
     if (type === "agent" && !agentMarketEnabled) throw new Error("Agent 功能处于测试阶段，暂未开放安装");
     await installPluginFile(type, file);
     ElMessage.success(`${pluginTypes[type].label}已安装`);

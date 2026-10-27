@@ -41,6 +41,8 @@ export async function createApp({
   // conf 由下方的路由动态加载，必须先确定整个进程共用的数据目录。
   if (dataDirectory) process.env.TOONFLOW_DATA_DIR = resolve(dataDirectory);
   const { default: conf } = await import("@/utils/conf");
+  const { initializeNetwork } = await import("@/utils/network");
+  await initializeNetwork();
   setLocaleFallback(() => normalizeLocale((conf.get("settings", {}).ui as { language?: unknown } | undefined)?.language)
     ?? detectLocale([Intl.DateTimeFormat().resolvedOptions().locale]));
   if (dataDirectory && toolsRoot)

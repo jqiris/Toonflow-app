@@ -13,6 +13,7 @@ const sharedFields = {
   providerId: z.string().regex(/^[a-z][a-zA-Z0-9]{0,95}$/),
   modelId: z.string().trim().min(1).max(256),
   prompt: z.string().trim().min(1).max(100000),
+  other: z.record(z.string(), z.json()).optional(),
   outputDirectory: relativePath.optional(),
   images: z.array(imageReference).max(64).optional(),
   ratio: z.string().regex(/^[1-9]\d{0,3}:[1-9]\d{0,3}$/).optional(),
@@ -27,6 +28,10 @@ export const imageGenerationSchema = z.strictObject({
 });
 export const videoGenerationSchema = z.strictObject({
   ...sharedFields,
+  referenceOrder: z.array(z.union([
+    z.strictObject({ type: z.enum(["image", "video", "audio"]), index: z.number().int().min(0).max(63) }),
+    z.strictObject({ type: z.enum(["firstFrame", "lastFrame", "text"]) }),
+  ])).max(256).optional().describe("提示词引用标记与素材的对应关系，是否支持及具体转换方式由供应商适配器决定。referenceOrder[0] 对应 {{ref 1}}；image/video/audio 的 index:0 指对应媒体数组的第1项；firstFrame/lastFrame 指对应首尾帧；text 指 prompt 中已包含的同号参考 N 文本。"),
   videos: z.array(videoReference).max(64).optional(),
   audios: z.array(audioReference).max(64).optional(),
   firstFrame: imageReference.optional(),
@@ -43,6 +48,7 @@ export const audioGenerationSchema = z.strictObject({
   providerId: sharedFields.providerId,
   modelId: sharedFields.modelId,
   prompt: sharedFields.prompt,
+  other: sharedFields.other,
   outputDirectory: sharedFields.outputDirectory,
   images: sharedFields.images,
   audios: z.array(audioReference).max(64).optional(),

@@ -46,15 +46,14 @@
       <input ref="fileInput" class="fileInput" type="file" accept="video/*" aria-label="选择视频" :disabled="uploading || exporting" @change="uploadVideo" />
       <el-button
         v-if="!exporting && !outputs.video"
-        class="uploadButton"
+        class="nodrag nopan"
+        :icon="IconUpload"
         text
         :loading="uploading"
         title="上传视频"
         aria-label="上传视频"
         @dblclick.stop
-        @click="fileInput?.click()">
-        <icon-upload v-if="!uploading" :size="48" stroke="1.5" />
-      </el-button>
+        @click.stop="fileInput?.click()">上传</el-button>
     </div>
   </nodeSkeleton>
   <videoActions ref="actions" :file="outputFile" :src="previewUrl" :disabled="uploading || exporting" />
@@ -160,6 +159,15 @@ function showError(error: unknown, fallback: string) {
 
 <style scoped lang="scss">
 .videoContent {
+  .nodeSkeleton.resized & {
+    height: 100%;
+    min-height: 0;
+    grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+    --nodeMediaHeight: 100%;
+
+    .exportLoading { max-height: 100%; box-sizing: border-box; overflow: auto; }
+  }
+
   position: relative;
   display: grid;
   place-items: center;
@@ -178,17 +186,6 @@ function showError(error: unknown, fallback: string) {
 
   .fileInput {
     display: none;
-  }
-
-  .uploadButton {
-    width: 100%;
-    height: 144px;
-    padding: 0;
-    color: var(--el-text-color-placeholder);
-
-    &:hover {
-      color: var(--el-color-primary);
-    }
   }
 }
 </style>

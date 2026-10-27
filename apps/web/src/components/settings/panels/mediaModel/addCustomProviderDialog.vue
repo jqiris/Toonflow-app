@@ -61,7 +61,7 @@
             <div class="fileImport">
               <div class="fileSource">
                 <!-- ACT: Android 会把 .ts 识别为视频，选中后再校验扩展名和大小。 -->
-                <input ref="fileInput" type="file" :accept="isMobile ? undefined : '.ts'" hidden :disabled="saving" @change="readSourceFile" />
+                <input ref="fileInput" type="file" :accept="actualPlatform.isMobile ? undefined : '.ts'" hidden :disabled="saving" @change="readSourceFile" />
                 <el-input :modelValue="fileName" :prefixIcon="IconFileCode" placeholder="尚未选择文件" readonly aria-label="已选择的供应商文件" />
                 <el-button :icon="IconFolderOpen" @click="fileInput?.click()">选择文件</el-button>
               </div>
@@ -97,6 +97,7 @@
 </template>
 
 <script setup lang="ts">
+import { translate } from "@toonflow/i18n/vue";
 import axios from "axios";
 import { computed, defineAsyncComponent, onBeforeUnmount, ref, shallowRef, watch, type Component } from "vue";
 import formCreate, { type Api, type Options } from "../../formCreate";
@@ -114,7 +115,7 @@ import type { MediaProvider } from "./types";
 import { providerPrompt } from "./providerPrompt";
 import { modelChoices, saveSettings } from "@/stores/settings";
 import { writeClipboardText } from "@/lib/clipboard";
-import { isMobile } from "@/lib/platform";
+import { actualPlatform } from "@/lib/platform";
 
 const { mode = "custom" } = defineProps<{ mode?: "builtin" | "custom" }>();
 const visible = defineModel<boolean>({ default: false });
@@ -250,7 +251,7 @@ async function addProvider() {
     invalidateNodeModels("media");
     visible.value = false;
   } catch (error) {
-    const message = axios.isAxiosError(error) ? error.response?.data?.message || error.message : error instanceof Error ? error.message : "添加失败，请重试";
+    const message = axios.isAxiosError(error) ? error.response?.data?.message || error.message : error instanceof Error ? error.message : translate("添加失败，请重试");
     formError.value = addedProvider.value ? `供应商已添加，连接配置未保存：${message}。填写内容已保留，请重试。` : message;
   } finally {
     saving.value = false;

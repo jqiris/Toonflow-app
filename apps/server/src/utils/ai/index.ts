@@ -7,7 +7,7 @@ import { defaultThinkingLevels, thinkingLevels, type ThinkingLevel } from "@/lib
 import { z } from "zod";
 import conf from "@/utils/conf";
 import { readReference } from "@/utils/media/generation";
-import modelContextLimits from "@/utils/ai/modelContextLimits";
+import { findModelContextLimits } from "@/utils/ai/modelContextLimits";
 import { createFileTransport, getUnsupportedFileText, type FileProvider } from "@/utils/ai/files";
 import { getRequestFiles } from "@/utils/ai/requestFiles";
 import { readFile, stat } from "@toonflow/file";
@@ -72,8 +72,7 @@ export function getModelReasoning(providerId: string, model: z.infer<typeof prov
 }
 
 export function getModelLimits(providerId: string, model: z.infer<typeof providerSchema>["models"][number]) {
-  const limits = modelContextLimits.find(item => item.id === model.id)
-    ?? modelContextLimits.find(item => item.id instanceof RegExp && model.id.search(item.id) !== -1);
+  const limits = findModelContextLimits(model.id);
   if (limits) return { contextWindow: limits.contextWindow, maxTokens: limits.maxTokens };
   if (model.contextWindow != null && model.maxOutputTokens != null) {
     return { contextWindow: model.contextWindow, maxTokens: model.maxOutputTokens };
@@ -204,6 +203,8 @@ export function streamAi(
   return aiApis[provider.protocol].streamSimple(model, context, {
     apiKey: provider.apiKey,
     signal,
+    // 此入口没有 AgentSession，仅重试尚未交付响应的请求，已输出的流不能直接拼接重放。
+    maxRetries: 3,
     fetch: files.fetch,
     onPayload: async (payload) => {
       let body = payload as Record<string, unknown>;

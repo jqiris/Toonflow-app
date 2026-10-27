@@ -51,8 +51,8 @@
           v-model="refList"
           @preview="setReferencePreview"
           @remove="removeReference" />
-        <promptInput v-if="editor?.mode === 'inpaint'" v-model="data.inpaintPromptModel" v-model:text="data.inpaintPrompt" :references="referenceMentions" expandable />
-        <promptInput v-else v-model="data.promptModel" v-model:text="data.prompt" :references="referenceMentions" expandable />
+        <promptInput v-if="editor?.mode === 'inpaint'" v-model="data.inpaintPromptModel" v-model:text="data.inpaintPrompt" :references="referenceMentions" :materials="materialMentions" :selectMaterial="selectMaterialReference" :selectAsset="selectAssetReference" expandable />
+        <promptInput v-else v-model="data.promptModel" v-model:text="data.prompt" :references="referenceMentions" :materials="materialMentions" :selectMaterial="selectMaterialReference" :selectAsset="selectAssetReference" expandable />
         <div class="promptFooter">
           <el-select
             v-if="editor?.mode !== 'inpaint'"
@@ -79,6 +79,8 @@
             v-if="editor?.mode !== 'inpaint'"
             v-model:size="data.size"
             v-model:ratio="data.ratio"
+            v-model:other="data.other"
+            :model="selectedModel"
             :sizes="sizeOptions"
             :ratios="ratioOptions"
             :disabled="generating || deleting || !selectedModel" />
@@ -110,7 +112,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onScopeDispose, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onScopeDispose, ref, shallowRef, watch } from "vue";
 import { ElButton, ElCard, ElSelect, ElOption, ElOptionGroup, ElLoading, ElImageViewer } from "element-plus";
 import { IconCheck, IconPhotoAi, IconSparkles, IconArrowUp, IconPlayerStop, IconTransfer, IconLayoutGrid, IconBrush, IconPencil, IconSun, IconCameraRotate, IconPanoramaHorizontal, IconChevronDown } from "@tabler/icons-vue";
 import { nodeSkeleton, nodeTools, useNode, z, type NodeMediaModel, type NodeImageRequest, type NodeHandle } from "@toonflow/nodes-scaffold/runtime";
@@ -118,6 +120,7 @@ import { groupNodeModels } from "@toonflow/node-shared/groupNodeModels";
 import { showNodeError } from "@toonflow/node-shared/showNodeError";
 import { useNodeGeneration } from "@toonflow/node-shared/useNodeGeneration";
 import { useNodeReferences } from "@toonflow/node-shared/useNodeReferences";
+import { useModelForm } from "@toonflow/node-shared/useModelForm";
 import promptInput from "@toonflow/node-shared/promptInput";
 import referenceItem from "@toonflow/node-shared/referenceItem";
 import mediaHistory from "@toonflow/node-shared/mediaHistory";
@@ -143,7 +146,7 @@ const { id, node, nodeProps, nodeEvent, outputs, files, ai, updateNodeInternals 
   label: "图片生成",
 });
 type PromptModel = NonNullable<InstanceType<typeof promptInput>["$props"]["modelValue"]>;
-const data = computed(() => node.data as { prompt: string; promptModel: PromptModel; inpaintPrompt: string; inpaintPromptModel: PromptModel; model: string; size: string; ratio: string; inpaint?: ImageInpaint });
+const data = computed(() => node.data as { prompt: string; promptModel: PromptModel; inpaintPrompt: string; inpaintPromptModel: PromptModel; model: string; size: string; ratio: string; other: Record<string, unknown>; inpaint?: ImageInpaint });
 data.value.prompt ??= "";
 data.value.promptModel ??= [];
 data.value.inpaintPrompt ??= "";
@@ -151,8 +154,9 @@ data.value.inpaintPromptModel ??= [];
 data.value.model ??= "";
 data.value.size ??= "";
 data.value.ratio ??= "16:9";
-const { refList, referenceMentions, setReferencePreview, removeReference } = useNodeReferences();
-const models = ref<NodeMediaModel[]>([]);
+data.value.other ??= {};
+const { refList, referenceMentions, materialMentions, selectMaterialReference, selectAssetReference, setReferencePreview, removeReference } = useNodeReferences();
+const models = shallowRef<NodeMediaModel[]>([]);
 const modelsLoading = ref(false);
 const uploading = ref(false);
 const fileInput = ref<HTMLInputElement>();
@@ -178,6 +182,7 @@ const { generating } = generationState;
 let generation: Promise<void> | undefined;
 let modelsRequest: Promise<void> | undefined;
 const selectedModel = computed(() => models.value.find((item) => JSON.stringify([item.providerId, item.modelId]) === data.value.model));
+useModelForm(data, selectedModel);
 const sizeOptions = computed(() => (selectedModel.value?.imageSizes?.length ? selectedModel.value.imageSizes : ["2K"]));
 const ratioOptions = computed(() => (selectedModel.value?.imageRatios?.length ? selectedModel.value.imageRatios : ["16:9"]));
 watch(
@@ -212,6 +217,7 @@ const generationInput = computed<Omit<NodeImageRequest, "directory"> | undefined
     prompt: generationPrompt.value,
     size: data.value.size,
     ratio: data.value.ratio,
+    other: Object.keys(data.value.other).length ? { ...data.value.other } : undefined,
     outputDirectory: `assets/${id}`,
     images: references.flatMap(item => item.dataType === "IMAGE" && item.value ? [{ path: item.value.url, mimeType: item.value.mimeType }] : []),
   };
@@ -411,6 +417,7 @@ function getConfig() {
       modelId: selectedModel.value?.modelId ?? "",
       size: data.value.size,
       ratio: data.value.ratio,
+      other: { ...data.value.other },
     },
     models: models.value,
   };
@@ -486,6 +493,20 @@ nodeTools.register({
 }
 
 .imageContent {
+  .nodeSkeleton.resized & {
+    height: 100%;
+    min-height: 0;
+    grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+
+    .inpaintGuide,
+    .imageEmpty {
+      height: 100%;
+      min-height: 0;
+    }
+
+    .inpaintGuide img { height: 100%; object-fit: contain; }
+  }
+
   position: relative;
   display: grid;
   place-items: center;

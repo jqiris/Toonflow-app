@@ -146,6 +146,7 @@
 <script setup lang="ts">
 import { computed, h, onBeforeUnmount, reactive, ref, shallowRef, watch } from "vue";
 import axios from "axios";
+import { t } from "@toonflow/i18n/vue";
 import { ElCheckbox, type FormInstance, type FormRules, type Column } from "element-plus";
 import {
   IconPlus,
@@ -185,7 +186,7 @@ const resultColumns = computed<Column[]>(() => [
       h(ElCheckbox, {
         modelValue: selectedIds.value.has(rowData.id),
         disabled: addedIds.value.has(rowData.id),
-        ariaLabel: `选择 ${rowData.id}`,
+        ariaLabel: t`选择 ${rowData.id}`,
         onChange: (value: boolean | string | number) => {
           if (value) selectedIds.value.add(rowData.id);
           else selectedIds.value.delete(rowData.id);

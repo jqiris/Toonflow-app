@@ -230,6 +230,7 @@ function mediaError() {
   }
   .playerControls {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 10px;
     padding: 10px 2px 0;

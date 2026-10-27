@@ -482,6 +482,25 @@ async function processVideo() {
 
 <style scoped lang="scss">
 .analysisContent {
+  .nodeSkeleton.resized & {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+
+    .videoArea {
+      display: grid;
+      flex: 1;
+      min-height: 80px;
+      grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+      --nodeMediaHeight: 100%;
+
+      .uploadButton { height: 100%; }
+    }
+
+    > :not(.videoArea) { flex-shrink: 0; }
+  }
+
   .videoArea {
     min-height: 144px;
     border-radius: var(--el-border-radius-base);

@@ -15,6 +15,11 @@ import { isWithin, lockWorkspaceFiles, writeWorkspaceFile } from "@/utils/worksp
 const maxBytes = 20 * 1024 * 1024;
 const require = createRequire(import.meta.url);
 
+export function recordInstalledAt(type: PluginInstallType, name: string) {
+  // ACT: 记录最近一次成功安装（含更新）；卸载后重装会覆盖旧时间，配置和内容编辑不修改此记录。
+  conf.set("pluginInstalledAt", { ...conf.get("pluginInstalledAt", {}), [`${type}:${name}`]: Date.now() });
+}
+
 function invalid(message: string, status = 400): never {
   throw Object.assign(new Error(message), { status });
 }
@@ -130,8 +135,9 @@ export async function installNode(fileName: string, source: string, force = fals
   try {
     const current = await lstat(path).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; });
     if (current && !current.isFile()) invalid("现有节点必须是普通文件", 403);
-    if (current && !force) requireNewerVersion(current.size <= maxBytes ? nodeVersion(await readFile(path, "utf8")) : undefined, nodeVersion(source), `节点“${name}”`);
+    if (current && !force) requireNewerVersion(current.size <= maxBytes ? nodeVersion(await readFile(path, "utf8")) : undefined, nodeVersion(source), t`节点“${name}”`);
     await writeWorkspaceFile(path, source, !current);
+    recordInstalledAt("node", name);
   } finally { release(); }
   return { name };
 }
@@ -158,10 +164,11 @@ export async function installExt(fileName: string, source: string, force = false
       let version: string | undefined;
       try { if (current.size <= maxBytes) version = parseExt(await readFile(path, "utf8"), name).version; }
       catch { /* 损坏的已安装版本只能由明确的强制安装覆盖。 */ }
-      requireNewerVersion(version, metadata.version, `文件扩展“${name}”`);
+      requireNewerVersion(version, metadata.version, t`文件扩展“${name}”`);
     }
     await writeWorkspaceFile(path, source, !current);
     await unlink(resolve(extDirectory, `${name}.removed`)).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; });
+    recordInstalledAt("ext", name);
   } finally { release(); }
   return { name };
 }
@@ -188,11 +195,12 @@ export async function installTool(fileName: string, source: string, force = fals
         const previous = await readFile(path, "utf8");
         try { version = parseTool(previous, name).metadata.version; } catch { /* 损坏元数据没有可比较的版本。 */ }
       }
-      requireNewerVersion(version, metadata.version, `工具“${name}”`);
+      requireNewerVersion(version, metadata.version, t`工具“${name}”`);
     }
     await writeWorkspaceFile(path, source, !current);
     // ACT: Bun 按文件路径缓存模块，URL query 不会使已加载的工具失效。
     delete require.cache[path];
+    recordInstalledAt("tool", name);
   } finally { release(); }
   return { name };
 }
@@ -201,7 +209,7 @@ export function skillPath(value: string, directory = false) {
   let path = value.replace(/^(\.\/)+/, "");
   if (directory) path = path.replace(/\/$/, "");
   if (!path && directory) return "";
-  if (!path || path.length > 1024 || path.split("/").some(part => !isSafeSegment(part))) invalid("技能包包含不安全的文件路径");
+  if (!path || path.length > 1024 || path.split("/").some(part => !isSafeSegment(part))) invalid("压缩包包含不安全的文件路径");
   return path;
 }
 
@@ -210,15 +218,15 @@ function skillEntryPaths(maxEntries = 2000) {
   const paths = new Map<string, { path: string; directory: boolean }>();
   return (original: string, directory: boolean) => {
     const path = skillPath(original, directory);
-    if (entries.has(path.toLowerCase())) invalid("技能包包含重名文件或目录");
+    if (entries.has(path.toLowerCase())) invalid("压缩包包含重名文件或目录");
     entries.add(path.toLowerCase());
-    if (entries.size > maxEntries) invalid(`技能包最多包含 ${maxEntries} 个文件和目录`);
+    if (entries.size > maxEntries) invalid(t`压缩包最多包含 ${maxEntries} 个文件和目录`);
     const parts = path ? path.split("/") : [];
     for (let index = 1; index <= parts.length; index++) {
       const nested = parts.slice(0, index).join("/");
       const isDirectory = index < parts.length || directory;
       const existing = paths.get(nested.toLowerCase());
-      if (existing && (existing.path !== nested || existing.directory !== isDirectory)) invalid("技能包包含冲突的文件或目录路径");
+      if (existing && (existing.path !== nested || existing.directory !== isDirectory)) invalid("压缩包包含冲突的文件或目录路径");
       paths.set(nested.toLowerCase(), { path: nested, directory: isDirectory });
     }
     return path;
@@ -233,19 +241,19 @@ export function skillZip(bytes: Uint8Array, options: { maxBytes?: number; maxEnt
   for (; end >= Math.max(0, data.length - 65557); end--) {
     if (data.readUInt32LE(end) === 0x06054b50 && end + 22 + data.readUInt16LE(end + 20) === data.length) break;
   }
-  if (end < Math.max(0, data.length - 65557)) invalid("ZIP 技能包结尾无效");
+  if (end < Math.max(0, data.length - 65557)) invalid("ZIP 压缩包结尾无效");
   const count = data.readUInt16LE(end + 10);
   const start = data.readUInt32LE(end + 16);
   if (data.readUInt16LE(end + 4) || data.readUInt16LE(end + 6) || data.readUInt16LE(end + 8) !== count
-    || count === 0xffff || start + data.readUInt32LE(end + 12) !== end) invalid("请使用未分卷的普通 ZIP 技能包，不支持 ZIP64");
-  if (count > entryLimit) invalid(`技能包最多包含 ${entryLimit} 个文件和目录`);
+    || count === 0xffff || start + data.readUInt32LE(end + 12) !== end) invalid("请使用未分卷的普通 ZIP 压缩包，不支持 ZIP64");
+  if (count > entryLimit) invalid(t`压缩包最多包含 ${entryLimit} 个文件和目录`);
   const entryPath = skillEntryPaths(entryLimit);
   const entries: { path: string; directory: boolean; size: number; checksum: number; method: number; start: number; end: number; header: number; mode: number }[] = [];
   let total = 0;
   let offset = start;
   // ACT: 仅支持普通存储/Deflate ZIP；先验证目录和声明大小，再限量解压，不将压缩包直接释放到磁盘。
   for (let index = 0; index < count; index++) {
-    if (offset + 46 > end || data.readUInt32LE(offset) !== 0x02014b50) invalid("ZIP 技能包目录无效");
+    if (offset + 46 > end || data.readUInt32LE(offset) !== 0x02014b50) invalid("ZIP 压缩包目录无效");
     const flags = data.readUInt16LE(offset + 8);
     const method = data.readUInt16LE(offset + 10);
     const checksum = data.readUInt32LE(offset + 16);
@@ -255,39 +263,39 @@ export function skillZip(bytes: Uint8Array, options: { maxBytes?: number; maxEnt
     const extraLength = data.readUInt16LE(offset + 30);
     const next = offset + 46 + nameLength + extraLength + data.readUInt16LE(offset + 32);
     const header = data.readUInt32LE(offset + 42);
-    if (next > end || header + 30 > start || data.readUInt16LE(offset + 34)) invalid("ZIP 技能包文件头无效");
-    if (flags & ~0x080e || ![0, 8].includes(method)) invalid("ZIP 技能包不能加密，仅支持存储或 Deflate 压缩");
+    if (next > end || header + 30 > start || data.readUInt16LE(offset + 34)) invalid("ZIP 压缩包文件头无效");
+    if (flags & ~0x080e || ![0, 8].includes(method)) invalid("ZIP 压缩包不能加密，仅支持存储或 Deflate 压缩");
     const original = decodeText(data.subarray(offset + 46, offset + 46 + nameLength));
     const attributes = data.readUInt32LE(offset + 38);
     const kind = (attributes >>> 16) & 0xf000;
     const directory = original.endsWith("/") || Boolean(attributes & 0x10) || kind === 0x4000;
-    if (![0, 0x4000, 0x8000].includes(kind)) invalid("ZIP 技能包不能包含链接、设备或其他特殊文件");
+    if (![0, 0x4000, 0x8000].includes(kind)) invalid("ZIP 压缩包不能包含链接、设备或其他特殊文件");
     const path = entryPath(original, directory);
     total += size;
-    if (size === 0xffffffff || compressed === 0xffffffff || total > byteLimit) invalid(`技能包解压后不能超过 ${byteLimit / 1024 / 1024} MB`, 413);
-    if (directory && size !== 0 || method === 0 && compressed !== size) invalid("ZIP 技能包文件大小无效");
+    if (size === 0xffffffff || compressed === 0xffffffff || total > byteLimit) invalid(t`压缩包解压后不能超过 ${byteLimit / 1024 / 1024} MB`, 413);
+    if (directory && size !== 0 || method === 0 && compressed !== size) invalid("ZIP 压缩包文件大小无效");
     if (data.readUInt32LE(header) !== 0x04034b50 || data.readUInt16LE(header + 6) !== flags
-      || data.readUInt16LE(header + 8) !== method || data.readUInt16LE(header + 26) !== nameLength) invalid("ZIP 技能包条目不一致");
+      || data.readUInt16LE(header + 8) !== method || data.readUInt16LE(header + 26) !== nameLength) invalid("ZIP 压缩包条目不一致");
     const content = header + 30 + nameLength + data.readUInt16LE(header + 28);
-    if (content + compressed > start || !data.subarray(header + 30, header + 30 + nameLength).equals(data.subarray(offset + 46, offset + 46 + nameLength))) invalid("ZIP 技能包条目不一致");
+    if (content + compressed > start || !data.subarray(header + 30, header + 30 + nameLength).equals(data.subarray(offset + 46, offset + 46 + nameLength))) invalid("ZIP 压缩包条目不一致");
     if (!(flags & 8) && (data.readUInt32LE(header + 14) !== checksum || data.readUInt32LE(header + 18) !== compressed
-      || data.readUInt32LE(header + 22) !== size)) invalid("ZIP 技能包条目大小或校验值不一致");
+      || data.readUInt32LE(header + 22) !== size)) invalid("ZIP 压缩包条目大小或校验值不一致");
     entries.push({ path, directory, size, checksum, method, start: content, end: content + compressed, header, mode: (attributes >>> 16) & 0o777 });
     offset = next;
   }
-  if (offset !== end) invalid("ZIP 技能包目录长度不一致");
+  if (offset !== end) invalid("ZIP 压缩包目录长度不一致");
   entries.sort((first, second) => first.header - second.header);
   const result = new Map<string, Uint8Array>();
   let previousEnd = 0;
   for (const entry of entries) {
-    if (entry.header < previousEnd) invalid("ZIP 技能包包含重叠条目");
+    if (entry.header < previousEnd) invalid("ZIP 压缩包包含重叠条目");
     previousEnd = entry.end;
     let content: Uint8Array;
     try {
       const compressed = data.subarray(entry.start, entry.end);
       content = entry.method === 0 ? compressed : inflateRawSync(compressed, { maxOutputLength: Math.max(1, entry.size) });
-    } catch { return invalid("ZIP 技能包损坏或实际解压大小超过声明值"); }
-    if (content.byteLength !== entry.size || crc32(content) !== entry.checksum) invalid("ZIP 技能包文件大小或校验值错误");
+    } catch { return invalid("ZIP 压缩包损坏或实际解压大小超过声明值"); }
+    if (content.byteLength !== entry.size || crc32(content) !== entry.checksum) invalid("ZIP 压缩包文件大小或校验值错误");
     if (!entry.directory && !entry.path.startsWith("__MACOSX/") && entry.path.split("/").at(-1) !== ".DS_Store") {
       result.set(entry.path, content);
       options.fileModes?.set(entry.path, entry.mode);
@@ -391,7 +399,7 @@ export async function installSkill(fileName: string, bytes: Uint8Array, force = 
           const previous = await readFile(join(target, "SKILL.md"), "utf8");
           try { version = (parseFrontmatter(previous).frontmatter.metadata as Record<string, unknown> | undefined)?.version; } catch { /* 损坏元数据没有可比较的版本。 */ }
         }
-        requireNewerVersion(version, (frontmatter.metadata as Record<string, unknown> | undefined)?.version, `技能“${name}”`);
+        requireNewerVersion(version, (frontmatter.metadata as Record<string, unknown> | undefined)?.version, t`技能“${name}”`);
       }
     }
     temporary = await mkdtemp(join(root, ".skillInstall"));
@@ -412,11 +420,12 @@ export async function installSkill(fileName: string, bytes: Uint8Array, force = 
         try { await rename(backup, target); }
         catch (restoreError) {
           preserveBackup = true;
-          throw new AggregateError([error, restoreError], `技能更新失败，旧版保留在 ${backup}，请恢复后重试`);
+          throw new AggregateError([error, restoreError], t`技能更新失败，旧版保留在 ${backup}，请恢复后重试`);
         }
       }
       throw error;
     }
+    recordInstalledAt("skill", name);
     return { name };
   } finally {
     try {

@@ -92,7 +92,7 @@
 </p>
 <p align="center">
   <img src="https://ziadoua.github.io/m3-Markdown-Badges/badges/TypeScript/typescript2.svg" alt="TypeScript" height="28" />&nbsp;
-  <img src="https://img.shields.io/badge/Bun-1.3.14-14151A?style=for-the-badge&logo=bun&logoColor=white" alt="Bun 1.3.14" />&nbsp;
+  <img src="https://img.shields.io/badge/Bun-1.4.3-14151A?style=for-the-badge&logo=bun&logoColor=white" alt="Bun 1.4.3" />&nbsp;
   <img src="https://img.shields.io/badge/Vue-3-42B883?style=for-the-badge&logo=vuedotjs&logoColor=white" alt="Vue 3" />&nbsp;
   <img src="https://img.shields.io/badge/Desktop-Electrobun-8257E5?style=for-the-badge" alt="Electrobun" />
 </p>
@@ -322,7 +322,7 @@ For more instructions, see the [User Guide](https://qcn7xdsqgc4z.feishu.cn/docx/
 
 ### 4.2 Docker Installation
 
-Install Git, [Docker Engine](https://docs.docker.com/engine/install/), and Docker Compose first. On Windows and macOS, you can use Docker Desktop in Linux container mode. The repository includes a [Dockerfile](../../Dockerfile), [Compose configuration](../../compose.yaml), and [build exclusions](../../.dockerignore). The image is built with Bun 1.3.14 and includes FFmpeg.
+Install Git, [Docker Engine](https://docs.docker.com/engine/install/), and Docker Compose first. On Windows and macOS, you can use Docker Desktop in Linux container mode. The repository includes a [Dockerfile](../../Dockerfile), [Compose configuration](../../compose.yaml), and [build exclusions](../../.dockerignore). The image is built with Bun 1.4.3 and includes FFmpeg.
 
 <details>
 <summary><strong>Expand Docker installation steps</strong></summary>
@@ -366,7 +366,7 @@ docker compose start
 
 ### 4.3 Server Installation
 
-Use this option to run Web and Server directly on a Linux server. The example below uses Ubuntu / Debian and the project's specified version, [Bun 1.3.14](https://bun.sh/docs/installation).
+Use this option to run Web and Server directly on a Linux server. The example below uses Ubuntu / Debian and the project's specified version, [Bun 1.4.3](https://bun.sh/docs/installation).
 
 <details>
 <summary><strong>Expand server installation steps</strong></summary>
@@ -376,7 +376,7 @@ Install the runtime environment:
 ```sh
 sudo apt-get update
 sudo apt-get install -y git curl unzip ffmpeg
-curl -fsSL https://bun.com/install | bash -s "bun-v1.3.14"
+curl -fsSL https://bun.com/install | bash -s "bun-v1.4.3"
 export PATH="$HOME/.bun/bin:$PATH"
 bun --version
 ```

@@ -33,15 +33,14 @@
       <input ref="fileInput" class="fileInput" type="file" accept="audio/*" aria-label="选择音频" :disabled="uploading || transcribing || actions?.processing" @change="uploadAudio" />
       <el-button
         v-if="!outputs.audio"
-        class="uploadButton"
+        class="uploadButton nodrag nopan"
+        :icon="IconUpload"
         text
         :loading="uploading"
         title="上传音频"
         aria-label="上传音频"
         @dblclick.stop
-        @click="fileInput?.click()">
-        <icon-upload v-if="!uploading" :size="48" stroke="1.5" />
-      </el-button>
+        @click.stop="fileInput?.click()">上传</el-button>
     </div>
     <template v-if="actions?.mode === 'speed'" #bottom><div ref="speedTarget" /></template>
   </nodeSkeleton>
@@ -147,6 +146,13 @@ function showError(error: unknown, fallback: string) {
   min-height: 144px;
   display: flex;
   align-items: center;
+  justify-content: center;
+
+  .nodeSkeleton.resized & {
+    height: 100%;
+    min-height: 0;
+    align-items: flex-start;
+  }
 
   .audioPreview {
     display: block;
@@ -159,14 +165,7 @@ function showError(error: unknown, fallback: string) {
   }
 
   .uploadButton {
-    width: 100%;
-    height: 144px;
-    padding: 0;
-    color: var(--el-text-color-placeholder);
-
-    &:hover {
-      color: var(--el-color-primary);
-    }
+    align-self: center;
   }
 }
 </style>

@@ -25,7 +25,7 @@
       <div v-if="actions?.mode === 'speed'" ref="speedTarget" />
       <el-card v-else class="promptCard" shadow="never" :bodyStyle="{ padding: '14px 16px 12px' }">
         <referenceItem v-if="refList.length" v-model="refList" @preview="setReferencePreview" @remove="removeReference" />
-        <promptInput v-model="data.promptModel" v-model:text="data.prompt" :references="referenceMentions" placeholder="描述您想要的音频效果或输入待朗读文本" expandable />
+        <promptInput v-model="data.promptModel" v-model:text="data.prompt" :references="referenceMentions" :materials="materialMentions" :selectMaterial="selectMaterialReference" :selectAsset="selectAssetReference" placeholder="描述您想要的音频效果或输入待朗读文本" expandable />
         <div class="promptFooter">
           <el-select
             v-model="data.model"
@@ -43,7 +43,7 @@
               <el-option v-for="item in provider.models" :key="item.modelId" :label="item.label" :value="JSON.stringify([item.providerId, item.modelId])" />
             </el-option-group>
           </el-select>
-          <generationSettings v-model:language="data.language" v-model:sampleRate="data.sampleRate" v-model:format="data.format" :disabled="busy || !selectedModel" />
+          <generationSettings v-model:language="data.language" v-model:sampleRate="data.sampleRate" v-model:format="data.format" v-model:other="data.other" :model="selectedModel" :disabled="busy || !selectedModel" />
           <div class="generationActions">
             <mediaPrice v-if="generationInput" :input="{ ...generationInput, mediaType: 'audio' }" :supported="selectedModel?.supportsPrice === true" />
             <el-button
@@ -62,7 +62,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onScopeDispose, ref, watch } from "vue";
+import { computed, onMounted, onScopeDispose, ref, shallowRef, watch } from "vue";
 import { ElButton, ElCard, ElLoading, ElOption, ElOptionGroup, ElSelect } from "element-plus";
 import { IconArrowUp, IconGauge, IconMusicBolt, IconPlayerStop, IconScissors, IconTransfer, IconTextRecognition } from "@tabler/icons-vue";
 import { getTargetValues, isTypeCompatible, nodeSkeleton, nodeTools, useNode, z, type NodeAudioRequest, type NodeHandle, type NodeInputValue, type NodeMediaModel } from "@toonflow/nodes-scaffold/runtime";
@@ -71,6 +71,7 @@ import { showNodeError } from "@toonflow/node-shared/showNodeError";
 import { useNodeGeneration } from "@toonflow/node-shared/useNodeGeneration";
 import { useAudioTranscription } from "@toonflow/node-shared/useAudioTranscription";
 import { useNodeReferences } from "@toonflow/node-shared/useNodeReferences";
+import { useModelForm } from "@toonflow/node-shared/useModelForm";
 import audioPlayer from "@toonflow/node-audio/audioPlayer";
 import audioActions from "@toonflow/node-audio/audioActions";
 import promptInput from "@toonflow/node-shared/promptInput";
@@ -90,15 +91,16 @@ defineOptions({
 const vLoading = ElLoading.directive;
 const { id, node, nodeProps, nodeEvent, outputs, files, ai, updateNodeInternals } = useNode({ label: "音频生成" });
 type PromptModel = NonNullable<InstanceType<typeof promptInput>["$props"]["modelValue"]>;
-const data = computed(() => node.data as { prompt: string; promptModel: PromptModel; model: string; language: string; sampleRate: number; format: string });
+const data = computed(() => node.data as { prompt: string; promptModel: PromptModel; model: string; language: string; sampleRate: number; format: string; other: Record<string, unknown> });
 data.value.prompt ??= "";
 data.value.promptModel ??= [];
 data.value.model ??= "";
 data.value.language ??= "zh-CN";
 data.value.sampleRate ??= 24000;
 data.value.format ??= "wav";
-const { refList, referenceMentions, setReferencePreview, removeReference } = useNodeReferences();
-const models = ref<NodeMediaModel[]>([]);
+data.value.other ??= {};
+const { refList, referenceMentions, materialMentions, selectMaterialReference, selectAssetReference, setReferencePreview, removeReference } = useNodeReferences();
+const models = shallowRef<NodeMediaModel[]>([]);
 const modelsLoading = ref(false);
 const uploading = ref(false);
 const deleting = ref(false);
@@ -118,6 +120,7 @@ const { generating } = generationState;
 const busy = computed(() => generating.value || uploading.value || deleting.value || transcribing.value || !!actions.value?.processing);
 watch(busy, value => { if (!value && modelsRefreshPending) void refreshProviderModels(); });
 const selectedModel = computed(() => models.value.find(item => JSON.stringify([item.providerId, item.modelId]) === data.value.model));
+useModelForm(data, selectedModel);
 const modelGroups = computed(() => groupNodeModels(models.value));
 const generationPrompt = computed(() => [data.value.prompt.trim(), ...refList.value.flatMap((item, index) =>
   item.dataType === "STRING" && item.value?.trim() ? [`参考 ${index + 1}：\n${item.value.trim()}`] : [])].filter(Boolean).join("\n\n"));
@@ -131,6 +134,7 @@ const generationInput = computed<Omit<NodeAudioRequest, "directory"> | undefined
     language: data.value.language,
     sampleRate: data.value.sampleRate,
     format: data.value.format,
+    other: Object.keys(data.value.other).length ? { ...data.value.other } : undefined,
     outputDirectory: `assets/${id}`,
     images: refList.value.flatMap(item => item.dataType === "IMAGE" && item.value ? [{ path: item.value.url, mimeType: item.value.mimeType }] : []),
     audios: refList.value.flatMap(item => item.dataType === "AUDIO" && item.value ? [{ path: item.value.url, mimeType: item.value.mimeType }] : []),
@@ -262,7 +266,7 @@ nodeEvent.on("delete", async () => {
 
 function getConfig() {
   return {
-    config: { providerId: selectedModel.value?.providerId ?? "", modelId: selectedModel.value?.modelId ?? "", language: data.value.language, sampleRate: data.value.sampleRate, format: data.value.format },
+    config: { providerId: selectedModel.value?.providerId ?? "", modelId: selectedModel.value?.modelId ?? "", language: data.value.language, sampleRate: data.value.sampleRate, format: data.value.format, other: { ...data.value.other } },
     models: models.value,
     languages: languageOptions,
     sampleRates: sampleRateOptions,
@@ -338,6 +342,14 @@ nodeTools.register({
   min-height: 144px;
   display: flex;
   align-items: center;
+
+  .nodeSkeleton.resized & {
+    height: 100%;
+    min-height: 0;
+    align-items: flex-start;
+
+    .audioEmpty { height: 100%; min-height: 0; }
+  }
 
   .audioPreview { display: block; width: 100%; border-radius: var(--el-border-radius-base); }
   .audioEmpty { display: grid; place-items: center; width: 100%; min-height: 144px; color: var(--el-text-color-placeholder); }

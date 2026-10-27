@@ -29,6 +29,15 @@ function inferredMediaType(file: File) {
   return fileMimeTypes[extension] ?? "";
 }
 
+export function getCanvasFileType(file: Pick<File, "name" | "type">) {
+  const fileType = file.type.split(";")[0]!.trim().toLowerCase();
+  const extension = file.name.split(".").pop()!.toLowerCase();
+  const mimeType = !fileType || fileType === "application/octet-stream" ? fileMimeTypes[extension] ?? fileType : fileType;
+  const kind = mimeType.startsWith("image/") ? "image" : mimeType.startsWith("audio/") ? "audio" : mimeType.startsWith("video/") ? "video"
+    : mimeType.startsWith("text/") || /^application\/(json|xml|javascript|x-ndjson)$/.test(mimeType) ? "text" : undefined;
+  return { mimeType, kind, type: kind ? `remote-${kind}Node` : undefined };
+}
+
 function clipboardMediaName(type: string, index: number) {
   const extension = mediaExtensions[type] ?? (type.split("/")[1]?.replace(/[^a-z0-9]/gi, "") || "bin");
   return "pasted-media-" + Date.now() + "-" + (index + 1) + "." + extension;
@@ -92,18 +101,14 @@ export async function dropCanvasFiles(event: DragEvent, context: CanvasFileConte
 export async function importCanvasFiles(droppedFiles: File[], position: { x: number; y: number }, context: CanvasFileContext) {
   const { signal, flow, availableNodes } = context;
   const files = useWorkspaceFiles(context.directory);
+  const importedIds: string[] = [];
   for (const [index, file] of droppedFiles.entries()) {
     if (signal.aborted) break;
     const id = crypto.randomUUID();
     let copiedPath: string | undefined;
     try {
-      const fileType = file.type.split(";")[0]!.trim().toLowerCase();
-      const extension = file.name.split(".").pop()!.toLowerCase();
-      const mimeType = !fileType || fileType === "application/octet-stream" ? fileMimeTypes[extension] ?? fileType : fileType;
-      const kind = mimeType.startsWith("image/") ? "image" : mimeType.startsWith("audio/") ? "audio" : mimeType.startsWith("video/") ? "video"
-        : mimeType.startsWith("text/") || /^application\/(json|xml|javascript|x-ndjson)$/.test(mimeType) ? "text" : undefined;
-      if (!kind) throw new Error(`${file.name}：该文件类型暂不支持导入画布`);
-      const type = `remote-${kind}Node`;
+      const { mimeType, kind, type } = getCanvasFileType(file);
+      if (!kind || !type) throw new Error(`${file.name}：该文件类型暂不支持导入画布`);
       if (!availableNodes.some(node => node.type === type)) throw new Error(`${file.name}：请先安装并启用对应的基础节点`);
       let output: NodeOutput | undefined;
       let textSnapshot: string | undefined;
@@ -116,11 +121,13 @@ export async function importCanvasFiles(droppedFiles: File[], position: { x: num
       signal.throwIfAborted();
       flow.addNodes({ id, type, position: { x: position.x + index * 32, y: position.y + index * 32 },
         data: kind === "text" ? { label: file.name, textSnapshot } : { label: file.name, outputs: { [kind]: output } } });
+      importedIds.push(id);
     } catch (error) {
       if (copiedPath) await files.remove(copiedPath).catch(showError);
       if (!signal.aborted) showError(error);
     }
   }
+  return importedIds;
 }
 
 function showError(error: unknown) {

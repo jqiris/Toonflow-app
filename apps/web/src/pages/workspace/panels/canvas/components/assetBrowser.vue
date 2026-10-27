@@ -57,8 +57,8 @@
 
       <el-scrollbar v-loading="loading" class="assetScroll" aria-label="素材列表">
         <div v-if="displayEntries.length" class="assetGrid">
-          <article v-for="entry in displayEntries" :key="entry.path" class="assetCard" :draggable="entry.type === 'file'" @dragstart="emit('drag', $event, entry)" @contextmenu.prevent.stop="emit('menu', $event, entry)">
-            <component :is="entry.type === 'directory' || mediaKind(entry) ? 'button' : 'div'" class="assetOpen" :type="entry.type === 'directory' || mediaKind(entry) ? 'button' : undefined" :disabled="entry.type === 'directory' && navigationLocked" :aria-label="entry.type === 'directory' ? '打开文件夹 ' + entry.name : mediaKind(entry) ? '预览素材 ' + entry.name : undefined" @click="openEntry(entry)">
+          <article v-for="entry in displayEntries" :key="entry.path" class="assetCard" :draggable="!canSelect && entry.type === 'file'" @dragstart="emit('drag', $event, entry)" @contextmenu.prevent.stop="emit('menu', $event, entry)">
+            <component :is="canSelect || entry.type === 'directory' || mediaKind(entry) ? 'button' : 'div'" class="assetOpen" :type="canSelect || entry.type === 'directory' || mediaKind(entry) ? 'button' : undefined" :disabled="entry.type === 'directory' ? navigationLocked : canSelect && (selecting || !canSelect(entry))" :aria-label="entry.type === 'directory' ? '打开文件夹 ' + entry.name : canSelect ? '引用素材 ' + entry.name : mediaKind(entry) ? '预览素材 ' + entry.name : undefined" @click="openEntry(entry)">
               <span class="assetVisual" :class="entry.type === 'directory' ? 'folderVisual' : mediaKind(entry) + 'Visual'">
                 <el-image v-if="mediaKind(entry) === 'image'" class="assetImage" :src="assetUrl(entry.path)" fit="cover" loading="lazy" draggable="false">
                   <template #error><span class="imageError"><icon-photo :size="38" aria-hidden="true" /></span></template>
@@ -89,6 +89,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
+import { t, translate } from "@toonflow/i18n/vue";
 import type { InputInstance } from "element-plus";
 import { IconChevronRight, IconDots, IconFile, IconFolder, IconFolderOpen, IconFolderPlus, IconLayoutGrid, IconMusic, IconPhoto, IconPlayerPlay, IconSearch, IconVideo } from "@tabler/icons-vue";
 import { mentionAssetType } from "@toonflow/server/agent/mentionSources";
@@ -105,6 +106,8 @@ const props = defineProps<{
   folderSaving?: boolean;
   mediaKind: (entry: AssetEntry) => MediaKind | undefined;
   assetUrl: (path: string) => string;
+  canSelect?: (entry: AssetEntry) => boolean;
+  selecting?: boolean;
 }>();
 const folder = defineModel<string>("folder", { default: "." });
 const searchQuery = defineModel<string>("searchQuery", { default: "" });
@@ -116,6 +119,7 @@ const emit = defineEmits<{
   preview: [entry: AssetEntry];
   menu: [event: MouseEvent, entry: AssetEntry];
   drag: [event: DragEvent, entry: AssetEntry];
+  select: [entry: AssetEntry];
 }>();
 
 const folderInput = ref<InputInstance>();
@@ -146,11 +150,11 @@ const directoryTree = computed(() => {
 });
 const breadcrumb = computed(() => folder.value === "." ? [] : folder.value.split("/").map((name, index, parts) => ({ name, path: parts.slice(0, index + 1).join("/") })));
 const filters = computed(() => [
-  { value: "all" as const, label: "全部", count: scopeFiles.value.length },
-  { value: "image" as const, label: "图片", count: scopeFiles.value.filter(entry => props.mediaKind(entry) === "image").length },
-  { value: "video" as const, label: "视频", count: scopeFiles.value.filter(entry => props.mediaKind(entry) === "video").length },
-  { value: "audio" as const, label: "音频", count: scopeFiles.value.filter(entry => props.mediaKind(entry) === "audio").length },
-  { value: "other" as const, label: "其他", count: scopeFiles.value.filter(entry => !props.mediaKind(entry)).length },
+  { value: "all" as const, label: translate("全部"), count: scopeFiles.value.length },
+  { value: "image" as const, label: translate("图片"), count: scopeFiles.value.filter(entry => props.mediaKind(entry) === "image").length },
+  { value: "video" as const, label: translate("视频"), count: scopeFiles.value.filter(entry => props.mediaKind(entry) === "video").length },
+  { value: "audio" as const, label: translate("音频"), count: scopeFiles.value.filter(entry => props.mediaKind(entry) === "audio").length },
+  { value: "other" as const, label: translate("其他"), count: scopeFiles.value.filter(entry => !props.mediaKind(entry)).length },
 ]);
 const displayEntries = computed(() => {
   const query = searchQuery.value.trim().toLocaleLowerCase();
@@ -173,13 +177,16 @@ function navigateTo(path: string) {
 
 function openEntry(entry: AssetEntry) {
   if (entry.type === "directory") navigateTo(entry.path);
+  else if (props.canSelect) {
+    if (!props.selecting && props.canSelect(entry)) emit("select", entry);
+  }
   else if (props.mediaKind(entry)) emit("preview", entry);
 }
 
 function typeLabel(entry: AssetEntry) {
-  if (entry.type === "directory") return "文件夹";
+  if (entry.type === "directory") return translate("文件夹");
   const kind = props.mediaKind(entry);
-  return kind === "image" ? "图片" : kind === "video" ? "视频" : kind === "audio" ? "音频" : entry.name.split(".").length > 1 ? entry.name.split(".").at(-1)?.toLocaleUpperCase() + " 文件" : "文件";
+  return kind === "image" ? translate("图片") : kind === "video" ? translate("视频") : kind === "audio" ? translate("音频") : entry.name.split(".").length > 1 ? t`${entry.name.split(".").at(-1)?.toLocaleUpperCase()} 文件` : translate("文件");
 }
 
 watch(() => props.newFolderParent, async parent => {
@@ -448,6 +455,7 @@ watch(allEntries, () => {
             cursor: default;
 
             &[type="button"] { cursor: pointer; }
+            &:disabled { cursor: not-allowed; opacity: 0.4; }
 
             .assetVisual {
               position: relative;

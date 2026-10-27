@@ -407,7 +407,7 @@ async function process() {
   } finally {
     if (!committed && workspace) {
       const results = await Promise.allSettled(createdDirectories.map(path => workspace!.remove(path, true)));
-      if (results.some(result => result.status === "rejected" && result.reason?.response?.data?.data?.code !== "ENOENT")) ElMessage.error("部分临时媒体文件清理失败");
+      if (results.some(result => result.status === "rejected" && result.reason?.response?.data?.data?.code !== "ENOENT")) ElMessage.error("部分临时媒体文件清理失败，未能全部删除。");
     }
     if (current.signal.aborted) visible.value = false;
     processing.value = cancelling.value = false;

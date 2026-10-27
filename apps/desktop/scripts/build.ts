@@ -2,6 +2,7 @@ import { $ } from "bun";
 import { cpSync, existsSync, mkdirSync, realpathSync, rmSync } from "@toonflow/file";
 import { dirname, resolve } from "node:path";
 import copyDocumentPackages from "../../server/scripts/copyDocumentPackages";
+import copySandboxPackages from "../../server/scripts/copySandboxPackages";
 import prepareMacDmg from "./macDmg";
 
 const projectDir = resolve(import.meta.dir, "../../..");
@@ -28,6 +29,21 @@ if (isMac) {
     }
   }
 }
+const ffmpegBuild = await Bun.build({
+  entrypoints: [resolve(projectDir, "packages/ffmpeg/src/ffmpegWorker.ts")],
+  outdir: resolve(projectDir, "build/desktop/ffmpeg"),
+  target: "bun",
+  minify: true,
+});
+if (!ffmpegBuild.success) throw new AggregateError(ffmpegBuild.logs, "FFmpeg 执行线程构建失败。");
+const sandboxBuild = await Bun.build({
+  entrypoints: [resolve(projectDir, "packages/tools/sandbox/src/sandboxProcess.ts")],
+  outdir: resolve(projectDir, "build/desktop/sandbox"),
+  target: "bun",
+  minify: true,
+  external: ["just-bash"],
+});
+if (!sandboxBuild.success) throw new AggregateError(sandboxBuild.logs, "沙盒执行进程构建失败。");
 if (!isMac) {
   const startupBuild = await Bun.build({
     entrypoints: [resolve(projectDir, "packages/startup/src/windowsSplashWorker.ts")],
@@ -61,6 +77,7 @@ const photonOutput = resolve(projectDir, "build/desktop/photon");
 rmSync(photonOutput, { recursive: true, force: true });
 cpSync(photonDirectory, photonOutput, { recursive: true });
 await copyDocumentPackages(resolve(projectDir, "build/desktop/node_modules"));
+await copySandboxPackages(resolve(projectDir, "build/desktop/node_modules"));
 if (isIntelMac) {
   // ACT: 共用插件和 Web 构建；Intel Mac 仅将 SDK 适配交给独立的 1.18.1。
   await $`${process.execPath} ${resolve(projectDir, "compat/macIntel/build.ts")} ${mode === "package" ? "build" : mode}`.cwd(projectDir);
@@ -68,7 +85,10 @@ if (isIntelMac) {
 }
 const cli = resolve(projectDir, "apps/desktop/node_modules/electrobun/bin/electrobun.cjs");
 if (isMac && mode !== "dev") await prepareMacDmg();
-await $`${process.execPath} ${cli} ${mode === "dev" ? "dev" : "build"} ${mode === "dev" ? [] : ["--env=stable"]}`.cwd(projectDir);
+// ACT: SDK 调用 Windows PowerShell 压缩产物，避免继承 PowerShell 7 的同名模块。
+const buildEnv = { ...process.env };
+if (!isMac && mode !== "dev") buildEnv.PSModulePath = resolve(process.env.WINDIR!, "System32/WindowsPowerShell/v1.0/Modules");
+await $`${process.execPath} ${cli} ${mode === "dev" ? "dev" : "build"} ${mode === "dev" ? [] : ["--env=stable"]}`.cwd(projectDir).env(buildEnv);
 if (mode === "package" && !isMac) {
-  await $`${process.execPath} ${resolve(import.meta.dir, "packageWindows.ts")}`.cwd(projectDir);
+  await $`${process.execPath} ${resolve(import.meta.dir, "packageWindows.ts")}`.cwd(projectDir).env(buildEnv);
 }

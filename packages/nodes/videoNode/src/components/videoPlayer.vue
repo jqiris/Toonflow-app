@@ -46,6 +46,7 @@
           </el-dropdown-menu>
         </template>
       </el-dropdown>
+      <el-button class="playerButton fullscreenButton" text circle :icon="IconMaximize" :disabled="!ready" aria-label="全屏视频" title="全屏" @click="enterFullscreen" />
     </div>
   </div>
 </template>
@@ -54,7 +55,7 @@
 import { inject, onBeforeUnmount, ref, watch } from "vue";
 import { useNode, useVueFlow } from "@vue-flow/core";
 import { ElButton, ElDropdown, ElDropdownMenu, ElDropdownItem, ElMessage, ElPopover, ElSlider } from "element-plus";
-import { IconPlayerPlay, IconPlayerPause, IconVolume, IconVolumeOff, IconPhotoScan, IconPlayerSkipBack, IconPlayerSkipForward } from "@tabler/icons-vue";
+import { IconPlayerPlay, IconPlayerPause, IconVolume, IconVolumeOff, IconPhotoScan, IconPlayerSkipBack, IconPlayerSkipForward, IconMaximize } from "@tabler/icons-vue";
 import { useNodeFiles } from "@toonflow/nodes-scaffold/workspaceFiles";
 
 const { src, label = "节点视频", readOnly = false } = defineProps<{ src: string; label?: string; readOnly?: boolean }>();
@@ -269,7 +270,9 @@ async function captureFrame(command: "current" | "first" | "last") {
 .videoPlayer {
   position: relative;
   width: 100%;
-  min-width: 180px;
+  height: var(--nodeMediaHeight, auto);
+  min-width: 0;
+  min-height: 0;
   container-type: inline-size;
   border-radius: var(--el-border-radius-base);
   background: var(--el-fill-color-darker);
@@ -279,7 +282,8 @@ async function captureFrame(command: "current" | "first" | "last") {
   .videoPreview {
     display: block;
     width: 100%;
-    max-height: 240px;
+    height: var(--nodeMediaHeight, auto);
+    max-height: var(--nodeMediaHeight, 240px);
     object-fit: contain;
     border-radius: var(--el-border-radius-base);
     pointer-events: none;
@@ -299,8 +303,8 @@ async function captureFrame(command: "current" | "first" | "last") {
     left: 0;
     right: 0;
     display: grid;
-    grid-template-columns: 28px auto minmax(0, 1fr) 28px 28px;
-    grid-template-areas: "progress progress progress progress progress" "play current duration volume capture";
+    grid-template-columns: 28px auto minmax(0, 1fr) 28px 28px 28px;
+    grid-template-areas: "progress progress progress progress progress progress" "play current duration volume capture fullscreen";
     align-items: center;
     gap: 2px 3px;
     padding: 8px 8px 4px;
@@ -326,6 +330,7 @@ async function captureFrame(command: "current" | "first" | "last") {
       .volumeButton { color: var(--el-text-color-regular); }
     }
     .captureMenu { grid-area: capture; }
+    .fullscreenButton { grid-area: fullscreen; }
     .currentTime, .durationLabel {
       white-space: nowrap;
       font-size: 10px;
@@ -358,9 +363,15 @@ async function captureFrame(command: "current" | "first" | "last") {
       }
     }
 
+    @container (max-width: 230px) {
+      grid-template-columns: 28px minmax(0, 1fr) 28px 28px 28px;
+      grid-template-areas: "progress progress progress progress progress" "current current duration duration duration" "play . volume capture fullscreen";
+      .currentTime { text-align: left; }
+      .durationLabel { text-align: right; }
+    }
     @container (min-width: 320px) {
-      grid-template-columns: 28px auto minmax(32px, 1fr) auto 28px 28px;
-      grid-template-areas: "play current progress duration volume capture";
+      grid-template-columns: 28px auto minmax(32px, 1fr) auto 28px 28px 28px;
+      grid-template-areas: "play current progress duration volume capture fullscreen";
       gap: 6px;
       padding: 8px 8px 4px;
       .currentTime, .durationLabel { font-size: 11px; }

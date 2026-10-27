@@ -1,6 +1,6 @@
 <template>
-  <div class="imageEditor" :class="{ editing: mode }">
-    <img ref="sourceImage" :src="src" :alt="alt" draggable="false" @load="emit('load', $event)" @error="emit('error', $event)" />
+  <div class="imageEditor" :class="{ editing: mode }" :style="{ '--imageRatio': imageRatio }">
+    <img ref="sourceImage" :src="src" :alt="alt" draggable="false" @load="imageLoaded" @error="emit('error', $event)" />
     <canvas
       v-if="mode"
       ref="paintCanvas"
@@ -71,6 +71,7 @@ const createVariation = useImageVariationNode();
 const getCanvas = inject<(() => { id: string } | undefined) | undefined>("canvas", undefined);
 const batchHistory = inject<(action: () => Promise<void>) => Promise<void>>("batchCanvasHistory", action => action());
 const sourceImage = ref<HTMLImageElement>();
+const imageRatio = ref(1);
 const paintCanvas = ref<HTMLCanvasElement>();
 const mode = ref<"inpaint" | "mark">();
 const busy = ref(false);
@@ -101,6 +102,12 @@ let strokes: Stroke[] = [];
 let draftStroke: Stroke | undefined;
 let pointerId: number | undefined;
 let operation: AbortController | undefined;
+
+function imageLoaded(event: Event) {
+  const image = event.target as HTMLImageElement;
+  if (image.naturalWidth && image.naturalHeight) imageRatio.value = image.naturalWidth / image.naturalHeight;
+  emit("load", event);
+}
 
 function cancel() {
   operation?.abort();
@@ -408,6 +415,19 @@ defineExpose({ mode, busy, start, cancel, createInpaint });
   width: 100%;
   display: grid;
   place-items: center;
+
+  .nodeSkeleton.resized & {
+    height: 100%;
+    container-type: size;
+
+    img,
+    .paintCanvas {
+      width: min(100cqw, calc(100cqh * var(--imageRatio)));
+      height: min(100cqh, calc(100cqw / var(--imageRatio)));
+      max-width: none;
+      max-height: none;
+    }
+  }
 
   img { display: block; width: 100%; max-height: 240px; object-fit: contain; border-radius: var(--el-border-radius-base); }
   .paintCanvas { position: absolute; max-width: 100%; max-height: 100%; height: 100%; touch-action: none; cursor: crosshair; }

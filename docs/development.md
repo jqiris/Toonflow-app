@@ -56,7 +56,7 @@ Windows 安装器负责注册协议；macOS 需要将应用放入 `/Applications
 
 | 层级 | 技术 |
 | --- | --- |
-| 运行时与包管理 | Bun 1.3.14、Bun Workspaces |
+| 运行时与包管理 | Bun 1.4.3、Bun Workspaces |
 | 前端 | Vue 3、Vite、TypeScript、Pinia、Element Plus、Vue Flow |
 | 服务端 | Bun、Express 5、Zod |
 | Agent | Pi Agent SDK、工具插件、Markdown 技能与记忆 |

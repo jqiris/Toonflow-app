@@ -49,14 +49,14 @@ export async function runProviderSource(
   const fetchRequest = Object.assign(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const request = input instanceof Request ? new Request(input, init) : new Request(String(input), init);
     const id = ++requestId;
-    if (id > 200) return fetch(request);
+    if (id > 200) return fetch(input, init);
     const start = performance.now();
     const log = { id, method: request.method, url: redact(request.url), request: [redact(Object.fromEntries(request.headers)), bodyText(init?.body)].filter(Boolean).join("\n") };
     // ACT: 日志最多展示 200 次请求和 16 KB 响应正文，避免轮询和媒体数据撑满调试界面。
     const report = (data: Record<string, unknown>) => { send({ type: "log", log: { ...log, ...data } }); };
     report({ state: "running" });
     try {
-      const response = await fetch(request);
+      const response = await fetch(input, init);
       let body = "";
       if (/json|text\/plain/i.test(response.headers.get("content-type") ?? "") && response.body) {
         const reader = response.clone().body!.getReader();
