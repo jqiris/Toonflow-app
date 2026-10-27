@@ -338,6 +338,26 @@ export default {
     }
 
     const seconds = clampSeconds(request.duration);
+    // ACT: quality / secondPass 默认沿用原固定值（quality 曾写死 "light"），宿主显式传入才覆盖。
+    // 引擎口径（agent guide）：light = 8 首轮步 + 3 refine 步二次采样，medium 同构但首轮更大更细节，
+    // high/max = 20 步单次采样——two_pass 只在 8 首轮步时生效，选 high/max 时二次采样开关不改变引擎行为。
+    const quality = request.quality ?? "light";
+    const secondPass = request.secondPass ?? true;
+    if (!["light", "medium", "high", "max"].includes(quality)) {
+      throw new Error(`生成质量仅支持 light/medium/high/max（轻量/标准/精细/极致），当前「${quality}」`);
+    }
+    // ACT: 续接（continue_from）或 ≥30s 自动分块都要求二次采样文本生成，否则引擎整任务拒绝；
+    // 提前拦下给出可执行的处置建议，与上面参考图上限拦截同风格。
+    if ((seconds >= 30 || continuing) && !secondPass && quality !== "light" && quality !== "medium") {
+      throw new Error("续接镜头或 30 秒以上的分块必须开启二次采样（引擎限制）；请开启二次采样，或把质量改为轻量/标准");
+    }
+    // ACT: preview 是引擎的快速预览模式（固定 8 步二次采样，无视 quality/secondPass 档位），
+    // 用于先看效果，成片需另发 refine_from 任务——所以本节点开启 preview 时产出就是预览片。
+    // 引擎 guide：多块或续接必须二次采样「且 no preview」，故预览只对单个 <30s 分块开放。
+    const preview = request.preview ?? false;
+    if (preview && (continuing || seconds >= 30)) {
+      throw new Error("预览模式只支持单个 30 秒以内的分块（引擎限制）；续接镜头或 30 秒以上长镜请关闭预览后重试");
+    }
     // ACT: first_frame_reference 只在 ≥30s 自动分块时减少跨块漂移；单段视频不受影响，
     // 运镜大/需要变化的场景规范建议关闭——保守取「≥30s 才开」，不引入开关面。
     // 续接任务由引擎自己维护上下文，不需要这个降级锚点。
@@ -347,7 +367,9 @@ export default {
       ref: makeRef('vid', request),
       prompt: request.prompt,
       seconds,
-      quality: "light",
+      quality,
+      two_pass: preview ? true : secondPass,
+      preview,
       ...(request.ratio ? { aspect: request.ratio } : {}),
       ...(request.resolution ? { megapixels: megapixels(request.resolution) } : {}),
       ...(seconds >= 30 && !continuing ? { first_frame_reference: true } : {}),

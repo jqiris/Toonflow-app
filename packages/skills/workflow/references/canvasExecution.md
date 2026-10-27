@@ -75,7 +75,7 @@
 ## 生成前准备
 
 1. 调用当前节点的 `node:getConfig`，核实可用模型、模式、参考类型与数量、画幅、图片尺寸或视频时长/分辨率、原生声音及音频输入能力。图片和视频的规格分开判断，不沿用不相关的默认值。
-2. 先接好实际素材，再读取当前匹配模式。通过 `node:setConfig` 设置配置：图片字段按 schema 使用 `providerId/modelId/size/ratio`；视频使用 `providerId/modelId/duration/resolution/ratio/mode/generateAudio`。只传所需且支持的字段，`providerId` 与 `modelId` 成对提供，mode 使用实际返回值。
+2. 先接好实际素材，再读取当前匹配模式。通过 `node:setConfig` 设置配置：图片字段按 schema 使用 `providerId/modelId/size/ratio`；视频使用 `providerId/modelId/duration/resolution/ratio/mode/generateAudio/quality/secondPass/preview`（`quality` 为 light/medium/high/max，默认 light；`secondPass` 为二次采样，默认 true；续接或 30 秒以上长镜必须 `secondPass: true` 且 `quality` 用 light/medium；`preview` 为快速预览，默认 false，只支持单个 30 秒以内分块，开启后产出即预览片）。只传所需且支持的字段，`providerId` 与 `modelId` 成对提供，mode 使用实际返回值。
 3. 写入完整提示词，再读配置与画布，核对实际 prompt、引用、规格和调用前 output。缺必要参考就停该生成并继续文稿；不能静默将图生图或多参改成无参考模式。
 4. 固定本次方案：对象、数量、完整提示词、参数、参考文件与用途/顺序、执行次数；展示并沿用或取得具体消耗算力授权。算力无法查询时明确未知，不把对话 Token 当媒体消耗。
 5. **临执行复核。** 用户回复后再次读取当前画布与配置，比对授权方案，包含节点、提示词、模式、声音、引用与数量。若发生变化，沿用仍匹配的对象；受影响对象重新展示差异并核对授权。不要以“已确认”执行界面后来被修改的配置。

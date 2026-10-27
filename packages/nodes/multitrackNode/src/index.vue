@@ -358,6 +358,9 @@ const clipPatchSchema = z.strictObject({
   ratio: z.string().optional(),
   resolution: z.string().optional(),
   generateAudio: z.boolean().optional(),
+  quality: z.enum(["light", "medium", "high", "max"]).optional(),
+  secondPass: z.boolean().optional(),
+  preview: z.boolean().optional(),
   // ACT: prompt 六字段全部可省——与 mergePatch 的字段级浅合并（mtrackEdit.ts:35-36）对齐，
   // agent 补写单段时只带一段即可，其余由原 clip 保留，不必「读-改-写」整组；
   // 显式传空串视为「清空这一段」（区别于省略键=不改），与 UI「留空则该段不下发」同口径。
@@ -584,7 +587,7 @@ async function readActualOrder(call: CanvasCall, nodeId: string, signal?: AbortS
 
 nodeTools.register({
   name: "editProject",
-  description: "批量编辑工程（编辑器等价能力，内核 mtrackEdit.applyClipOperations）：operations 1–100 条，六种 op——add{clipId?,after?,patch?} / patch{clipId,patch} / duplicate{clipId} / move{clipId,to|after} / remove{clipId} / setGlobal{ratio?,style?,systemPrompt?,model?}。整批原子：任一 op 校验失败整批拒收，问题在 issues 返回、不抛错。真源字段可写，但生成前仍必须跑 planOperator validate 且 error 清零，本工具不代跑完整契约校验。save=true（默认）成功后立即落盘，不等防抖。patch.status 只接受 pending/generating/generated/failed；accepted 由用户在界面验收产生，agent 不能代写",
+  description: "批量编辑工程（编辑器等价能力，内核 mtrackEdit.applyClipOperations）：operations 1–100 条，六种 op——add{clipId?,after?,patch?} / patch{clipId,patch} / duplicate{clipId} / move{clipId,to|after} / remove{clipId} / setGlobal{ratio?,style?,systemPrompt?,model?}。整批原子：任一 op 校验失败整批拒收，问题在 issues 返回、不抛错。真源字段可写，但生成前仍必须跑 planOperator validate 且 error 清零，本工具不代跑完整契约校验。save=true（默认）成功后立即落盘，不等防抖。patch.status 只接受 pending/generating/generated/failed；accepted 由用户在界面验收产生，agent 不能代写。patch 也可写本镜的 quality（light/medium/high/max，缺省 light）、secondPass（二次采样，缺省 true）与 preview（先出预览，缺省 false）：承接上一镜（continuity=context）的镜头只能用 light/medium 且必须 secondPass=true、不能开 preview，preview 只支持单个 30 秒以内镜头；越界由 validateClip 整批拒收，issues 会带原因",
   parameters: z.strictObject({
     operations: z.array(editOpSchema).min(1).max(100),
     save: z.boolean().default(true),
@@ -635,7 +638,7 @@ nodeTools.register({
 
 nodeTools.register({
   name: "dispatchGenerate",
-  description: "把选段交给编辑器经画布 nodeTools 逐镜生成（UI「生成选中段」等价物，不经过对话模型）：clipIds（1–200 个分镜号）或 from+to 二选一（from 必填，to 缺省到最后一个分镜）；includeFinished=false 默认只派 pending/failed 的镜头。立即返回 { batchId, skipped } 不等待生成。与逐镜 SOP 二选一：本会话正在按 SOP 逐镜生成时绝不要再调它，否则同一批镜头双重执行、双份算力。进度看 node:getStatus.batchClipIds / planOperator mtrackRead，停手用 node:cancelBatch",
+  description: "把选段交给编辑器经画布 nodeTools 逐镜生成（UI「生成选中段」等价物，不经过对话模型）：clipIds（1–200 个分镜号）或 from+to 二选一（from 必填，to 缺省到最后一个分镜）；includeFinished=false 默认只派 pending/failed 的镜头；逐镜按镜头当前设置下发，含 quality/secondPass/preview——要改先用 node:editProject 设好再派。立即返回 { batchId, skipped } 不等待生成。与逐镜 SOP 二选一：本会话正在按 SOP 逐镜生成时绝不要再调它，否则同一批镜头双重执行、双份算力。进度看 node:getStatus.batchClipIds / planOperator mtrackRead，停手用 node:cancelBatch",
   parameters: z.strictObject({
     clipIds: z.array(clipIdSchema).min(1).max(200).optional(),
     from: clipIdSchema.optional(),

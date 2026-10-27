@@ -35,9 +35,21 @@
           </span>
         </el-button>
       </div>
+      <div class="sectionLabel">质量</div>
+      <el-select v-model="quality" :disabled="disabled" :teleported="false" aria-label="视频生成质量">
+        <el-option v-for="item in qualityOptions" :key="item.value" :value="item.value" :label="item.label" />
+      </el-select>
       <div v-if="model?.audio === 'optional'" class="audioOption">
         <span class="sectionLabel">生成音频</span>
         <el-switch v-model="generateAudio" :disabled="disabled" aria-label="生成音频" />
+      </div>
+      <div class="audioOption">
+        <span class="sectionLabel">二次采样</span>
+        <el-switch v-model="secondPass" :disabled="disabled" aria-label="二次采样" />
+      </div>
+      <div class="audioOption">
+        <span class="sectionLabel">先出预览</span>
+        <el-switch v-model="preview" :disabled="disabled || previewDisabled" aria-label="先出预览" />
       </div>
     </div>
   </el-popover>
@@ -49,13 +61,23 @@ import { ElButton, ElPopover, ElSelect, ElOption, ElSwitch } from "element-plus"
 import { IconChevronDown, IconChevronUp } from "@tabler/icons-vue";
 import type { NodeMediaModel } from "@toonflow/nodes-scaffold/runtime";
 
-const props = defineProps<{ model?: NodeMediaModel; disabled?: boolean; ratios: string[] }>();
+const props = defineProps<{ model?: NodeMediaModel; disabled?: boolean; ratios: string[]; previewDisabled?: boolean }>();
 const settingsVisible = ref(false);
 const duration = defineModel<number | undefined>("duration", { required: true });
 const resolution = defineModel<string>("resolution", { required: true });
 const ratio = defineModel<string>("ratio", { required: true });
 const mode = defineModel<string>("mode", { required: true });
 const generateAudio = defineModel<boolean>("generateAudio", { required: true });
+type VideoQuality = "light" | "medium" | "high" | "max";
+const quality = defineModel<VideoQuality>("quality", { required: true });
+const secondPass = defineModel<boolean>("secondPass", { required: true });
+const preview = defineModel<boolean>("preview", { required: true });
+const qualityOptions: { value: VideoQuality; label: string }[] = [
+  { value: "light", label: "轻量" },
+  { value: "medium", label: "标准" },
+  { value: "high", label: "精细" },
+  { value: "max", label: "极致" },
+];
 const modeLabels: Record<string, string> = {
   text: "文生视频", singleImage: "单图参考", startEndRequired: "首尾帧必填", endFrameOptional: "尾帧可选", startFrameOptional: "首帧可选",
 };

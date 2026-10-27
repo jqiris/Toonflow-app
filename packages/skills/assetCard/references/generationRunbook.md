@@ -138,7 +138,7 @@
 2. **上一镜必须有可用的供应商任务号**（`attempts` 里 `status: "succeeded"` 且带 `jobId` 的那条）。没有就报错，**绝不静默降级成独立起镜**——那会让「承接」变成假承接。
 3. **参考素材照常生效，但合计最多 3 个**（图片/视频/音频同口径，`mediaDispatch.ts:209` 按 `references` 总数判，不只数图片）：`continue_from` 与 `first`/`last` 互斥，`references` 是续接时官方唯一允许的媒体。所以「续接 + 多参考图」要并存，续接只能走 `continue_from`，不能塞首帧图。
 4. **续接段时长至少 10 秒**：引擎原文 `Each continued part must be at least 10 seconds`，可用时长 10 s / 11 s 起；独立镜头 2 秒即可，续接镜不行。
-5. **续接任务必须是 two-pass**：`quality: light` 或 `medium`（供应商已固定 `light`），`preview=false`。
+5. **续接任务必须是 two-pass**：`quality: light` 或 `medium`（供应商默认 `light`；`quality` 与 `secondPass` 已是可透传的请求参数，默认即 light + 开启二次采样），`preview` 必须为 `false`——预览只支持单个 30 秒以内分块，续接任务开启预览会被供应商拒绝。
 
 > 旧工程里的 `continue` 自动归一为 `context`，`start`/`cut` 归一为 `shot`；`story.mtrack` 不必手工改字段。
 
@@ -586,7 +586,7 @@ success data: { text: string, requiresReview: true }   // :107
 
 | 字段 | 怎么来 |
 |---|---|
-| `signature` | 键排序 JSON 规范化串（`stableJson`，**不用哈希、零依赖**）。内容 = 项目级 `global{ratio, style, systemPrompt, model}` + 本镜 `{clipId, title, seconds, ratio, resolution, generateAudio, prompt, continuity, mode, systemPromptOverride}` + `referenceIds` + （`continuity === "context"` 时上一镜的 `signature` 作续接链，否则空串） |
+| `signature` | 键排序 JSON 规范化串（`stableJson`，**不用哈希、零依赖**）。内容 = 项目级 `global{ratio, style, systemPrompt, model}` + 本镜 `{clipId, title, seconds, ratio, resolution, generateAudio, prompt, continuity, mode, systemPromptOverride}` + `referenceIds` + （`continuity === "context"` 时上一镜的 `signature` 作续接链，否则空串）。**`quality` / `secondPass` / `preview` 故意不进签名**——旧工程已生成镜的 attempts 签名是旧格式（不含这三键），纳入会让它们在升级后全部误判成 `stale`（待更新），而默认值（light + 二采开 + 无预览）与旧行为完全一致，属假阳性；`stale` 只驱动「待更新」徽标、不驱动派工，少报比误报代价低 |
 | `recordSignature` / `recordIndex` | 取自该镜 `attempts` 里**最后一条 `succeeded`** 记录落盘时的 `ClipAttempt.signature` / `ClipAttempt.index`（`writeClipRun` 在成功分支写入，见 §15.9·1）；无记录时 `recordSignature` 为空串、`recordIndex` 为 `null` |
 | `recordParentJobId` | 同一条记录的 `ClipAttempt.parentJobId`（该镜生成时上一镜的 `continuationJobId`；独立镜为空串） |
 | `stale` | 恒从 `false` 起算，**只有 `clip.assetPath && attempt?.signature` 同时成立时才可能为 `true`**，且三条件任一命中：`recordSignature != signature`（参数变了）／`recordIndex != 当前时间线位置`（镜头挪过序）／（`continuity === "context"` 且 `recordParentJobId != 上一镜当前 continuationJobId`，即续接来源变了） |

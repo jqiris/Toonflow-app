@@ -120,6 +120,12 @@ export interface MediaGenerationRequest {
   resolution?: string;
   duration?: number;
   generateAudio?: boolean;
+  /** 生成质量档位（如 FreeVideo 的 light/medium/high/max）；供应商按模型能力校验，未传时走供应商默认。 */
+  quality?: string;
+  /** 是否开启二次采样（引擎的二次细化采样）；未传时走供应商默认。 */
+  secondPass?: boolean;
+  /** 是否开启快速预览模式（引擎只跑预览片，成片需另发 refine 任务）；未传时走供应商默认。 */
+  preview?: boolean;
   voice?: string;
   speed?: number;
   volume?: number;

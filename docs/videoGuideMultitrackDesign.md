@@ -98,7 +98,7 @@
 | 4. `GET /queue` | **不接** | 排队位次提示无 Toonflow UI 承接面；引擎 busy 错误的 `retry_after_seconds` 已随 `errorMessage` 透传给用户。 |
 | 5. ref 幂等复用 | **行为不改，仅修正误导注释** | 见 C2。内容哈希不可行（spec 含每次不同的上传文件名）；只哈希 prompt+秒数会把「同参数再抽一次」误合并回旧任务，比偶发重复提交更糟。 |
 | 6. `POST /media/inspect`、`/media/frame` | **不接** | 首/尾帧与参考图全部由宿主提供、供应商只转传，抽帧服务的是引擎自己的 VLM/审片流，超出供应商边界。 |
-| 附 1. quality 四档只用 `light` | **不接（保持）** | `VideoRequest` 无 quality 字段，UI 无控制通路可映射；light 与实跑口径一致。升级路径：将来宿主透传 quality 时，在 `generateVideo` spec 组装处加一档映射即可，无需现在铺面。 |
+| 附 1. quality 四档只用 `light` | **已接（透传）** | 请求链（`MediaGenerationRequest` → `videoGenerationSchema` → `VideoRequest` → `generateVideo` spec）新增 `quality`（light/medium/high/max）与 `secondPass` 两个可选参数，spec 组装处映射为 `quality` / `two_pass`；默认 `quality="light"`、`secondPass=true`，与原写死口径一致。升级路径已落地。 |
 | 附 2. ≥30s 自动分段且带 4 参考图会被引擎 422 | **不预拦，仅记录** | 引擎报错清晰（"at most 3 pictures when … multiple blocks"）、经 `errorMessage` 用户可感知；自拦需要 seconds×参考数联合推断，收益低于复杂度。 |
 
 ### C1 实现书：interrupted 自动 resume（唯一改动行为项）
@@ -127,7 +127,7 @@
 
 ### C3 禁止项与验证
 
-- 禁止：新增 quality 参数面、/plan 调用、SSE、/queue、inspect/frame、任何占位代码；禁止动 `metaso.ts` 等其他供应商；禁止新增测试/自检文件。
+- 禁止：新增 quality 参数面、/plan 调用、SSE、/queue、inspect/frame、任何占位代码；禁止动 `metaso.ts` 等其他供应商；禁止新增测试/自检文件。（本条「新增 quality 参数面」是本次改版的范围约束；后续用户已明确要求放开 quality 与二次采样，见附 1 更新——本条的 /plan、SSE、/queue、inspect/frame、动其他供应商、占位代码等约束仍然有效。）
 - 验证：优先 `bun run typecheck`（根 package.json 已按 `--filter '@toonflow/*'` 逐包执行，providers 无自带脚本时以根过滤结果如实汇报）；HTTP 行为变化在引擎在跑时实测一条 `light` 短任务走通提交→轮询→下载回归（interrupted 路径需引擎重启才能自然复现，无法复现时如实说明为代码级走查，r1 已实测 resume 端点可用）。逐条报告：裁决项→实现/未实现→证据。
 
 ---

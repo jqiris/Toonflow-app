@@ -12,7 +12,7 @@
  */
 
 import { resolveReferenceSources, type CanvasCall } from "./directDispatch";
-import { resolveClipMode, type AssetIndexCard, type MtrackClip } from "./mtrackProject";
+import { resolveClipMode, videoQualityValues, type AssetIndexCard, type MtrackClip } from "./mtrackProject";
 
 /** 一镜的组装结果：可以直接作为 /api/ai/media/generate 的请求体。 */
 export type ClipGenerationRequest = {
@@ -35,6 +35,12 @@ export type ClipGenerationRequest = {
   resolution: string;
   duration: number;
   generateAudio: boolean;
+  /** 质量档位（light/medium/high/max）；省略走供应商默认 light。 */
+  quality?: string;
+  /** 二次采样（two_pass）；省略走供应商默认开启。 */
+  secondPass?: boolean;
+  /** 先出预览（preview）；省略走供应商默认关闭。 */
+  preview?: boolean;
   mode: unknown;
   outputDirectory: string;
   /** 参考位次 → 素材来源，仅用于回执与排错。 */
@@ -267,6 +273,31 @@ export async function composeClipRequest(options: {
       ...(audioList.length ? [`audioReference:${audioList.length}`] : []),
     ]
     : [];
+  /*
+   * ACT: 质量/二次采样/先出预览是引擎真实支持的请求参数（light=8 首轮 + 3 refine 两遍、medium 同两遍，
+   * high/max=20 步单遍；preview 固定 8 步两遍、成片需另发 refine_from），默认值与 freevideo provider 侧一致，
+   * 不传即走供应商默认。三条引擎硬约束在这里提前拦下（与提示词/续接同口径，不让用户等批跑到一半才失败）：
+   *   1. 质量只认四档；
+   *   2. 续接镜必须 preview=false、secondPass=true、质量只能 light/medium（续接任务是 two-pass）；
+   *   3. 预览只支持单个 30 秒以内的独立镜头。
+   */
+  if (!videoQualityValues.includes(clip.quality)) {
+    throw new Error(`${clip.clipId} 的质量档位 ${clip.quality} 无效：可选轻量/标准/精细/极致（light/medium/high/max）`);
+  }
+  if (continueFrom) {
+    if (clip.preview) {
+      throw new Error(`${clip.clipId} 承接 ${previousClip?.clipId ?? "上一镜"} 时不能开预览（引擎限制：预览只支持单个 30 秒以内的独立镜头），请关闭先出预览`);
+    }
+    if (!clip.secondPass) {
+      throw new Error(`${clip.clipId} 承接 ${previousClip?.clipId ?? "上一镜"} 时必须开启二次采样（引擎限制：续接任务必须是 two-pass），请开启二次采样`);
+    }
+    if (clip.quality !== "light" && clip.quality !== "medium") {
+      throw new Error(`${clip.clipId} 承接 ${previousClip?.clipId ?? "上一镜"} 时只能用轻量/标准质量（引擎限制：续接任务必须是 two-pass），请改为轻量或标准`);
+    }
+  }
+  if (clip.preview && clip.seconds >= 30) {
+    throw new Error(`${clip.clipId} 时长 ${clip.seconds} 秒，超出预览上限 30 秒（引擎限制：预览只支持单个 30 秒以内的分块），请关闭先出预览`);
+  }
   return {
     clipId: clip.clipId,
     providerId: videoModel.providerId,
@@ -282,6 +313,9 @@ export async function composeClipRequest(options: {
     resolution: clip.resolution,
     duration: clip.seconds,
     generateAudio: clip.generateAudio,
+    quality: clip.quality,
+    secondPass: clip.secondPass,
+    preview: clip.preview,
     /*
      * 生成模式按 LSC 的 task_mode 判定（`ref` / `image` / `text`），不再只看参考数量：
      *  - `image`：单图首帧，仅一张图；时长按 startFrameOptional 走；

@@ -31,6 +31,7 @@ description: 把分镜稿与资产稿接成多轨工程、逐镜生成并合成�
 6. **`status=accepted` 只能由人在多轨界面点验收。** Agent 的写入路径只收 `pending/generating/generated/failed`，不要试图标 accepted 去凑合成条件。
 7. **本技能不做采样、LoRA、种子、CFG 这类参数。** 要换的只有模型、画幅、分辨率、时长、音频开关这些工程字段。
 8. **`generateAudio` 目前只做透传，freevideo 供应商不消费它。** 传 `true`/`false` 不会改变成片有没有声音；要人声、环境声、配乐，写进提示词的 `overallSoundscape` / `nonDiegeticMusic`，别指望这个开关。换到 apiMart / tfRouter / compshare 时它们**会**消费这个开关（下发为 `generate_audio`），所以别把它当无用字段随便填。
+9. **`quality` / `secondPass` / `preview` 是多轨编辑器逐镜可设的真实请求参数**（在逐镜面板设，与画幅/分辨率/生成声音同一行）：`quality` 四档（轻量/标准/精细/极致，缺省轻量）、`secondPass` 二次采样（缺省开启）、`preview` 先出预览（缺省关闭）。**承接上一镜（`continuity: context`）只能用轻量/标准质量且必须开二次采样、不能开预览**；`preview` 只支持单个 30 秒以内、不承接上一镜的镜头，且开启后产出即预览片、**不会自动精修成成片**（成片需另发 `refine_from`）。这三项会经 `composeClipRequest` → `submitClipTask` 下发到服务端生成通道；写稿阶段不用填，界面默认值就是引擎默认。**agent 要控制这几项**：先用 `node:editProject` 的 `patch` 写本镜 `quality` / `secondPass` / `preview`（越界由 `validateClip` 整批拒收、`issues` 带原因），再 `node:dispatchGenerate`；`planOperator mtrackRead` 与 `node:readClips` 都能读回这三项，回写前先读别覆盖用户设置。
 
 ## 2 工具面（只有这些，别找别的）
 
@@ -261,6 +262,8 @@ description: 把分镜稿与资产稿接成多轨工程、逐镜生成并合成�
 - `context` 拿不到上一镜可用的 `jobId` 时**直接报错，不静默降级成独立镜头**：要么先生成上一镜，要么显式改成 `shot`。
 
 派工前必查：`node:readReferenceMap`（缺 `missingCardIds` 就是真断点，派工会报「参考图未就绪」）。断点先补：资产节点没产出就回阶段门 3 出图，没连线就补 `connectNodes`。
+
+**质量与二次采样**：`quality`（`light`/`medium`/`high`/`max`，默认 `light`）与 `secondPass`（默认开启）已作为请求参数透传，走镜头节点路径时经 `node:setConfig` 设置；**续接镜（`context`）或 30 秒以上的长镜必须 `secondPass: true` 且 `quality` 用 `light`/`medium`**，否则供应商会拒绝（引擎限制，同 `generationRunbook.md` §五 5）。`high`/`max` 是单次 20 步采样，`secondPass` 开关不改变它们的步数。**预览**：`preview`（默认关闭）只支持单个 30 秒以内分块，开启后产出即预览片（引擎固定 8 步二次采样，无视质量档位），成片需另发 `refine_from` 任务；**续接镜或 30 秒以上长镜必须关闭预览**，否则供应商会拒绝。
 
 派工时 `referenceIds` 的位次就是官方 `<Picture N>` / `<Video N>` / `<Audio N>` 的编号基数：正文一律写官方尖括号标记（每类独立从 1 起），旧「双花括号 ref 占位符」会被 `composeClipRequest` 判 error。
 

@@ -22,6 +22,9 @@
       <label class="field fieldNarrow"><span class="fieldLabel">画幅</span><el-select :modelValue="clip.ratio" size="small" @change="emit('patch', { ratio: String($event) })"><el-option v-for="ratio in ratioOptions" :key="ratio" :label="ratio" :value="ratio" /></el-select></label>
       <label class="field fieldNarrow"><span class="fieldLabel">分辨率</span><el-select :modelValue="clip.resolution" size="small" @change="emit('patch', { resolution: String($event) })"><el-option v-for="resolution in resolutionOptions" :key="resolution" :label="resolution" :value="resolution" /></el-select></label>
       <label class="field fieldInline"><span class="fieldLabel">生成声音</span><el-switch :modelValue="clip.generateAudio" @change="emit('patch', { generateAudio: Boolean($event) })" /></label>
+      <label class="field fieldNarrow"><span class="fieldLabel">质量</span><el-select :modelValue="clip.quality" size="small" @change="onQualityChange"><el-option v-for="option in qualityOptions" :key="option.value" :label="option.label" :value="option.value" /></el-select></label>
+      <label class="field fieldInline"><span class="fieldLabel">二次采样</span><el-switch :modelValue="clip.secondPass" @change="emit('patch', { secondPass: Boolean($event) })" /></label>
+      <label class="field fieldInline"><span class="fieldLabel">先出预览</span><el-switch :modelValue="clip.preview" :disabled="previewDisabled" @change="emit('patch', { preview: Boolean($event) })" /></label>
     </div>
     <div class="promptSections">
       <template v-for="section in sections" :key="section.key"><label class="sectionField"><span class="sectionLabel">{{ section.label }}</span><el-input :modelValue="draft[section.key]" type="textarea" :rows="section.rows" resize="vertical" :placeholder="section.placeholder" @input="onSectionInput(section.key, String($event))" /></label></template>
@@ -32,6 +35,10 @@
     <p v-else class="continuityHint">独立起拍 / 有意切镜：不读取上一镜的上下文，参考素材最多 4 个。</p>
     <p v-if="isContext && clip.referenceIds.length > 3" class="continuityHint continuityHintWarn" role="alert">本镜已选 {{ clip.referenceIds.length }} 个参考素材，超出续接上限 3 个（图片/视频/音频合计）；请减少参考，或把衔接方式改为独立起拍。</p>
     <p v-if="isContext && clip.seconds < 10" class="continuityHint continuityHintWarn" role="alert">本镜时长 {{ clip.seconds }} 秒，短于续接下限 10 秒；请加长本镜，或把衔接方式改为独立起拍。</p>
+    <p class="continuityHint">质量档位：轻量/标准为两遍生成（开二次采样），精细/极致为 20 步单遍；先出预览出片更快但是低清预览片、不会自动精修成成片。</p>
+    <p v-if="isContext && (clip.quality !== 'light' && clip.quality !== 'medium')" class="continuityHint continuityHintWarn" role="alert">承接上一镜的镜头只能用轻量/标准质量（引擎限制：续接任务是 two-pass），请改一下。</p>
+    <p v-if="isContext && !clip.secondPass" class="continuityHint continuityHintWarn" role="alert">承接上一镜的镜头必须开启二次采样（引擎限制），请开启。</p>
+    <p v-if="previewDisabled && clip.preview" class="continuityHint continuityHintWarn" role="alert">先出预览只支持单个 30 秒以内、不承接上一镜的镜头，请关闭。</p>
     <details class="rulesDetails"><summary class="rulesSummary">整理规则 · {{ rewriteRules.trim() ? "已自定义" : "服务端内置" }}</summary><el-input v-model="rewriteRules" type="textarea" :rows="4" maxlength="20000" placeholder="留空则用服务端内置规则；填写后整段替换内置规则。规则只用于本次整理，不写入工程。" /></details>
     <section v-if="rewritePending" class="pendingPanel" aria-live="polite"><header class="pendingHeader"><span class="pendingTitle">整理结果待采用</span><span class="pendingMeta">本次整理规则：{{ rewritePending.basis.rules ? "自定义" : "服务端内置" }}</span></header><div class="pendingBody"><div class="pendingColumn"><span class="fieldLabel">原文（整理前，只读）</span><p class="pendingOriginal" :title="rewritePending.basis.text">{{ rewritePending.basis.text || "（原文为空）" }}</p></div><div class="pendingColumn"><span class="fieldLabel">整理结果（可编辑）</span><el-input type="textarea" :rows="6" :modelValue="rewritePending.text" @input="emit('updateRewriteDraft', String($event))" /></div></div><p v-if="rewriteBasisChanged" class="pendingGuard" role="alert">本镜原文、时长或整理规则已变化，请核对整理结果后重新整理</p><div class="pendingActions"><el-button size="small" type="primary" :disabled="rewriteBasisChanged || !rewritePending.text.trim()" @click="emit('adoptRewrite', rewritePending.text)">采用整理结果</el-button><el-button size="small" @click="emit('discardRewrite')">放弃</el-button></div></section>
   </section>
@@ -41,7 +48,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { ElButton, ElInput, ElInputNumber, ElOption, ElSelect, ElSwitch } from "element-plus";
-import { continuityLabels, continuityOptions, normalizeContinuity, promptToText, ratioOptions, resolutionOptions, type ClipPrompt, type MtrackClip } from "../mtrackProject";
+import { continuityLabels, continuityOptions, normalizeContinuity, promptToText, ratioOptions, resolutionOptions, videoQualityLabels, videoQualityValues, type ClipPrompt, type MtrackClip, type VideoQuality } from "../mtrackProject";
 import { firstFrameInstruction } from "../mediaDispatch";
 
 type RewriteBasis = { text: string; seconds: number; rules: string };
@@ -61,7 +68,34 @@ const rewriteBasisChanged = computed(() => {
   return pending.basis.text !== promptToText(clip.prompt) || pending.basis.seconds !== clip.seconds || pending.basis.rules !== rewriteRules.value.trim();
 });
 
-function onContinuityChange(value: string) { emit("patch", { continuity: normalizeContinuity(value) }); }
+function onQualityChange(value: string) { emit("patch", { quality: value as VideoQuality }); }
+
+function onContinuityChange(value: string) {
+  const continuity = normalizeContinuity(value);
+  // ACT: 切成承接上一镜时把与续接互斥的两个开关一并归位，否则留着一个会被编辑内核/派工双双拒掉的组合。
+  if (continuity === "context") {
+    emit("patch", {
+      continuity,
+      ...(props.clip?.quality !== "light" && props.clip?.quality !== "medium" ? { quality: "light" } : {}),
+      ...(props.clip?.preview ? { preview: false } : {}),
+    });
+    return;
+  }
+  emit("patch", { continuity });
+}
+
+/** 承接上一镜的镜头只能选轻量/标准质量（引擎限制：续接任务是 two-pass）。
+ *  ACT: 读盘可能带出 high/max（承接镜的非法值，写入侧由 validateClip 拦），当前值不在过滤后选项里时补回一条，
+ *  避免 el-select 遇到列表外的值显示成空白；上限：这只是 UI 容错，真越界仍由 validateClip 整批拒收。 */
+const qualityOptions = computed(() => {
+  const current = props.clip?.quality;
+  const base: readonly VideoQuality[] = isContext.value ? videoQualityValues.filter(value => value === "light" || value === "medium") : videoQualityValues;
+  const list = current && !base.includes(current) ? [...base, current] : base;
+  return list.map(value => ({ value, label: videoQualityLabels[value] }));
+});
+
+/** 先出预览只支持单个 30 秒以内、不承接上一镜的镜头（引擎限制），其余情况置灰。 */
+const previewDisabled = computed(() => isContext.value || (props.clip?.seconds ?? 0) >= 30);
 
 const fullSections: { key: keyof ClipPrompt; label: string; rows: number; placeholder: string }[] = [
   { key: "subjectDefinitions", label: "subject_definitions:", rows: 4, placeholder: "逐项定义 <Subject N> / <Picture N> / <Video N> / <Audio N> 的参考来源与特征。" },

@@ -95,6 +95,18 @@ export function continuationJobId(clip: MtrackClip | undefined): string {
   return clip.attempts.findLast(attempt => attempt.status === "succeeded" && attempt.jobId)?.jobId ?? "";
 }
 
+/** FreeVideo 质量四档；与 freevideo provider 侧 quality 枚举、videoGenerationNode 同口径。 */
+export const videoQualityValues = ["light", "medium", "high", "max"] as const;
+export type VideoQuality = (typeof videoQualityValues)[number];
+/** 引擎默认档（light = 8 首轮 + 3 refine 两遍生成，首轮半尺寸）。 */
+export const defaultVideoQuality: VideoQuality = "light";
+export const videoQualityLabels: Record<VideoQuality, string> = {
+  light: "轻量",
+  medium: "标准",
+  high: "精细",
+  max: "极致",
+};
+
 export interface MtrackClip {
   clipId: string;
   title: string;
@@ -103,6 +115,12 @@ export interface MtrackClip {
   ratio: string;
   resolution: string;
   generateAudio: boolean;
+  /** 质量档位：light(轻量)/medium(标准)/high(精细)/max(极致)；引擎默认 light。 */
+  quality: VideoQuality;
+  /** 二次采样（two_pass）：默认开启；续接上一镜的镜头必须开启（引擎限制：续接任务是 two-pass）。 */
+  secondPass: boolean;
+  /** 先出预览（preview）：快速低清预览片，只支持单个 30 秒以内的独立镜头；开启后产出即预览片，不会自动精修成成片。 */
+  preview: boolean;
   prompt: ClipPrompt;
   referenceIds: string[];
   /** `shot` | `context`；旧工程的 start/continue/cut 由 normalizeContinuity 归一。 */
@@ -210,6 +228,11 @@ function readBoolean(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
 }
 
+/** 质量只认四档，其它取值（旧工程/手改文件）回落引擎默认 light。 */
+function readQuality(value: unknown): VideoQuality {
+  return videoQualityValues.includes(value as VideoQuality) ? (value as VideoQuality) : defaultVideoQuality;
+}
+
 function readNumber(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
@@ -271,6 +294,9 @@ export function normalizeProject(value: unknown): MtrackProject {
       ratio: readString(item.ratio, "9:16"),
       resolution: readString(item.resolution, "768P"),
       generateAudio: readBoolean(item.generateAudio, false),
+      quality: readQuality(item.quality),
+      secondPass: readBoolean(item.secondPass, true),
+      preview: readBoolean(item.preview, false),
       prompt: readPrompt(item.prompt),
       referenceIds: Array.isArray(item.referenceIds) ? item.referenceIds.filter(ref => typeof ref === "string") : [],
       // ACT: 首镜永远 shot（没有上一镜可接），其余缺省 shot；旧工程的 continue 归一为 context。
@@ -304,6 +330,9 @@ export function createClip(index: number, ratio: string): MtrackClip {
     ratio,
     resolution: "768P",
     generateAudio: false,
+    quality: defaultVideoQuality,
+    secondPass: true,
+    preview: false,
     prompt: {
       subjectDefinitions: "",
       summary: "",
@@ -407,7 +436,7 @@ export function cloneClips(clips: MtrackClip[]): MtrackClip[] {
 }
 
 /** 真源字段：写作者/用户在编辑器里定的镜头内容，合并时以「相对基线谁改过」为准，两边都改则信磁盘。 */
-const clipSourceKeys = ["title", "seconds", "ratio", "resolution", "generateAudio", "prompt", "referenceIds", "continuity", "mode", "notes", "systemPromptOverride", "sourceRange"] as const;
+const clipSourceKeys = ["title", "seconds", "ratio", "resolution", "generateAudio", "quality", "secondPass", "preview", "prompt", "referenceIds", "continuity", "mode", "notes", "systemPromptOverride", "sourceRange"] as const;
 /** 生成侧字段：派工与对账写出来的运行结果，合并时优先内存（用户正看着的那份）。 */
 const clipRunKeys = ["status", "nodeId", "assetPath"] as const;
 
@@ -589,6 +618,12 @@ function globalSignature(global: MtrackProject["global"]): string {
 /**
  * 单镜生成设置签名：项目级设置 + 本镜字段 + 参考集合，承接镜再链上一镜签名。
  * 与 LSC signatures() 同口径——六段提示词整块进签名，参考身份单列，context 链向前累加。
+ * ACT: 质量档位 / 二次采样 / 先出预览三字段故意不进签名——它们只改变渲染档位、不改变镜头身份；
+ *  旧工程里已生成镜的 attempts 签名是旧格式（不含这三键），纳入会让它们在升级后全部误判成 stale（待更新），
+ *  而这三字段的默认值（light + 二次采样开 + 无预览）与旧行为完全一致，属假阳性。
+ *  stale 只驱动「待更新」徽标、不驱动派工（pickDispatchTargets 只看 status），少报（改质量不提示重出）
+ *  比误报（整片待更新）代价低。升级路径：若将来要「改了质量就提示重出」，加回这三键并配套一次
+ *  旧签名迁移（把无这三键的旧签名按缺省值补齐后再比较）。
  */
 function clipSignature(globalSig: string, clip: MtrackClip, previous: string): string {
   return stableJson({

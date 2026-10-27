@@ -1,7 +1,7 @@
 /** 多轨工程编辑内核：对工程做批量纯函数编辑，禁止 import vue / 磁盘 API。 */
 
 import type { MtrackClip, MtrackProject } from "./mtrackProject";
-import { ratioOptions, resolutionOptions, nextClipId, createClip, cloneClips, normalizeContinuityOrder } from "./mtrackProject";
+import { ratioOptions, resolutionOptions, videoQualityValues, nextClipId, createClip, cloneClips, normalizeContinuityOrder } from "./mtrackProject";
 
 /**
  * 编辑操作。定位一律用 clipId（after 为锚点片段编号），不用可能漂移的裸索引；
@@ -70,6 +70,20 @@ export function validateClip(clip: MtrackClip): string[] {
   // 独立镜头 2 秒即可。这里提前拦下，不让用户等到派工才看到 422。
   if (clip.continuity === "context" && clip.seconds < 10) {
     issues.push(`承接上一镜的镜头最短 10 秒（引擎限制），当前 ${clip.seconds} 秒；请加长本镜或改为独立起拍`);
+  }
+  // ACT: 质量/二次采样/先出预览是引擎真实支持的请求参数；两条引擎硬约束在这里提前拦下，
+  // 不让用户等到派工才看到失败（与上面的续接参考/时长同口径）。
+  if (!(videoQualityValues as readonly string[]).includes(clip.quality)) {
+    issues.push(`质量 ${clip.quality} 不在可选范围内（轻量/标准/精细/极致）`);
+  }
+  if (clip.continuity === "context" && clip.quality !== "light" && clip.quality !== "medium") {
+    issues.push(`承接上一镜的镜头只能用轻量/标准质量（引擎限制：续接任务是 two-pass），请改为轻量或标准`);
+  }
+  if (clip.continuity === "context" && !clip.secondPass) {
+    issues.push(`承接上一镜的镜头必须开启二次采样（引擎限制），请开启二次采样`);
+  }
+  if (clip.preview && (clip.continuity === "context" || clip.seconds >= 30)) {
+    issues.push(`先出预览只支持单个 30 秒以内、不承接上一镜的镜头（引擎限制），当前${clip.continuity === "context" ? "是承接上一镜" : `时长 ${clip.seconds} 秒`}；请关闭先出预览`);
   }
   return issues;
 }

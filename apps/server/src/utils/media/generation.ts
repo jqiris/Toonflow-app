@@ -165,6 +165,8 @@ async function prepareRequest<T>(directory: string | undefined, mediaType: "imag
     ...(request.continueFrom ? { continueFrom: request.continueFrom } : {}),
     ...(label ? { label } : {}),
     ratio: request.ratio, resolution: request.resolution, duration: request.duration, generateAudio: request.generateAudio, mode: request.mode,
+    quality: request.quality, secondPass: request.secondPass,
+    preview: request.preview,
   };
 }
 

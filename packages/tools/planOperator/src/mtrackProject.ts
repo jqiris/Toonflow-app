@@ -32,6 +32,12 @@ export interface MtrackClip {
   ratio: string;
   resolution: string;
   generateAudio: boolean;
+  /** 质量档位（light/medium/high/max，缺省 light）：编辑器逐镜可设，派工经 composeClipRequest 下发到请求参数 quality。 */
+  quality?: string;
+  /** 二次采样（缺省 true）：承接上一镜必须开启，否则引擎拒绝。 */
+  secondPass?: boolean;
+  /** 先出预览（缺省 false）：只支持单个 30 秒以内、不承接上一镜的分块，开启后产出即预览片。 */
+  preview?: boolean;
   prompt: MtrackClipPrompt;
   referenceIds: string[];
   continuity: string;
@@ -58,6 +64,8 @@ export interface MtrackProject {
 }
 
 export const clipStatuses = ["pending", "generating", "generated", "accepted", "failed"] as const;
+/** 质量档位枚举：与 nodeShared mtrackProject 的 videoQualityValues 保持一致（镜像透传只认这四个值）。 */
+export const videoQualityValues = ["light", "medium", "high", "max"] as const;
 export const clipIdPattern = /^S\d{3}$/;
 export const defaultProjectPath = "plan/story.mtrack";
 export const defaultAssetCardsPath = "assets/assetCards.md";
@@ -73,6 +81,10 @@ function readString(value: unknown, fallback = ""): string {
 
 function readNumber(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function isQuality(value: unknown): value is (typeof videoQualityValues)[number] {
+  return typeof value === "string" && (videoQualityValues as readonly string[]).includes(value);
 }
 
 function readPrompt(value: unknown): MtrackClipPrompt {
@@ -133,6 +145,12 @@ export function normalizeProject(value: unknown): MtrackProject {
       ratio: readString(item.ratio, "9:16"),
       resolution: readString(item.resolution, "768P"),
       generateAudio: typeof item.generateAudio === "boolean" ? item.generateAudio : false,
+      // ACT: quality / secondPass / preview 是编辑器逐镜可设的真实请求参数，镜像归一必须透传——
+      // 漏透传会让 mtrackRead 读回来没有这三项，agent 误以为当前是默认档，回写时把用户设置覆盖掉
+      //（同类坑见上方 mode 的审计 F3）。非法值不猜，直接不带键。
+      ...(isQuality(item.quality) ? { quality: item.quality } : {}),
+      ...(typeof item.secondPass === "boolean" ? { secondPass: item.secondPass } : {}),
+      ...(typeof item.preview === "boolean" ? { preview: item.preview } : {}),
       prompt: readPrompt(item.prompt),
       referenceIds: Array.isArray(item.referenceIds) ? item.referenceIds.filter(ref => typeof ref === "string") : [],
       continuity: index === 0 ? "shot" : (item.continuity === "context" || item.continuity === "continue" ? "context" : "shot"),

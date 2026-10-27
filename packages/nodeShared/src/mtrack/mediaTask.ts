@@ -67,6 +67,9 @@ export async function submitClipTask(directory: string, clip: ClipGenerationRequ
       resolution: clip.resolution,
       duration: clip.duration,
       generateAudio: clip.generateAudio,
+      ...(clip.quality !== undefined ? { quality: clip.quality } : {}),
+      ...(clip.secondPass !== undefined ? { secondPass: clip.secondPass } : {}),
+      ...(clip.preview !== undefined ? { preview: clip.preview } : {}),
       mode: clip.mode,
       outputDirectory: clip.outputDirectory,
     }, controller.signal);

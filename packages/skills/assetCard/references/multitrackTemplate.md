@@ -90,6 +90,9 @@
 | `ratio` | string | ✅ | 五档枚举 | 与 `global.ratio` 不同则覆盖；**缺省不跟随 `global.ratio`，会静默落 `9:16`**（`mtrackProject.ts:262`），手写 JSON 必须每镜写全 |
 | `resolution` | string | ✅ | `768P`/`2K` | 来自 `durationResolutionMap`（V12） |
 | `generateAudio` | boolean | ✅ | — | H3 `audio: "optional"` 的开关 |
+| `quality` | enum | ✅ | `light`/`medium`/`high`/`max`，缺省 `light` | 质量档位：`light`=8 首轮 + 3 refine 两遍（默认）、`medium`=同两遍但首轮更大、`high`/`max`=20 步单遍；**承接上一镜（`continuity: context`）只能用 `light`/`medium`** |
+| `secondPass` | boolean | ✅ | 缺省 `true` | 二次采样（two_pass）；**承接上一镜必须开启**，否则引擎拒绝 |
+| `preview` | boolean | ✅ | 缺省 `false` | 先出预览：快速低清预览片，**只支持单个 30 秒以内、不承接上一镜的镜头**；开启后产出即预览片，**不会自动精修成成片** |
 | `prompt.subjectDefinitions` | string | 有参考时 ✅；无参考可空 | 段首标签 `subject_definitions:` 由本字段首行书写 | 六段之一：定义每个 `<Subject N>` 及其 `<Picture N>` / `<Video N>` / `<Audio N>` 来源与主要特征（详见 §四）；**正文用英文** |
 | `prompt.summary` | string | 有参考时 ✅；无参考可空 | 段首标签 `summary:` 由本字段首行书写 | 六段之一：一句话总述任务类型（`[reference generation]` / `[keyframe completion]` / `[video continuation]` 等）与主要参考关系 |
 | `prompt.retentionAnalysis` | string | 有参考时 ✅；无参考可空 | 段首标签 `retention_analysis:` 由本字段首行书写 | 六段之一：逐条写 `<Subject N>` / `<Picture N>` 等的关系标记，可见内容用 `fully_preserved` / `partially_preserved` / `attribute_transfer` / `weak_reference`，音频用 `fully_copy` / `partially_copy` / `reference` / `weak_reference` |

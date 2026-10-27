@@ -79,8 +79,12 @@
             v-model:ratio="data.ratio"
             v-model:mode="data.mode"
             v-model:generateAudio="data.generateAudio"
+            v-model:quality="data.quality"
+            v-model:secondPass="data.secondPass"
+            v-model:preview="data.preview"
             :ratios="ratioOptions"
             :model="selectedModel"
+            :preview-disabled="previewBlocked"
             :disabled="generating || deleting || !selectedModel" />
           <div class="generationActions">
             <mediaPrice v-if="generationInput" :input="{ ...generationInput, mediaType: 'video' }" :supported="selectedModel?.supportsPrice === true" />
@@ -129,7 +133,9 @@ const { id, node, nodeProps, nodeEvent, outputs, files, ai, updateNodeInternals 
   label: "视频生成",
 });
 type PromptModel = NonNullable<InstanceType<typeof promptInput>["$props"]["modelValue"]>;
-const data = computed(() => node.data as { prompt: string; promptModel: PromptModel; model: string; duration?: number; resolution: string; ratio: string; mode: string; generateAudio: boolean });
+const videoQualityValues = ["light", "medium", "high", "max"] as const;
+type VideoQuality = (typeof videoQualityValues)[number];
+const data = computed(() => node.data as { prompt: string; promptModel: PromptModel; model: string; duration?: number; resolution: string; ratio: string; mode: string; generateAudio: boolean; quality: VideoQuality; secondPass: boolean; preview: boolean });
 data.value.prompt ??= "";
 data.value.promptModel ??= [];
 data.value.model ??= "";
@@ -137,6 +143,11 @@ data.value.resolution ??= "";
 data.value.mode ??= "";
 data.value.generateAudio ??= true;
 data.value.ratio ??= "9:16";
+// ACT: 引擎默认 light + 开启二次采样，与供应商侧默认一致；节点内也落一份，便于 getConfig 回读与派工透传。
+data.value.quality ??= "light";
+data.value.secondPass ??= true;
+// ACT: 预览默认关闭，与供应商/引擎默认一致；开启后节点产出即预览片（引擎固定 8 步二次采样），成片需另发 refine 任务。
+data.value.preview ??= false;
 const { refList, referenceMentions, setReferencePreview, removeReference } = useNodeReferences();
 const models = ref<NodeMediaModel[]>([]);
 const modelsLoading = ref(false);
@@ -157,6 +168,8 @@ const ratioOptions = ["16:9", "9:16", "1:1", "4:3", "3:4"];
 const selectedModel = computed(() => models.value.find((item) => JSON.stringify([item.providerId, item.modelId]) === data.value.model));
 const selectedMode = computed(() => selectedModel.value?.mode?.find((item) => JSON.stringify(item) === data.value.mode) as NodeVideoRequest["mode"]);
 const frameMode = computed(() => ["startEndRequired", "endFrameOptional", "startFrameOptional"].includes(String(selectedMode.value)));
+// ACT: 预览只支持单个 30 秒以内分块，时长≥30s 时直接在面板禁用开关，避免到生成时被供应商拒绝。
+const previewBlocked = computed(() => (data.value.duration ?? 0) >= 30);
 const mediaCounts = computed(() => ({
   image: refList.value.filter((item) => item.dataType === "IMAGE").length,
   video: refList.value.filter((item) => item.dataType === "VIDEO").length,
@@ -263,6 +276,9 @@ const generationInput = computed<Omit<NodeVideoRequest, "directory"> | undefined
     resolution: data.value.resolution || undefined,
     ratio: data.value.ratio,
     generateAudio: choice.audio === "optional" ? data.value.generateAudio : choice.audio,
+    quality: data.value.quality,
+    secondPass: data.value.secondPass,
+    preview: data.value.preview,
     outputDirectory: `assets/${id}`,
     images: frameMode.value ? undefined : images,
     firstFrame: frameMode.value && (selectedMode.value !== "startFrameOptional" || images.length > 1) ? images[0] : undefined,
@@ -431,6 +447,9 @@ function getConfig() {
       ratio: data.value.ratio,
       mode: selectedMode.value,
       generateAudio: data.value.generateAudio,
+      quality: data.value.quality,
+      secondPass: data.value.secondPass,
+      preview: data.value.preview,
     },
     models: models.value,
     ratios: ratioOptions,
@@ -452,7 +471,7 @@ nodeTools.register({
 
 nodeTools.register({
   name: "setConfig",
-  description: "修改此视频生成节点的模型、时长、分辨率、比例、模式或声音；先用 getConfig 查询能力，providerId 与 modelId 必须同时提供；mode 使用返回的原始字符串或数组，须匹配当前引用；不修改提示词、不启动生成",
+  description: "修改此视频生成节点的模型、时长、分辨率、比例、模式、声音、质量、二次采样或预览；先用 getConfig 查询能力，providerId 与 modelId 必须同时提供；mode 使用返回的原始字符串或数组，须匹配当前引用；quality 用 light/medium/high/max（轻量/标准/精细/极致，默认 light），secondPass 为二次采样开关（默认 true）；续接或 30 秒以上长镜必须 secondPass=true 且 quality 用 light/medium，否则生成会被供应商拒绝；preview 为快速预览模式（默认 false），只支持单个 30 秒以内分块，开启后产出即预览片；不修改提示词、不启动生成",
   parameters: z.strictObject({
     providerId: z.string().min(1).optional(),
     modelId: z.string().min(1).optional(),
@@ -461,6 +480,9 @@ nodeTools.register({
     ratio: z.enum(ratioOptions).optional(),
     mode: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]).optional(),
     generateAudio: z.boolean().optional(),
+    quality: z.enum(videoQualityValues).optional(),
+    secondPass: z.boolean().optional(),
+    preview: z.boolean().optional(),
   }).refine((args) => (args.providerId === undefined) === (args.modelId === undefined), "providerId 与 modelId 必须同时提供"),
   async execute(args, { signal }) {
     signal?.throwIfAborted();
@@ -485,6 +507,9 @@ nodeTools.register({
     if (args.ratio !== undefined) data.value.ratio = args.ratio;
     if (args.mode !== undefined) data.value.mode = JSON.stringify(args.mode);
     if (args.generateAudio !== undefined) data.value.generateAudio = args.generateAudio;
+    if (args.quality !== undefined) data.value.quality = args.quality;
+    if (args.secondPass !== undefined) data.value.secondPass = args.secondPass;
+    if (args.preview !== undefined) data.value.preview = args.preview;
     return getConfig();
   },
 });

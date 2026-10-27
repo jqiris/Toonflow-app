@@ -73,7 +73,7 @@ LSC 的两个合并开关**不引入新字段、新状态**。Toonflow 的合成
 
 `ClipState` 形状：`{ signature, recordSignature, recordIndex: number | null, recordParentJobId, stale }`。
 
-- **`signature`** = 键排序 JSON 规范化串（`stableJson`：`JSON.stringify` 前递归排键，**不用哈希、零依赖**）。内容 = 项目级 `global{ratio,style,systemPrompt,model}` + 本镜 `{clipId,title,seconds,ratio,resolution,generateAudio,prompt,continuity,mode,systemPromptOverride}` + `referenceIds` +（`continuity === "context"` 时把**上一镜的 signature** 作为续接链带进来）。
+- **`signature`** = 键排序 JSON 规范化串（`stableJson`：`JSON.stringify` 前递归排键，**不用哈希、零依赖**）。内容 = 项目级 `global{ratio,style,systemPrompt,model}` + 本镜 `{clipId,title,seconds,ratio,resolution,generateAudio,prompt,continuity,mode,systemPromptOverride}` + `referenceIds` +（`continuity === "context"` 时把**上一镜的 signature** 作为续接链带进来）。**`quality` / `secondPass` / `preview` 三字段故意不进签名**：旧工程已生成镜的 attempts 签名是旧格式（不含这三键），纳入会让它们在升级后全部误判成 stale（待更新），而默认值（light + 二采开 + 无预览）与旧行为完全一致，属假阳性；`stale` 只驱动「待更新」徽标、不驱动派工，少报比误报代价低。
 - **`recordSignature` / `recordIndex`** = 该镜 attempts 里**最后一条 `status === "succeeded"`** 记录落盘时的签名与时间线位置——新字段 `ClipAttempt.signature` / `ClipAttempt.index`，由 `multitrackEditor.vue` 的 `writeClipRun` 在成功时写入（同时写 `parentJobId = continuationJobId(上一镜)`）。
 - **`stale`** = 记录存在（`clip.assetPath && attempt?.signature`）且以下任一成立：`recordSignature !== 当前 signature`；`recordIndex !== 当前时间线位置`（夹位即改序，也算过）；`continuity === "context"` 且续接来源 `parentJobId` 与上一镜当前 `continuationJobId` 不一致。
 

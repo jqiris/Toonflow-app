@@ -112,7 +112,7 @@ if value.get('continue_from') and media has (first | last):
 
 | LSC 控件 | 为什么不做 |
 |---|---|
-| 种子 / 采样步数 / LoRA 权重 / 一采二采 | FreeVideo agent API 没有这些参数（`/api/ai/media/generate` 请求体不收；`quality: light` 已固定 two-pass）；暴露了也只是摆设。升级路径：API 补参数后加进快捷设置行 |
+| 种子 / 采样步数 / LoRA 权重 | FreeVideo agent API 没有这些参数（`/api/ai/media/generate` 请求体不收）；暴露了也只是摆设。二采与质量已暴露：请求参数 `secondPass`（默认开启，与原 `quality: light` 固定 two-pass 一致）、`quality`（light/medium/high/max，默认 light）。升级路径：API 补参数后加进快捷设置行 |
 | ~~删除版本入口~~ | **已补齐**：`versionMenu` 逐行「删除」+ 折叠头「全部删除」+ `statusPanel` 版本行删除按钮；单删不弹确认（对齐 LSC `scope:'version'`），整镜走 `ElMessageBox.confirm` danger 确认；`EditorFiles.remove` 删物理文件，`/404\|not found\|ENOENT\|不存在/i` 不算失败；删当前默认后默认回落到剩余版本里最新一条；不改 `clip.status`（对齐 LSC `mergeDeletedResultDraft` 只动结果簿记）；生成中的镜拦截 |
 | 双缓冲预载（`.nh-result-preview` + `.nh-result-buffer` 两个 video 元素，切换时预加载下一段） | Toonflow 用单个 `<video v-if="previewUrl">`：每次换 URL 元素销毁重建，天然无换源卡顿，不需要双缓冲 |
 | ~~项目名称独立字段 / 本镜系统提示词独立字段~~ | **已补齐（t6）**：协议新增可选字段 `project.name`（界面「项目名称」编辑位，缺失显示「未命名项目」，不从 `projectId` 猜）与 `clip.systemPromptOverride`（派工经 `effectiveGlobal` 替换 `global.systemPrompt`）；`projectId` 回归跨文件对账标识、`clip.notes` 回归纯备注（不再当提示词读，消除 agent 写入口的提示词注入隐患），均为 additive 可选字段，老工程照常加载 |
@@ -128,7 +128,7 @@ if value.get('continue_from') and media has (first | last):
 | 父段 generation 级失效判定 | 同上；只能判 jobId 有无 |
 | 三路视频轨 / 三路音频轨 | 产品口径是资产卡（图 ≤4 或续接 ≤3、视频 ≤1、音频 ≤1） |
 | 副字幕轨（subtitle） | 未纳入当前产品范围 |
-| LoRA / 调度器 / 二采参数 | agent API 不暴露（`quality: light` 已固定 two-pass） |
+| LoRA / 调度器 | agent API 不暴露；二采已通过请求参数 `secondPass` 暴露（默认开启），`quality` 同步放开 light/medium/high/max（默认 light） |
 | 撤销/重做工程编辑 | 只保留删除后的一次撤销快照 |
 
 ---
@@ -165,6 +165,6 @@ if value.get('continue_from') and media has (first | last):
 | 预览播放静音 | 强制 muted，声音走独立 Playback 组件 | **保留声音**（当前片段的音轨） | 我们是逐镜成片自带音轨，没有独立混音轨；静音会让用户以为没生成声音 |
 | 「项目与成片」是独立浏览器窗口 | `window.open` 级独立窗口 | **画布世界层浮窗**：teleport 到 `.vue-flow__transformationpane`，随画布缩放平移，几何持久化 `node.data.resultsUi` | 我们的宿主是画布卡片，独立弹窗会脱离画布坐标与主题；世界层浮窗保留「和镜头同处一张画布」的空间感，位置还能随工程画布一起存 |
 | 「用于合并」是独立合并标记 | 独立 `merge` 勾选集 | **映射 `clip.status` 的 `generated ⇄ accepted`**（勾选 = 验收，契约 §3.2） | 合成清单真源一直是 accepted（V14 连续性复核），另造布尔字段就是双真源；浮窗勾选与工作台「验收」按钮改的是同一个值 |
-| 种子 / 采样步数 / LoRA / 一采二采控件 | 高级设置里逐项可调 | **不暴露** | FreeVideo agent API 没有这些参数，暴露了只是摆设；`quality: light` 已固定 two-pass |
+| 种子 / 采样步数 / LoRA / 一采二采控件 | 高级设置里逐项可调 | **二采与质量已暴露，其余不暴露** | FreeVideo agent API 没有这些参数，暴露了只是摆设；二采（`secondPass`，默认开启）与质量（`quality`，light/medium/high/max，默认 light）已作为请求参数透传，调试请求/节点可直接填；种子、采样步数、LoRA 仍未开放 |
 | 删除版本入口 | 版本行可删 | **不开放** | 历史版本是画布上的真实节点与磁盘产物，删除牵涉节点生命周期与文件回收；协议里没有「删一次 attempts」语义（见三节表与 §15.9 纪律） |
 | 合并可任意勾选、任意顺序 | `merge_files` 收任意勾选段 | 只含 accepted 且必须按工程顺序连续 | 数据层协议，本次改版不动；footer 文案不暗示能合并非连续/未验收镜 |

@@ -44,6 +44,18 @@ export const videoGenerationSchema = z.strictObject({
   resolution: z.string().trim().min(1).max(64).optional(),
   duration: z.number().finite().positive().max(3600).optional(),
   generateAudio: z.boolean().optional(),
+  /**
+   * 生成质量档位（FreeVideo 引擎：light/medium 为 8 步二次采样，high/max 为 20 步单次采样）；
+   * 未传时供应商按自身默认值处理。
+   */
+  quality: z.enum(["light", "medium", "high", "max"]).optional(),
+  /** 是否开启二次采样（引擎的二次细化采样）；未传时供应商按自身默认值处理。 */
+  secondPass: z.boolean().optional(),
+  /**
+   * 是否开启快速预览模式（引擎固定跑 8 步二次采样，无视 quality/secondPass 档位；产出为预览片，
+   * 成片需另发 refine 任务）；未传时供应商按自身默认值处理。
+   */
+  preview: z.boolean().optional(),
   mode: z.union([
     z.enum(["singleImage", "startEndRequired", "endFrameOptional", "startFrameOptional", "text"]),
     z.array(referenceMode).min(1).max(3),
