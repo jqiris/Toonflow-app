@@ -92,15 +92,15 @@ export function isTextOnlyAsset(asset: Pick<ExtractedAsset, "kind" | "textOnly">
   return asset.kind === "sound" ? true : asset.textOnly ?? false;
 }
 
-/** 卡没给画幅时的默认值：与抽取提示词同口径（人物四视图整版/场景空镜 16:9，道具 1:1）。 */
-const assetRatioDefaults: Record<AssetKind, string> = { character: "16:9", scene: "16:9", prop: "1:1", sound: "16:9" };
+/** 卡没给画幅时的默认值：与抽取提示词同口径（人物四视图整版 2:3 竖版，场景空镜 16:9，道具 1:1）。 */
+const assetRatioDefaults: Record<AssetKind, string> = { character: "2:3", scene: "16:9", prop: "1:1", sound: "16:9" };
 
 const ratioShape = /^[1-9]\d{0,3}:[1-9]\d{0,3}$/;
 
 /**
  * 卡画幅归一：形状非法（空串/中文）会让该卡单张失败并抛英语 zod 文案，按 kind 回落；
- * 形状合法但不是该 kind 标准档位（人物四视图整版/场景空镜 16:9、道具 1:1）的也归一到标准档并回一句告警——
- * 否则「C 卡 16:9 四视图整版」的版式口径会被 2:3/9:16 静默破坏（抽取提示词与 assetCardTemplate 都用 16:9）。
+ * 形状合法但不是该 kind 标准档位（人物四视图整版 2:3、场景空镜 16:9、道具 1:1）的也归一到标准档并回一句告警——
+ * 否则「C 卡 2:3 四视图整版（2×2 竖版）」的版式口径会被 16:9/9:16 静默破坏（旧 16:9 横排四栏实测半身栏坍缩，2026-10-27 作废）。
  */
 function pickAssetRatio(ratio: string | undefined, kind: AssetKind): { ratio: string; warning?: string } {
   const standard = assetRatioDefaults[kind];
@@ -138,6 +138,43 @@ function defaultContinuity(index: number, seconds: number, referenceCount: numbe
   return index > 0 && seconds >= 10 && referenceCount <= 3 ? "context" : "shot";
 }
 
+/**
+ * 角色卡版面契约（英文，实测基线）：2:3 竖版 2×2 等分四格，左上=清晰半身像（唯一脸部权威），
+ * 右上=正面全身（默认不透明遮脸），左下=90° 侧面全身，右下=背面全身。
+ * 唯一真源是 packages/skills/assetCard/references/imagePrompt.md §5.1；此处为出图链路自动拼接的镜像副本，
+ * 改动必须同步（ACT: 不指望抽取模型逐字复制 1400 字符英文版面句——会走样；代码注入保证每张 C 卡版面一致）。
+ */
+const characterSheetLayout =
+  "Character design sheet: one portrait 2:3 image, a clean 2x2 grid with exactly FOUR equal rectangular panels and thin gutters, one view of the SAME person per panel. " +
+  "TOP LEFT: front-facing head-and-shoulders close-up from the waist up, enlarged upper body, calm neutral expression, all facial features clear and sharp, top of head near panel edge, garment cropped at waist. " +
+  "TOP RIGHT: ONE front-facing full-body standing figure, complete head through footwear, arms relaxed at sides; ONLY in this panel replace the entire face interior from forehead to chin and cheek to cheek with a completely OPAQUE flat skin-colored oval, full feature removal, NOT blur: no eyes, brows, nose, lips, shadows or highlights inside; feather only the outer boundary; keep hair, headwear, ears, neck and clothing sharp. " +
+  "BOTTOM LEFT: ONE true 90-degree side-profile full-body figure, complete head through footwear. " +
+  "BOTTOM RIGHT: ONE rear-facing full-body figure, back of head and garment back seams visible, head not turned to camera. " +
+  "The three full-body panels share one identical scale: aligned feet baselines, equal head height. " +
+  "One identity and one costume across all panels; no beautification or invented accessories. " +
+  "Pure-white seamless background, soft even light, faint contact shadow under feet, no environment or props. " +
+  "No text, labels, watermark, grid lines, panel borders, collage seams; no extra person, duplicate or fifth view, cropped head or feet, deformed hands, extra fingers.";
+
+/** 卡显式声明不遮脸（状态段写明）时，从版面契约里剥掉遮脸句。 */
+function characterLayout(negative: string | undefined, prompt: string) {
+  const source = `${prompt}\n${negative ?? ""}`;
+  return /不遮脸|保留完整五官|full face|unmasked/i.test(source) ? characterSheetLayout.replace(/; ONLY in this panel[\s\S]*?clothing sharp\./, "; keep the face clear and sharp.") : characterSheetLayout;
+}
+
+// ACT: 旧口径的 C 卡正文常自带中文版面句（横排四栏/栏间留白/遮脸/背景光位），与注入的英文契约冲突时模型只会二选一。
+// 词表按真实旧卡（C07 全文、旧派生句）实测过。升级方向：词表随 §5.1 演进同步。
+const presentationClause = /四视图|版面|设定图|栏|从左到右|依次为|半身像|正面全身|侧面全身|背面全身|格间|格内|四格|每格|同一画面|左上|右上|左下|右下|遮脸|无脸|不透明|五官不可|贴齐|脚底线|比例尺|棚拍|柔光|硬光|补光|冷灰|背景为|背景[:：]|环境[:：]|网格线|分栏边框|拼贴|拼图|turnaround|panel|grid|sheet layout/i;
+
+/** 派生卡的参考绑定句（含「参考图/身份锚点/重绘同一/同一张脸」）不是版面描述，即便句中带「四视图/半身像格」等词也整句保留。
+ * ACT: 别把「同一人物」加进来——旧卡版面句「四栏同一人物、同一服装」会撞豁免漏进正文（回归实测过）。 */
+const referenceBinding = /参考图|身份锚点|重绘同一|同一张脸/;
+
+/** 角色卡正文清洗：按句子（句读级）剔除自带版面句，保留人物描述与参考绑定句（注入契约的前置条件）。
+ * 姿态/表情类短语若与版面词同句会被一并滤掉——英文版面段自带 arms relaxed at sides 与 calm neutral expression，不丢信息。 */
+function characterBody(prompt: string) {
+  return prompt.split(/(?=[。；;\n])/).filter(clause => !/^[。；;\n\s]+$/.test(clause) && (referenceBinding.test(clause) || !presentationClause.test(clause))).join("").trim();
+}
+
 /** 正文上限：单次抽取塞进一个上下文，超出就让人分段，避免悄悄截断原文。 */
 const scriptLimit = 200000;
 
@@ -145,7 +182,7 @@ const scriptLimit = 200000;
 const extractionSystemPrompt = `你是短剧/漫剧的资产与分镜抽取器。只输出 JSON 对象，不要解释、不要 Markdown 代码块、不要注释。
 
 编号规则（必须遵守，同一编号全局唯一、不复用）：
-- C01、C02…：人物角色卡，kind=character，默认画幅 16:9（一张四视图整版：横向等分四栏，① 半身像腰部以上 ② 正面全身 ③ 90° 侧面全身 ④ 背面全身，②③④ 共用全身比例尺、按脚底线对齐）
+- C01、C02…：人物角色卡，kind=character，默认画幅 2:3（一张四视图整版：竖版 2×2 等分四格，左上 半身像腰部以上、右上 正面全身（默认不透明遮脸）、左下 90° 侧面全身、右下 背面全身，三个全身格共用比例尺、按脚底线对齐）。版面指令由出图节点自动注入，prompt 里不要写版面/栏位/遮脸/背景光位，只写人物本身（年龄、五官、发型发冠、服装材质与颜色、配饰、气质、状态）
 - SC01、SC02…：场景空镜卡，kind=scene，默认画幅 16:9，画面里不出现人
 - P01、P02…：道具卡，kind=prop，默认画幅 1:1，画面里不出现手
 - S01、S02…：只记录文字的声音资产，kind=sound 且 textOnly=true（不许写 false，声音卡一律不出图）；原文有台词、独白或旁白时，为每个说话人（含画外旁白）各建一张，prompt 写一句稳定的音色描述（年龄感、音高、清亮/沙哑等质感、气息、语速），此后每镜提示词里同一说话人逐字复用这句；同一角色需要不同年龄或状态的声线时另建后缀卡（如 S01-A）。
@@ -154,7 +191,7 @@ const extractionSystemPrompt = `你是短剧/漫剧的资产与分镜抽取器�
 
 输出 JSON 结构：
 {"style":"全片统一风格词（画风媒介/材质光线/色调/质感，资产出图时逐张沿用）","systemPrompt":"全片统一约束，例如：无字幕无水印、不出现现代物件；剧情实体文字（招牌/信件/书页/包装印刷）按原文保留并清晰可读，禁止的是新增或改写文字",
- "assets":[{"id":"C01","name":"淳于棼（青年）","kind":"character","prompt":"面向文生图的画面描述：年龄、外貌、发型、服装、气质，并写明是四视图整版（① 半身像 ② 正面全身 ③ 90° 侧面 ④ 背面全身）；场景卡写空间结构、材质、光线且强调空镜无人；道具卡写形制、材质、磨损","negativePrompt":"可选","ratio":"16:9","textOnly":false,"refs":[]},{"id":"C01-A","name":"淳于棼（换装）","kind":"character","prompt":"以参考图 1 为同一人物的身份锚点，重绘同一角色的四视图整版：面部结构、发际线与参考图 1 完全一致，仅更换服装为……","refs":["C01"]}],
+ "assets":[{"id":"C01","name":"淳于棼（青年）","kind":"character","prompt":"面向文生图的人物描述：年龄、外貌、发型、服装、气质（四视图版面指令由出图节点自动注入，正文不写版面/栏位/遮脸/背景光位）；场景卡写空间结构、材质、光线且强调空镜无人；道具卡写形制、材质、磨损","negativePrompt":"可选","ratio":"2:3","textOnly":false,"refs":[]},{"id":"C01-A","name":"淳于棼（换装）","kind":"character","prompt":"以参考图 1 为同一人物的身份锚点，重绘同一角色：面部结构、发际线与参考图 1 完全一致，仅更换服装为……","refs":["C01"]}],
  "shots":[{"title":"分镜标题","seconds":5,"prompt":"该镜提示词：原文给过就整段原样保留（六个官方段首齐全），原文没给才写一句话画面描述","referenceIds":["C01","SC01"],"mode":"ref","continuity":"shot"}]}
 
 要求：
@@ -324,7 +361,7 @@ export async function generateAssetImages(options: {
   let done = 0;
   for (const asset of ordered) {
     options.signal?.throwIfAborted();
-    // ACT: 画幅归一在被改写时留痕（C/SC 卡必须是 16:9 四视图整版/空镜，P 卡 1:1），不静默换档。
+    // ACT: 画幅归一在被改写时留痕（C 卡 2:3 四视图整版、SC 卡 16:9 空镜，P 卡 1:1），不静默换档。
     const picked = pickAssetRatio(asset.ratio, asset.kind);
     if (picked.warning) warnings.push(`${asset.id}：${picked.warning}`);
     // ACT: 基卡关联——refs 声明的基卡若本次已出图，成图作参考图 + 画布连线（衍生卡基于基础卡出图链路的真实实现）；
@@ -356,6 +393,17 @@ export async function generateAssetImages(options: {
       //（「无字幕无水印」「不出现现代物件」这类全片硬约束逐张生效，不靠卡片各自重抄）。
       const stylePrefix = options.style?.trim() ? `${options.style.trim()}，` : "";
       const globalConstraint = options.systemPrompt?.trim() ? `\n全片约束：${options.systemPrompt.trim()}` : "";
+      // ACT: C 卡版面契约由代码统一注入（英文、实测基线，见 characterSheetLayout 注释），不指望抽取模型逐字复写；
+      // 顺序=风格前缀→英文版面→中文人物正文→排除→全片约束，与 abtest E/F 组验证的拼接形态一致。C 卡固定 2K（2:3 档 1344×2048）。
+      const isCharacter = asset.kind === "character";
+      // ACT: C 卡先洗掉旧口径自带的中文版面句（与注入契约冲突时模型只会二选一），再注入英文版面。
+      const bodyClean = isCharacter ? characterBody(body) || body : body;
+      const layoutBlock = isCharacter ? `${characterLayout(asset.negativePrompt, body)}\n` : "";
+      const finalPrompt = `${stylePrefix}${layoutBlock}${bodyClean}${asset.negativePrompt?.trim() ? `\n避免出现：${asset.negativePrompt.trim()}` : ""}${globalConstraint}`;
+      // ACT: 引擎图像任务 prompt 硬上限 2000 字符（freevideo kind=image schema maxLength），注入版面段已占 1474；
+      // 只拦 freevideo 供应商（其他图片模型上限不同，不该被本数误伤），超限时在这里点名失败（进 failed 清单），
+      // 不要让引擎 422 抛英语 invalid_prompt 让人猜。
+      if (options.model.providerId === "freevideo" && finalPrompt.length > 2000) throw new Error(`提示词 ${finalPrompt.length} 字符超过引擎 2000 上限${isCharacter ? "（含自动注入的四视图版面段 1474 字符，请精简卡正文/排除句/全片约束）" : "，请精简卡正文"}`);
       const images = await options.ai.generateImage({
         directory: options.directory,
         providerId: options.model.providerId,
@@ -363,9 +411,10 @@ export async function generateAssetImages(options: {
         // ACT: 引擎任务名按「分类-编号-时间戳」拼，编号从 label 取（freevideo.ts jobLabel 认 C01/SC01/P02/KF1/S001）；不传就退回旧的「生成方式-提示词主题」。
         label,
         // ACT: 媒体通道没有负面提示词字段（mediaGenerationSchema.sharedFields 只有 prompt），负面词只能并进正向提示。
-        prompt: `${stylePrefix}${body}${asset.negativePrompt?.trim() ? `\n避免出现：${asset.negativePrompt.trim()}` : ""}${globalConstraint}`,
+        prompt: finalPrompt,
         outputDirectory: options.assetDirectory,
         ratio: picked.ratio,
+        ...(isCharacter ? { size: "2K" } : {}),
         ...(baseRefs.length ? { images: baseRefs.map(ref => ({ path: ref.path, mimeType: ref.mimeType })) } : {}),
       }, options.signal);
       const image = images[0];

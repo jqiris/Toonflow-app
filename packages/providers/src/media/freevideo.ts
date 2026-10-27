@@ -18,10 +18,10 @@ const rules = [
   },
 ] as const;
 
-const version = "1.1.1";
+const version = "1.1.2";
 const agentSuffix = "/freevideo/agent/v1";
-/** 参考图上限统一按 9 张（与视频 imageReference:9 声明同口径）。引擎图像任务文档未写显式上限，超限时由引擎 422 报错。 */
-const maxImageReferences = 9;
+/** 图像任务参考图上限：引擎 kind=image 的 images 数组 maxItems=4（超限返回 too_many_images）。视频单块仍是 9，见 models 段。 */
+const maxImageReferences = 4;
 
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("FreeVideo 响应格式错误");
@@ -69,13 +69,14 @@ function megapixels(resolution?: string) {
   return 1.0;
 }
 
-/** 图像任务的 width/height（256-2048），按比例与 1K/2K 档位推算。 */
+/** 图像任务的 width/height（256-2048），按比例与 1K/2K 档位推算；引擎要求 32 的倍数，向下取整对齐（2:3 的 683/1365 不对齐会 422）。 */
 function imageDimensions(ratio?: string, size?: string) {
   const base = size === "2K" || size === "4K" ? 2048 : 1024;
   const [rw, rh] = (ratio ?? "1:1").split(":").map(Number);
   if (!rw || !rh) return { width: base, height: base };
-  const width = rw >= rh ? base : Math.round((base * rw) / rh);
-  const height = rw >= rh ? Math.round((base * rh) / rw) : base;
+  const align32 = (value: number) => Math.max(256, Math.floor(value / 32) * 32);
+  const width = rw >= rh ? base : align32((base * rw) / rh);
+  const height = rw >= rh ? align32((base * rh) / rw) : base;
   return {
     width: Math.min(2048, Math.max(256, width)),
     height: Math.min(2048, Math.max(256, height)),
@@ -246,7 +247,7 @@ export default {
 - Token 来自 FreeVideo 安装目录的 \`agent/token\` 文件（Comfy-Desktop 安装下在
 \`%LOCALAPPDATA%\\Comfy-Desktop\\ComfyUI-Installs\\comfyui\\ComfyUI\\FreeVideo-engine\\agent\\token\`）。
 - 视频：文生 / 首帧 / 首尾帧 / 参考图、视频、音频，原生带同步音轨；2-60 秒，768P / 2K。
-- 参考图最多 4 张为 Toonflow 侧限制；引擎单块默认支持到 9 张，30 秒及以上自动分块时实限 3 张（超限由引擎报错）。
+- 视频参考图单块最多 9 张（引擎能力，供应商侧不预拦）；≥30 秒自动分块与续接镜实限 3 张，超限由引擎报错。图像任务参考图引擎硬上限 4 张（超限 422 too_many_images，供应商同值拦截）。
 - ≥30 秒的片段自动分块时开启 first_frame_reference，减少跨块的取景与人物漂移；单段视频不受影响。
 - 提示词按 FreeVideo 约定拼装：有参考图时六段（subject_definitions → summary → retention_analysis → detailed_description → overall_soundscape → non_diegetic_music），无参考时三段；前四段的段首标签由写作者写，两个声音段的段名由多轨引擎补。
 - 生成中断（引擎重启、显存波动）时自动尝试续拍，最多 2 次，已生成部分保留；续拍仍失败会明确报错。
@@ -270,7 +271,9 @@ export default {
       type: "image",
       mode: ["text", "singleImage", "multiReference"],
       imageSizes: ["1K", "2K"],
-      imageRatios: ["1:1", "16:9", "9:16", "4:3", "3:4"],
+      // ACT: 2:3 是角色四视图整版（2×2 竖版）的标准档位，实测引擎接受 width/height 直给（832×1248 等）；
+      // 其余四档是历史基线。新增档位只影响 imageDimensions 推算，引擎侧上限仍是每边 2048。
+      imageRatios: ["1:1", "16:9", "9:16", "4:3", "3:4", "2:3"],
     },
   ] satisfies ProviderModel[],
   async getPrice() {
