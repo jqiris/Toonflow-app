@@ -341,6 +341,13 @@ export default {
     // ACT: quality / secondPass 默认沿用原固定值（quality 曾写死 "light"），宿主显式传入才覆盖。
     // 引擎口径（agent guide）：light = 8 首轮步 + 3 refine 步二次采样，medium 同构但首轮更大更细节，
     // high/max = 20 步单次采样——two_pass 只在 8 首轮步时生效，选 high/max 时二次采样开关不改变引擎行为。
+    // ACT: two_pass 是采样开关，必须嵌套在 sampling 对象里（sampling: { two_pass, base_steps?, refine_steps? }），
+    // 不能发在 spec 顶层——引擎顶层 additionalProperties: false，顶层 two_pass 会被拒为
+    // "<unknown> must be absent (unknown field); received True"（Pydantic v2 报错）。
+    // 早期探针成功是因为 runProbe.py 只发 quality: "light"、从不发 two_pass，靠引擎默认补两遍；
+    // videoJob.json 里顶层 two_pass 是引擎输出回显时展开的，不代表输入层。
+    // 引擎 guide：sampling.two_pass=false 且不带 base_steps 时跑 20 步单遍；two_pass=true 固定 8 首轮步。
+    // 质量档位 light/medium/high/max 由引擎据 quality 决定步数，这里不发 base_steps/refine_steps。
     const quality = request.quality ?? "light";
     const secondPass = request.secondPass ?? true;
     if (!["light", "medium", "high", "max"].includes(quality)) {
@@ -368,7 +375,7 @@ export default {
       prompt: request.prompt,
       seconds,
       quality,
-      two_pass: preview ? true : secondPass,
+      sampling: { two_pass: preview ? true : secondPass },
       preview,
       ...(request.ratio ? { aspect: request.ratio } : {}),
       ...(request.resolution ? { megapixels: megapixels(request.resolution) } : {}),
