@@ -11,7 +11,7 @@
           <el-button size="small" type="danger" :disabled="clipCount <= 1" @click="emit('remove')">删除</el-button>
           <el-button v-if="canUndo" size="small" text @click="emit('undoRemove')">撤销删除</el-button>
           <el-button size="small" :type="clip.status === 'accepted' ? 'success' : 'default'" :disabled="clip.status !== 'generated' && clip.status !== 'accepted'" @click="emit('accept', clip.status !== 'accepted')">{{ clip.status === "accepted" ? "取消验收" : "验收" }}</el-button>
-          <el-button size="small" :disabled="clip.status === 'generating'" @click="emit('regenerate')">重新生成本镜</el-button>
+          <el-button size="small" :disabled="clip.status === 'generating' || batchRunning || batchPaused" @click="emit('regenerate')">重新生成本镜</el-button>
           <el-button size="small" :disabled="!rewriteEligible" :loading="rewriteBusy" @click="emit('rewrite', rewriteRules)">整理本镜提示词</el-button>
         </div>
       </details>
@@ -54,7 +54,7 @@ import { firstFrameInstruction } from "../mediaDispatch";
 type RewriteBasis = { text: string; seconds: number; rules: string };
 type RewritePending = { clipId: string; text: string; basis: RewriteBasis };
 
-const props = defineProps<{ clip?: MtrackClip; index: number; clipCount: number; previousClipId?: string; previousClipJobId?: string; rewriteBusy?: boolean; rewritePending?: RewritePending; canUndo?: boolean; }>();
+const props = defineProps<{ clip?: MtrackClip; index: number; clipCount: number; previousClipId?: string; previousClipJobId?: string; rewriteBusy?: boolean; rewritePending?: RewritePending; canUndo?: boolean; batchRunning?: boolean; batchPaused?: boolean; }>();
 
 const emit = defineEmits<{ (e: "patch", patch: Partial<MtrackClip>): void; (e: "duplicate"): void; (e: "move", offset: number): void; (e: "remove"): void; (e: "accept", accepted: boolean): void; (e: "rewrite", rules: string): void; (e: "regenerate"): void; (e: "adoptRewrite", text: string): void; (e: "discardRewrite"): void; (e: "updateRewriteDraft", text: string): void; (e: "undoRemove"): void; }>();
 

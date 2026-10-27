@@ -94,6 +94,8 @@
               :rewriteBusy="rewriteBusy"
               :rewritePending="pendingRewrite"
               :canUndo="undoStack.length > 0"
+              :batchRunning="batchRunning"
+              :batchPaused="batchPaused"
               @patch="onPatch"
               @duplicate="duplicateClip"
               @move="moveClip"
@@ -1871,7 +1873,7 @@ async function startBatch(payload: { clips: string[]; includeFinished: boolean }
 
 /** footer「生成视频」：把「生成范围」的两个数字换算成镜单后走 startBatch 同一条链。 */
 function generateFromRange() {
-  if (dispatching.value || batchHandle.value) return;
+  if (dispatching.value || batchHandle.value) return ElMessage.warning("生成进行中，请先暂停或取消后再发起生成");
   if (!clips.value.length) return ElMessage.warning("工程里还没有镜头，请先添加镜头");
   void startBatch({ clips: rangeClips.value, includeFinished: includeFinished.value });
 }
@@ -1952,7 +1954,7 @@ async function panelRetry(payload: { clipId: string }) {
 /** UI 入口：重新生成本镜。LSC 对齐——已生成/已验收的镜也直接重跑，强制 includeFinished；
  *  每次重跑生成新版本（旧版本保留，历史版本列表可切回），新视频完成后成为该镜默认。 */
 async function regenerateClip() {
-  if (dispatching.value || batchHandle.value) return;
+  if (dispatching.value || batchHandle.value) return ElMessage.warning("生成进行中，请先暂停或取消后再重新生成本镜");
   const clip = selectedClip.value;
   if (!clip) return;
   const picked = pickDispatchTargets([clip.clipId], true);
