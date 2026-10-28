@@ -22,7 +22,7 @@
       <div v-if="previewUrl" class="outputRow">
         <div class="outputHeader nodrag nopan">
           <span class="outputLabel">成片</span>
-          <el-button size="small" text :icon="IconRefresh" :loading="loadingOutput" title="重新读取合成结果" aria-label="重新读取合成结果" @click.stop="refreshOutput">刷新</el-button>
+          <el-button size="small" text :icon="IconRefresh" :loading="loadingOutput" title="重新读取合成结果" aria-label="重新读取合成结果" @click.stop="refreshOutput(true)">刷新</el-button>
         </div>
         <videoPlayer :src="previewUrl" label="多轨成片" />
       </div>
@@ -220,11 +220,18 @@ function getFiles(): EditorFiles {
  * ACT: 输出 url 未变时必须保留原对象引用——useFileUrl 按 outputFile 的标识重跑，
  * 每次换新对象都会让预览重新 acquire/release 一次 blob，画布被标脏后 save 钩子又回到这里，
  * 形成「读清单 → 换对象 → 标脏 → 保存 → 再读」的自激循环（实测 66 次写盘/秒）。
- * ACT: onMounted、closeFullscreen 与画布 save 钩子可能并发触发，未合成时每次都要读一次
- * composite.json 并吃一个 404；只合并并发调用，不做缓存，保证成片落盘后立刻能被读到。
+ * ACT: onMounted、closeFullscreen 与画布 save 钩子可能并发触发；并发调用合并为一个请求，
+ * 未合成时的 404 另有短期负缓存，成片落盘后由 onCompositeDone 与 agent 工具以 force 立即读到。
  */
 let refreshOutputInFlight: Promise<void> | undefined;
-async function refreshOutput() {
+// ACT: 未合成态下 404 负缓存。画布 saveCanvasState 前后各 emit 一次 save，节点未合成时每次都要真读一次
+// composite.json 并吃 404（实测单次会话 70+ 条 404）；5 秒内最多真正读一次。
+// force 用于已知写入路径（onCompositeDone、agent 的 refreshOutput 工具、手动刷新按钮），绕过 TTL 直接读。
+// 并发去重仍生效：force 不会重复起请求，但可能拿到一个稍旧的并发结果——写入方随后即由 attachCompositeToCanvas 落盘。
+const compositeMissingTtl = 5000;
+let compositeMissingAt = -Infinity;
+async function refreshOutput(force = false) {
+  if (!force && performance.now() - compositeMissingAt < compositeMissingTtl) return;
   if (refreshOutputInFlight) return refreshOutputInFlight;
   const running = runRefreshOutput();
   refreshOutputInFlight = running;
@@ -239,6 +246,7 @@ async function runRefreshOutput() {
   loadingOutput.value = true;
   try {
     const manifest = await files.getWorkspaceFiles().readJson<{ executed?: boolean; output?: string }>(compositeManifestPath);
+    compositeMissingAt = -Infinity;
     const url = manifest?.executed && manifest.output ? manifest.output : "";
     const current = outputs.value.video;
     if (url && current?.dataType === "VIDEO" && current.value.url === url) return;
@@ -249,7 +257,10 @@ async function runRefreshOutput() {
     // ACT: 只有「清单确实不存在」(404) 才清空成片输出。瞬时失败（网络/权限/宿主未就绪）也清空的话，
     // 下一次 save 钩子刷新成功又会写回 url → 标脏 → 再保存，形成清空/恢复的抖动循环（历史上出现过 66 次写盘/秒）。
     const message = reason instanceof Error ? reason.message : String(reason);
-    if (/404|不存在|not found/i.test(message)) outputs.value.video = undefined;
+    if (/404|不存在|not found/i.test(message)) {
+      outputs.value.video = undefined;
+      compositeMissingAt = performance.now();
+    }
     else console.warn("[multitrackNode] 读取合成清单失败，保留原成片输出：", message);
   } finally {
     loadingOutput.value = false;
@@ -309,7 +320,7 @@ async function attachCompositeToCanvas(output: string) {
 }
 
 async function onCompositeDone(output: string) {
-  await refreshOutput();
+  await refreshOutput(true);
   await attachCompositeToCanvas(output);
 }
 
@@ -730,7 +741,7 @@ nodeTools.register({
   parameters: z.strictObject({}),
   async execute(_args, { signal }) {
     signal?.throwIfAborted();
-    await refreshOutput();
+    await refreshOutput(true);
     signal?.throwIfAborted();
     const video = outputs.value.video;
     return video?.dataType === "VIDEO" ? { hasOutput: true, url: video.value.url } : { hasOutput: false };

@@ -423,7 +423,7 @@ async function runGeneration(instruction: string) {
       );
       const directory = mediaReferences.some(item => item.dataType !== "STRING") ? (await workspaceFiles.list()).directory : undefined;
       if (disposed) return;
-      await ai.generate({
+      const reply = await ai.generate({
         references: mediaReferences,
         providerId: choice.providerId,
         modelId: choice.modelId,
@@ -434,7 +434,11 @@ async function runGeneration(instruction: string) {
         signal: controller.signal,
       });
       if (disposed) return;
-      if (!draft.edited) throw new Error("Agent 未修改方案，原方案未修改，请重试。");
+      if (!draft.edited) {
+        // ACT: 模型正常结束却没成功调 editDocument 时，带上它自己的说明；丢掉它只会留下一句通用文案，无从排查。
+        const note = reply.text.replace(/\s+/g, " ").trim().slice(0, 600);
+        throw new Error(note ? `Agent 未修改方案，原方案未修改，请重试。${note}` : "Agent 未修改方案，原方案未修改，请重试。");
+      }
       const result = draft.read();
       const nextScene = draft.sceneChanged ? result.scene : baseScene;
       const plan = { ...result.plan, id: task.id, instruction: requirement };
@@ -470,6 +474,12 @@ async function runGeneration(instruction: string) {
       if (!generationResults.has(task.id)) generationResults.set(task.id, { status: "failed", error: message });
     } finally {
       generationControllers.delete(task.id);
+      const result = generationResults.get(task.id);
+      if (result) {
+        window.dispatchEvent(new CustomEvent("toonflow:director3d-generation-done", {
+          detail: { taskId: task.id, ...result },
+        }));
+      }
     }
   })();
   return { taskId: task.id, status: "generating" as const, pending };
@@ -558,11 +568,11 @@ nodeTools.register({
 
 nodeTools.register({
   name: "generateScene",
-  description: "后台启动此导演台的 3D 场景搭建/修改与镜头动画生成：instruction 用自然语言描述场景、角色、动作与运镜；参考图/视频需先连到本节点 in 句柄并确认 getConfig.references 全部就绪，且模型支持视觉；立即返回 taskId 不等待完成——用 getGenerationStatus 轮询、cancelGeneration 取消；首次建场只接收一个请求，之后建议多轮小步修改；完成后用 getState 查看方案，再用 exportVideo/exportKeyframe 导出",
+  description: "启动此导演台的 3D 场景搭建/修改与镜头动画生成：instruction 用自然语言描述场景、角色、动作与运镜；参考图/视频需先连到本节点 in 句柄并确认 getConfig.references 全部就绪，且模型支持视觉；立即返回 { taskId, status: \"generating\" } 不等待完成——用 getGenerationStatus 轮询或监听 toonflow:director3d-generation-done 事件获取结果；首次建场只接收一个请求，之后建议多轮小步修改；完成后用 getState 查看方案，再用 exportVideo/exportKeyframe 导出",
   parameters: z.strictObject({ instruction: z.string().trim().min(1) }),
   execute({ instruction }, { signal }) {
     signal?.throwIfAborted();
-    return runGeneration(instruction).then(({ taskId, status }) => ({ taskId, status }));
+    return runGeneration(instruction).then(({ taskId }) => ({ taskId, status: "generating" as const }));
   },
 });
 

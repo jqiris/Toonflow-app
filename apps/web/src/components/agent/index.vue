@@ -359,6 +359,23 @@ function onMtrackBatchDone(event: Event) {
 }
 
 /**
+ * 导演台生成结束通知（director3dNode 派发的 window 事件）：让 agent 知道 3D 场景生成已完成或失败，
+ * 可以继续后续操作（导出关键帧/视频等）。与 mtrack-batch-done 同机制，只是粒度是单次生成任务。
+ */
+function onDirector3dGenerationDone(event: Event) {
+  const detail = (event as CustomEvent<{ taskId?: string; status?: "succeeded" | "failed"; error?: string }>).detail;
+  if (!detail) return;
+  const status = detail.status === "succeeded" ? "已完成" : "失败";
+  const errorPart = detail.error ? `，错误：${detail.error.slice(0, 200)}` : "";
+  const text = `（自动通知，非用户输入）导演台 3D 场景生成${status}${errorPart}。请核对结果并继续后续操作。`;
+  if (!deliverBatchNotice(text)) {
+    const taskId = detail.taskId || `director3d:${Date.now()}`;
+    if (!pendingBatchNotices.value.some(item => item.batchId === taskId)) pendingBatchNotices.value.push({ batchId: taskId, text, directory: workspaceStore.project?.directory });
+    visible.value = true;
+  }
+}
+
+/**
  * 从外部把指定会话切到前台（浮窗收起时点入口会走这里）。
  * 首屏的列表/详情请求正在飞时 selectConversation 会早退，所以最多等 1 秒再切；
  * 等不到（仍在加载）就放弃，不给调用方留一个挂起的 Promise。
@@ -382,10 +399,14 @@ watch([conversations, selectedConversation, pendingBatchNotices], flushBatchNoti
 
 defineExpose({ focusConversation });
 
-onMounted(() => window.addEventListener("toonflow:mtrack-batch-done", onMtrackBatchDone));
+onMounted(() => {
+  window.addEventListener("toonflow:mtrack-batch-done", onMtrackBatchDone);
+  window.addEventListener("toonflow:director3d-generation-done", onDirector3dGenerationDone);
+});
 onBeforeUnmount(() => {
   requestId++;
   window.removeEventListener("toonflow:mtrack-batch-done", onMtrackBatchDone);
+  window.removeEventListener("toonflow:director3d-generation-done", onDirector3dGenerationDone);
 });
 
 </script>

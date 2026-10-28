@@ -1,6 +1,6 @@
 import { z } from "@toonflow/nodes-scaffold/runtime";
 import { createJsonScene, registerObject, type SceneRuntime } from "threejson/core";
-import { AmbientLight, Box3, DirectionalLight, GridHelper, HemisphereLight, Mesh, PCFSoftShadowMap, PlaneGeometry, ShadowMaterial, Sphere, Vector3 } from "three";
+import { AmbientLight, Box3, DirectionalLight, GridHelper, HemisphereLight, Mesh, PlaneGeometry, ShadowMaterial, Sphere, Vector3 } from "three";
 import { Sky } from "three/examples/jsm/objects/Sky.js";
 import { createMannequin, mannequinJoints } from "./mannequin";
 
@@ -205,7 +205,7 @@ export async function createStage(canvas: HTMLCanvasElement, document: SceneDocu
     const { x, y, z } = document.sceneConfig.controls.target;
     next.camera.lookAt(x, y, z);
     next.camera.updateProjectionMatrix();
-    next.renderer.shadowMap.type = PCFSoftShadowMap;
+    // three 0.184 已移除 PCFSoftShadowMap，默认即 PCFShadowMap，无需显式设置。
     next.scene.traverse(object => {
       if (object instanceof Mesh) {
         object.castShadow = true;
