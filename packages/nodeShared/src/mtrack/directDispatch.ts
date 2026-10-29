@@ -131,11 +131,22 @@ export async function readClipGeneration(bridge: CanvasBridge, nodeId: string, s
 export type SourcePort = { id?: string; type?: string; dataType?: string | string[] };
 export type NodeDetail = { id: string; label?: string; type?: string; ports?: SourcePort[]; outputs?: Record<string, unknown> };
 
-/** 卡片 id 与画布 label 的边界匹配：`C01-A` 不能命中 `C01-B …`，`C01` 也不能命中 `C01-A …`。 */
+/**
+ * 卡片 id 与画布 label 的边界匹配：`C01-A` 不能命中 `C01-B …`，`C01` 也不能命中 `C01-A …`。
+ * `-` 有两种含义：是 id 的一部分（`C01-A` 的 `-A`），也可能是 id 与描述名的连接符（`C01-B-浮于侍`）。
+ * 当 `-` 后一位仍是字母数字（如 `C01` 对 `C01-A`）时是另一个 id，不匹配；
+ * 当 `-` 后一位是汉字等非字母数字（如 `C01-B` 对 `C01-B-浮于侍（聪马…`）时是描述，匹配。
+ */
 export function labelMatchesCard(label: string, cardId: string) {
   if (!label.startsWith(cardId)) return false;
   const next = label[cardId.length];
-  return next === undefined || !/[A-Za-z0-9-]/.test(next);
+  if (next === undefined) return true;
+  if (next === "-") {
+    // `-` 后一位是字母数字 → 属于另一个 id（C01 vs C01-A）；否则是 id 与描述名之间的连接符。
+    const after = label[cardId.length + 1];
+    return after === undefined || !/[A-Za-z0-9]/.test(after);
+  }
+  return !/[A-Za-z0-9-]/.test(next);
 }
 
 export function imagePathOf(node: NodeDetail) {
