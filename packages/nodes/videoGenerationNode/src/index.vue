@@ -405,7 +405,8 @@ async function startGeneration() {
     .then(([result]) => {
       controller.signal.throwIfAborted();
       if (!result) throw new Error("供应商未返回视频");
-      outputs.value.video = { dataType: "VIDEO", value: { url: result.path, mimeType: result.mimeType } };
+      // ACT: jobId 随产出留底（getGenerationStatus / getCanvasNodes 都能带出），多轨对账靠它补写 attempts。
+      outputs.value.video = { dataType: "VIDEO", value: { url: result.path, mimeType: result.mimeType, ...(result.jobId ? { jobId: result.jobId } : {}) } };
     }))
     .catch((error) => showNodeError(error, "视频生成失败"))
     .finally(() => {

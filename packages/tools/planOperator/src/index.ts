@@ -7,7 +7,7 @@ import { createStore, type PlanStore } from "./indexStore";
 import { planComposite, type SpecWarning } from "./composite";
 import { compositeManifestPath, concatComposite, defaultCompositeOutputPath } from "./compositeRun";
 import {
-  normalizeProject, isRecord, sliceClips, clipNumber,
+  normalizeProject, isRecord, sliceClips, clipNumber, mergeAttempts,
   defaultProjectPath, defaultAssetCardsPath, defaultIndexPath,
   type MtrackClip, type MtrackProject,
 } from "./mtrackProject";
@@ -104,15 +104,15 @@ const snapshotSchema = z.object({
 // ACT: 用 looseObject 而非 object，与读侧 clipAttemptSchema / ClipAttempt 同口径。
 // 编辑器与服务端媒体任务写进 attempts 的字段不止这四个：jobId（续接下一镜的唯一来源，
 // continuationJobId 只认 status==="succeeded" && attempt.jobId）、assetPath（clipVersions 的版本身份）、
-// signature / index（clipStates 的设置与时间线回显）、parentJobId（承接来源）。z.object 会静默剥掉
-// 未声明键，Agent 用 mtrackRead 结果整数组回写时就会丢这些字段，导致下一镜 continuity="context" 取不到任务号。
+// signature / index（clipStates 的设置与时间线回显）、parentJobId（承接来源）。
+// 合并语义下这些盘上键本来就不被覆盖，looseObject 保证 Agent 传进来的未声明键也不被 z 层剥掉。
 // 上限：looseObject 不再拒绝 attempts 内的未知键，marker 仍可被手改（见 planValidator V13 的已知上限）。
 const updateAttemptSchema = z.looseObject({
   at: z.string().describe("ISO 8601 时间戳"),
   nodeId: z.string().nullable(),
   status: z.string().describe("ClipStatus 取值或 \"cancelled\""),
   error: z.string().optional(),
-  jobId: z.string().trim().max(128).optional().describe("成功尝试的供应商任务号（FreeVideo 形如 j+12hex）；整数组回写时必须原样带上，否则该镜不能被下一镜承接"),
+  jobId: z.string().trim().max(128).optional().describe("成功尝试的供应商任务号（FreeVideo 形如 j+12hex）；合并回写时被同 at 的盘上记录保留，无需重复带"),
 });
 
 const clipUpdateSchema = z.object({
@@ -123,7 +123,9 @@ const clipUpdateSchema = z.object({
   status: z.enum(["pending", "generating", "generated", "failed"]).optional(),
   nodeId: z.string().nullable().optional(),
   assetPath: z.string().nullable().optional(),
-  attempts: z.array(updateAttemptSchema).optional().describe("整数组替换，不是追加合并；每项须保留 jobId 与 error 里的 batch:<uuid>/task:<id> 标记"),
+  // ACT: 合并语义（非整数组替换）：同 at 的盘上记录逐键合并，Agent 只传变更项即可；
+  // 盘上未命中的键（signature/index/parentJobId/assetPath 等）原样保全，续接链不再因漏传而断。
+  attempts: z.array(updateAttemptSchema).optional().describe("按 at 与盘上记录合并（upsert）：只需传本次变更/新增的尝试，盘上其余记录及其内部键自动保留；传新 at 即追加"),
 }).strict();
 
 const clipIdSchema = z.string().regex(/^S\d{3}$/).describe("分镜号，形如 S001（含端点）");
@@ -205,8 +207,8 @@ export const plugin: ToolPlugin = {
     const store = createStore(context.files);
 
     const description = allowBuild
-      ? "解析资产卡、结算参考接线，并对资产索引、多轨工程与画布快照执行 V1–V16 确定性校验（含 V16：承接上一镜的片段最多 3 张参考图、时长至少 10 秒）；validate error 清零后可写入派生文件 assetIndex.json、assetReport.json。另可读写多轨工程（mtrackRead/mtrackUpdate）、按起止分镜号出派工清单（dispatch）与画布装配计划（assemble）。composite 按 accepted 片段出合成清单（execute=true 成功后才写 plan/composite.json），并在此条件下经宿主 ffmpeg 拼接成片（不覆盖已有输出）。"
-      : "解析资产卡、结算参考接线，并对资产索引、多轨工程与画布快照执行 V1–V16 确定性校验（含 V16：承接上一镜的片段最多 3 张参考图、时长至少 10 秒；只读，不写入派生文件）。另可读取多轨工程（mtrackRead）、出派工清单（dispatch）与画布装配计划（assemble）；mtrackUpdate 受 allowBuild 限制，关闭时不可用。composite 同样需要 allowBuild。";
+      ? "解析资产卡、结算参考接线，并对资产索引、多轨工程与画布快照执行 V1–V16 确定性校验（含 V16：承接上一镜的片段最多 3 张参考图、时长至少 10 秒）；validate error 清零后可写入派生文件 assetIndex.json、assetReport.json。另可读写多轨工程（mtrackRead/mtrackUpdate），mtrackRead 逐镜返回 attempts（status 为 succeeded 的记录含供应商任务号 jobId，查续接来源就看这一条）、按起止分镜号出派工清单（dispatch）与画布装配计划（assemble）。composite 按 accepted 片段出合成清单（execute=true 成功后才写 plan/composite.json），并在此条件下经宿主 ffmpeg 拼接成片（不覆盖已有输出）。"
+      : "解析资产卡、结算参考接线，并对资产索引、多轨工程与画布快照执行 V1–V16 确定性校验（含 V16：承接上一镜的片段最多 3 张参考图、时长至少 10 秒；只读，不写入派生文件）。另可读取多轨工程（mtrackRead，逐镜返回 attempts，succeeded 记录里带供应商任务号 jobId，续接来源就查这一条）、出派工清单（dispatch）与画布装配计划（assemble）；mtrackUpdate 受 allowBuild 限制，关闭时不可用。composite 同样需要 allowBuild。";
 
     return [{
       name: "planOperator",
@@ -217,7 +219,7 @@ export const plugin: ToolPlugin = {
         "快照必须完整：getCanvasNodes 有分页与截断，total/truncated 不完整时工具直接报错，不拿半份快照出结论。",
         "状态查询纪律：node:getGenerationStatus 的 idle 只表示本次打开节点后未发起生成，idle 不表示没有历史输出；跨轮或换会话前必须先用 getCanvasNodes({ fields: [\"outputs\"] }) 读该节点已产出的媒体，不能用 idle 推断未生成。",
         "本工具只做解析、结算、校验、多轨回写与计划产出：dispatch 只返回逐镜派工清单、assemble 只返回画布装配计划，生成与画布落盘由 agent 走画布工具（addNodes/connectNodes）与 nodeTools 执行；工具自身不执行生成、不连接画布节点、不调用供应商。用户也可能在多轨界面/节点直接派工，此时生成由编辑器自己执行，不要重复生成。",
-        "mtrackUpdate 只回写 status/nodeId/assetPath/attempts 四个生成侧字段，seconds/prompt/referenceIds/continuity 等真源字段归多轨编辑器与对话所有，禁写；status 只接受 pending/generating/generated/failed，accepted 是用户在多轨界面点「验收」的人工判定，Agent 不得代写（磁盘上已有的 accepted 读盘时原样保留）；回写前先用 mtrackRead 的 updatedAt 作为 expectedUpdatedAt 做乐观并发。attempts 是整数组替换（多轨编辑器那边是追加）：传 attempts 时必须把每项原有的 jobId 一并带上，jobId 只由成功的那次尝试产生，丢了它该镜就无法被下一镜 continuity=\"context\" 承接（续接链会断在 mediaDispatch 的「上一镜没有可用的生成任务号」）；error 里以 batch:<uuid>/task:<id> 开头的标记同样要原样保留，V13 靠它识别服务端媒体通道的产物。",
+        "mtrackUpdate 只回写 status/nodeId/assetPath/attempts 四个生成侧字段，seconds/prompt/referenceIds/continuity 等真源字段归多轨编辑器与对话所有，禁写；status 只接受 pending/generating/generated/failed，accepted 是用户在多轨界面点「验收」的人工判定，Agent 不得代写（磁盘上已有的 accepted 读盘时原样保留）；回写前先用 mtrackRead 的 updatedAt 作为 expectedUpdatedAt 做乐观并发。attempts 按 at 与盘上记录合并（upsert），不是整数组替换：只需传本次变更或新增的尝试，盘上其余记录及其内部键（jobId/assetPath/signature/index/parentJobId、error 里的 batch:<uuid>/task:<id> 标记）自动原样保留，传一个盘上没有的新 at 即追加；jobId 只由成功的那次尝试产生，丢了它该镜就无法被下一镜 continuity=\"context\" 承接（续接链会断在 mediaDispatch 的「上一镜没有可用的生成任务号」），因此不要手动改写已有记录的 at 或尝试整体替换整条 attempts。",
         "composite 只拼接 status 为 accepted 的片段，按工程文件内顺序（即合成顺序）；没有 accepted 片段、V14 顺序不连续、assetPath 缺失或不可读、实测规格与首段不一致都会直接报错。默认只出清单、不落盘（预检不改动已有 plan/composite.json），execute=true 才真正调用宿主 ffmpeg 执行 concat，并在成功后写清单 executed:true；执行前先逐段 ffprobe 实测尺寸/帧率/像素格式/音轨参数，与首段不一致就挡在编码之前，声明 seconds 与实测时长差超过 1s 只记规格提示。输出文件已存在时报错，不自动重命名、不覆盖；输出目录必须已存在，本工具不创建目录。",
       ],
       parameters: z.toJSONSchema(requestSchema, { io: "input", target: "draft-07" }),
@@ -367,7 +369,9 @@ export const plugin: ToolPlugin = {
             if (patch.status !== undefined) target.status = patch.status;
             if (patch.nodeId !== undefined) target.nodeId = patch.nodeId;
             if (patch.assetPath !== undefined) target.assetPath = patch.assetPath;
-            if (patch.attempts !== undefined) target.attempts = patch.attempts;
+            // ACT: upsert 合并而不是整数组替换：agent 读不到 signature（读侧为控体积剥掉了它），
+            // 整替换会必然丢 signature、漏传一条就断续接链；合并让盘上未被命中的记录与其内部键原样保全。
+            if (patch.attempts !== undefined) target.attempts = mergeAttempts(target.attempts, patch.attempts);
             updated.push(patch.clipId);
           }
           const updatedAt = new Date().toISOString();

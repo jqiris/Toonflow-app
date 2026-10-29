@@ -52,6 +52,12 @@ function assetPathOf(status: GenerationStatus) {
   return video?.value?.url || "";
 }
 
+/** 节点产出里留底的供应商任务号（video.value.jobId）；旧节点产物没有该字段时为空。 */
+function jobIdOf(outputs: Record<string, unknown> | undefined) {
+  const video = outputs?.video as { value?: { jobId?: string } } | undefined;
+  return typeof video?.value?.jobId === "string" ? video.value.jobId : "";
+}
+
 /** 从节点 outputs 里取视频路径：getCanvasNodes 与 getGenerationStatus 两条来源的字段形状一致。 */
 function videoPathOf(outputs: Record<string, unknown> | undefined) {
   const video = outputs?.video as { value?: { url?: string } } | undefined;
@@ -100,7 +106,7 @@ async function readNodeOutputs(bridge: CanvasBridge, nodeId: string, signal: Abo
  * 不可用等）→ 抛错让对账整轮跳过。把查不出来写成 failed 会误伤一个其实还在跑的镜头。
  */
 export async function readClipGeneration(bridge: CanvasBridge, nodeId: string, signal?: AbortSignal): Promise<
-  { outcome: "succeeded" | "failed" | "pending" | "idle"; assetPath: string; error: string }
+  { outcome: "succeeded" | "failed" | "pending" | "idle"; assetPath: string; error: string; jobId: string }
 > {
   const useSignal = signal ?? new AbortController().signal;
   let status: GenerationStatus;
@@ -112,20 +118,20 @@ export async function readClipGeneration(bridge: CanvasBridge, nodeId: string, s
     // 不在才判 failed，还在就照旧抛错让对账整轮跳过，绝不把在跑的镜头误标失败。
     const detail = await readNodeDetail(requireCall(bridge), nodeId, useSignal);
     if (detail) throw error;
-    return { outcome: "failed", assetPath: "", error: "画布上的视频节点已不存在，该镜需要重新生成" };
+    return { outcome: "failed", assetPath: "", error: "画布上的视频节点已不存在，该镜需要重新生成", jobId: "" };
   }
-  if (status?.status === "succeeded") return { outcome: "succeeded", assetPath: assetPathOf(status), error: "" };
-  if (status?.status === "failed") return { outcome: "failed", assetPath: "", error: status.error || "视频生成失败" };
+  if (status?.status === "succeeded") return { outcome: "succeeded", assetPath: assetPathOf(status), error: "", jobId: jobIdOf(status.outputs) };
+  if (status?.status === "failed") return { outcome: "failed", assetPath: "", error: status.error || "视频生成失败", jobId: "" };
   // running：节点正在跑，等下一轮对账，不动状态。
-  if (status?.status === "running") return { outcome: "idle", assetPath: "", error: "" };
+  if (status?.status === "running") return { outcome: "idle", assetPath: "", error: "", jobId: "" };
   // ACT: idle 只说明「本次打开节点后没跑过生成」，本身不能反推任务失联（刚 onStart 还没 generateVideo
   // 的镜头也是 idle）。所以再看一眼节点产物：真·进程重启后节点上的任务没了但产物可能还在——
   // 有产物就补成 generated，一点产物都没有才回退 pending 让用户能重新派工（绝不能标 failed）。
   const outputs = await readNodeOutputs(bridge, nodeId, useSignal);
   const assetPath = videoPathOf(outputs);
-  if (assetPath) return { outcome: "succeeded", assetPath, error: "" };
-  if (!outputs) return { outcome: "failed", assetPath: "", error: "画布上的视频节点已不存在，该镜需要重新生成" };
-  return { outcome: "pending", assetPath: "", error: "重启后未在节点上找到生成产物，已退回待生成" };
+  if (assetPath) return { outcome: "succeeded", assetPath, error: "", jobId: jobIdOf(outputs) };
+  if (!outputs) return { outcome: "failed", assetPath: "", error: "画布上的视频节点已不存在，该镜需要重新生成", jobId: "" };
+  return { outcome: "pending", assetPath: "", error: "重启后未在节点上找到生成产物，已退回待生成", jobId: "" };
 }
 
 export type SourcePort = { id?: string; type?: string; dataType?: string | string[] };

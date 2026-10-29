@@ -44,7 +44,9 @@ const plugin: ToolPlugin = {
         const text = result.map(asset => {
           const url = asset.path.replaceAll("\\", "/").split("/").map(encodeURIComponent).join("/");
           const preview = asset.mediaType === "image" ? `![生成图片](<${url}>)` : `[${asset.mediaType === "audio" ? "播放生成音频" : "查看生成视频"}](<${url}>)`;
-          return `${preview}\n工作区文件：${asset.path}`;
+          // ACT: jobId 必须进文本通道——只放 details 时 agent 看不见（同 planOperator 审计 F1），
+          // 直生分镜就无法把任务号回写进 attempts，下一镜 continuity="context" 断链。
+          return `${preview}\n工作区文件：${asset.path}${asset.jobId ? `\n任务号（jobId，续接/回写用）：${asset.jobId}` : ""}`;
         }).join("\n\n");
         return { content: [{ type: "text", text }], details: result };
       },

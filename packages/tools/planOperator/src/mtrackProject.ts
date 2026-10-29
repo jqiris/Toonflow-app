@@ -22,6 +22,18 @@ export interface MtrackClipAttempt {
   nodeId: string | null;
   status: string;
   error?: string;
+  /** 供应商任务号（续接链唯一来源）；读侧必须透传，否则 agent 查不到 jobId、回写也带不回。 */
+  jobId?: string;
+  /** 本次尝试产出的视频路径（历史版本身份）。 */
+  assetPath?: string;
+  /**
+   * 生成时的设置签名（编辑器 clipStates 口径）。读侧**不产出**：它是整镜提示词的摘要、
+   * context 镜还链上一镜（单条实测 ~8KB），进 mtrackRead 文本会让一次范围读膨胀 2 倍以上。
+   * 保它靠 mtrackUpdate 的 upsert 合并（未传键保留盘上原值），不靠 agent 带回。
+   */
+  signature?: string;
+  index?: number;
+  parentJobId?: string;
 }
 
 export interface MtrackClip {
@@ -101,12 +113,46 @@ function readPrompt(value: unknown): MtrackClipPrompt {
 }
 
 function readAttempts(value: unknown): MtrackClipAttempt[] {
+  // ACT: 透传 jobId/assetPath/index/parentJobId（nodeShared ClipAttempt 的读侧子集）——
+  // 剥掉 jobId 会让 mtrackRead 读回来看不见任务号，agent 既查不到也无法回写，续接链断。
+  // signature 刻意**不透传**：它是整镜提示词摘要、context 镜链上一镜（单条实测 ~8KB），
+  // 进文本会让一次范围读膨胀 2 倍以上；它的保全由 mtrackUpdate 的 upsert 合并负责（见 mergeAttempts）。
   return Array.isArray(value) ? value.filter(isRecord).map(item => ({
     at: readString(item.at),
     nodeId: typeof item.nodeId === "string" ? item.nodeId : null,
     status: readString(item.status),
     ...(typeof item.error === "string" ? { error: item.error } : {}),
+    ...(typeof item.jobId === "string" ? { jobId: item.jobId } : {}),
+    ...(typeof item.assetPath === "string" ? { assetPath: item.assetPath } : {}),
+    ...(typeof item.index === "number" ? { index: item.index } : {}),
+    ...(typeof item.parentJobId === "string" ? { parentJobId: item.parentJobId } : {}),
   })) : [];
+}
+
+/**
+ * attempts 的 upsert 合并（mtrackUpdate 用，磁盘原始对象口径，不经归一）：
+ * 传入记录按 `at` 与盘上未消费记录对齐——命中则 `{...盘上, ...传入}` 合并（盘上有、传入没有的
+ * 内部键如 signature 原样保留；传入显式给的键覆盖盘上值），未命中视为新尝试追加到末尾。
+ * 盘上未被任何传入记录命中的记录一律保留：**本通道不再支持删除尝试记录**，
+ * 删版本是编辑器 clipVersions 的活；agent 整数组回写时最坏是多出一条重复，不会误删续接链。
+ * ACT: 旧语义是整数组替换，agent 看不见 signature 就必然丢 signature（stale 判定失效）、
+ * 漏传一条 jobId 就断链；合并语义把"带不回的键"从 agent 责任里移除。
+ * 上限：同 `at` 的盘上记录只会被消费一次（重复时间戳时第二条按新记录追加）；`at` 为空的传入记录不参与匹配、直接追加。
+ */
+export function mergeAttempts(diskValue: unknown, incoming: Record<string, unknown>[]): Record<string, unknown>[] {
+  const disk = (Array.isArray(diskValue) ? diskValue.filter(isRecord) : []).map(item => ({ ...item }));
+  const consumed = new Set<number>();
+  for (const patch of incoming) {
+    const at = typeof patch.at === "string" ? patch.at : "";
+    const index = at ? disk.findIndex((item, position) => !consumed.has(position) && item.at === at) : -1;
+    if (index >= 0) {
+      consumed.add(index);
+      disk[index] = { ...disk[index], ...patch };
+    } else {
+      disk.push({ ...patch });
+    }
+  }
+  return disk;
 }
 
 /** 读容错：真实编辑器写出的工程缺字段也能读，缺字段按默认值补齐，未知字段不参与归一。 */

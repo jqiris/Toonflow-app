@@ -30,7 +30,8 @@ export type NodeImageRequest = {
 };
 export type NodeImageResult = { path: string; mimeType: string; mediaType: "image" };
 export type NodeVideoRequest = Omit<MediaGenerationRequest, "size"> & { directory: string; outputDirectory: string };
-export type NodeVideoResult = { path: string; mimeType: string; mediaType: "video" };
+// ACT: jobId 是供应商任务号（FreeVideo 形如 j+12hex），续接下一镜的唯一来源；服务端通道响应里本来就带，节点侧不得再剥掉。
+export type NodeVideoResult = { path: string; mimeType: string; mediaType: "video"; jobId?: string };
 export type NodeMediaPriceRequest = (NodeImageRequest & { mediaType: "image" }) | (NodeVideoRequest & { mediaType: "video" }) | (NodeAudioRequest & { mediaType: "audio" });
 export type NodeMediaPrice = { price: string; tips: string };
 export type NodeAudioRequest = Pick<MediaGenerationRequest, "providerId" | "modelId" | "prompt" | "images" | "audios" | "voice" | "speed" | "volume" | "pitch" | "language" | "format" | "sampleRate"> & { directory: string; outputDirectory: string };
@@ -375,7 +376,7 @@ export function useNodeAi() {
     } finally {
       waitingSignal.removeEventListener("abort", abort);
     }
-    return await mediaTasks.wait(input.directory, taskId, waitingSignal) as { path: string; mimeType: string; mediaType: T }[];
+    return await mediaTasks.wait(input.directory, taskId, waitingSignal) as { path: string; mimeType: string; mediaType: T; jobId?: string }[];
   }
 
   function generateImage(input: NodeImageRequest, signal?: AbortSignal) {

@@ -1,4 +1,6 @@
-export type NodeMediaValue = { url: string; mimeType: string };
+// ACT: jobId 是供应商任务号（FreeVideo 形如 j+12hex），随视频产出留底：
+// 多轨对账与 agent 查历史节点生成结果时靠它补写 attempts，续接链才不断。
+export type NodeMediaValue = { url: string; mimeType: string; jobId?: string };
 
 export type NodeValueMap = {
   STRING: string;

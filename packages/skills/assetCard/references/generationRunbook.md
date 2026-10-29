@@ -135,7 +135,7 @@
 **续接的五条硬规则**（写提示词与派工前必须核对）：
 
 1. **首镜必须 `shot`**——没有上一镜可承接，`context` 会被校验器直接拒绝（V11）。
-2. **上一镜必须有可用的供应商任务号**（`attempts` 里 `status: "succeeded"` 且带 `jobId` 的那条）。没有就报错，**绝不静默降级成独立起镜**——那会让「承接」变成假承接。
+2. **上一镜必须有可用的供应商任务号**（`attempts` 里 `status: "succeeded"` 且带 `jobId` 的那条；多版本时取与该镜**当前默认版本同键**的那条，见 §15.9·5）。没有就报错，**绝不静默降级成独立起镜**——那会让「承接」变成假承接。
 3. **参考素材照常生效，但合计最多 3 个**（图片/视频/音频同口径，`mediaDispatch.ts:209` 按 `references` 总数判，不只数图片）：`continue_from` 与 `first`/`last` 互斥，`references` 是续接时官方唯一允许的媒体。所以「续接 + 多参考图」要并存，续接只能走 `continue_from`，不能塞首帧图。
 4. **续接段时长至少 10 秒**：引擎原文 `Each continued part must be at least 10 seconds`，可用时长 10 s / 11 s 起；独立镜头 2 秒即可，续接镜不行。
 5. **续接任务必须是 two-pass**：`quality: light` 或 `medium`（供应商默认 `light`；`quality` 与 `secondPass` 已是可透传的请求参数，默认即 light + 开启二次采样），`preview` 必须为 `false`——预览只支持单个 30 秒以内分块，续接任务开启预览会被供应商拒绝。
@@ -302,7 +302,7 @@ planOperator { action: "dispatch", path: "plan/story.mtrack", from: "S003", to: 
 
 | 步 | 动作 | 关键参数 / 期望 |
 |---|---|---|
-| a | `mtrackUpdate` 先占位 | `{ action: "mtrackUpdate", expectedUpdatedAt: <13.1 的 updatedAt>, updates: [{ clipId, status: "generating", nodeId: <复用或新建>, attempts: [<原有全部 attempts>, { at: <ISO>, nodeId, status: "generating", error: "batch:<批次号>" }] }] }`。**`attempts` 是整数组替换**（`packages/tools/planOperator/src/index.ts:107`），必须把读到的旧记录一起带上，否则历史被抹掉 |
+| a | `mtrackUpdate` 先占位 | `{ action: "mtrackUpdate", expectedUpdatedAt: <13.1 的 updatedAt>, updates: [{ clipId, status: "generating", nodeId: <复用或新建>, attempts: [{ at: <ISO>, nodeId, status: "generating", error: "batch:<批次号>" }] }] }`。**`attempts` 按 `at` 与盘上记录合并（upsert，非整数组替换）**（`packages/tools/planOperator/src/index.ts:128`）：只需传本次新增的尝试，盘上其余记录及其内部键自动原样保留，传一个盘上没有的新 `at` 即追加 |
 | b | 建节点（`currentState.nodeId` 为空时） | 画布 `addNode`，`type` 取 `getCanvas({ include: ["nodeTypes"] })` 里真实存在的类型（真实类型带 `remote-` 前缀，见 `apps/web/src/pages/workspace/panels/canvas/canvasDrop.ts:106`）；`label` 用 `场<场景号>·片段<片段号>·视频`。**已有 `nodeId` 的重生成复用该节点，跳过本步** |
 | c | 接线 | `connectNodes`，按 `referencePlan` 顺序把资产节点 → 视频节点 `in` 端口；单批上限 64 条（`packages/tools/canvas/src/runtime.ts:61`） |
 | d | 核对参考顺序 | `nodeTools` `node:getReferenceOrder`（`packages/nodeShared/src/useNodeReferences.ts:52`）；不一致用 `node:setReferenceOrder`（`packages/nodeShared/src/useNodeReferences.ts:67`）按 `referencePlan` 顺序重写。节点端口上的参考顺序由 `referenceOrder` 决定，不看连线手势；**但落到具体镜头的官方参考标记位次以 `clip.referenceIds` 为准**——编辑器「参考素材」勾选直接写它（文档下方「把资产图接进多轨」），勾选路径不要拿 `setReferenceOrder` 去模拟 |
@@ -360,7 +360,7 @@ planOperator { action: "mtrackRead", path: "plan/story.mtrack" }   // 读全量�
 要点：
 
 1. `clip.status` **只能**取 `pending`/`generating`/`generated`/`accepted`/`failed` 五值之一（读盘口径；`packages/nodeShared/src/mtrack/mtrackProject.ts` 的 `ClipStatus`）。但**写入路径只收四态**——`planOperator` `mtrackUpdate` 的 `clipUpdateSchema.status`（`packages/tools/planOperator/src/index.ts:104`）与 `node:editProject` 的 `clipPatchSchema.status` 都不含 `accepted`：验收是用户点「验收」的人工判定，Agent 代写会被 zod 校验直接拒。`"cancelled"` 不是 `ClipStatus`，只允许出现在 `attempts[].status`（那里是自由字符串，`packages/tools/planOperator/src/index.ts:95`）。
-2. `attempts` 整数组替换：先 `mtrackRead` 拿旧数组，再追加，一次 `mtrackUpdate` 写回。
+2. `attempts` 按 `at` upsert 合并（非整数组替换）：只需传本次变更/新增的尝试，盘上其余记录及其内部键（jobId/assetPath/signature/index/parentJobId、`error` 里的 `batch:<uuid>`/`task:<id>` 标记）自动原样保留；传一个盘上没有的新 `at` 即追加。不要手动改写已有记录的 `at`，也不要靠传空数组清空历史（删版本是编辑器 `clipVersions` 的活）。
 3. 一次 `updates` 最多 500 条（`packages/tools/planOperator/src/index.ts:138`），超了分批。
 4. 冲突重试：`mtrackUpdate 冲突：多轨工程已被其他操作修改（expected <a>，实际 <b>），请重新读取后重派`（`packages/tools/planOperator/src/index.ts:308`）→ 重新 `mtrackRead` 再派，不硬覆盖。
 
@@ -554,7 +554,7 @@ success data: { text: string, requiresReview: true }   // :107
 | `clip.nodeId` | 新通道不建画布节点，`writeClipRun` 把 `nodeId` 写成 `null`（旧工程里画布节点版次的 nodeId 仍保留在历史 attempts 里） | 「设为默认/预览反查」只有这条条目没有 `assetPath` 时，才拿它走画布桥 |
 | 版本身份 | `attempt.assetPath`（本次尝试的产物路径），旧工程的 attempt 只有 nodeId 时回退用 `nodeId` | 对齐 LSC 的 `resultVersions`（按 `file.url` 去重）；`writeClipRun` 在 `attempt.status === "succeeded"` 且本次 patch 带 `assetPath` 时自动把产物路径写进这条 attempt，调用点无需再传字段 |
 | 版本列表 | `mtrackProject.ts` 的 `clipVersions(clip)` 返回 `ClipVersion[]`：`attempts` 里 `succeeded` 的记录按 `key = attempt.assetPath || attempt.nodeId` 去重、旧→新；末尾若 `clip.assetPath` 不在列表里则补一条 | 媒体任务通道的新版次也在列表里（这是本次修复的核心）；每条 attempt 仍留痕（`error` 带 `batch:<uuid> task:<taskId>` 与 `jobId`） |
-| 版本签名簿记 | 成功那条 attempt 还写 `signature` / `index` / `parentJobId` 三个字段（`writeClipRun` 在 `attempt.status === "succeeded"` 分支写：`signature = clipStates(current)[clipId]?.signature ?? ""`、`index = clipIndex`、`parentJobId = continuationJobId(current.clips[clipIndex - 1])`，`continuationJobId(clip)` = 上一镜最后一条带 `jobId` 的 `succeeded` attempt 的 `jobId`） | 记录的是**落盘那一刻**的参数签名、时间线位置与续接来源，供 §15.9·5 的 stale 判定逐字段比对 |
+| 版本签名簿记 | 成功那条 attempt 还写 `signature` / `index` / `parentJobId` 三个字段（`writeClipRun` 在 `attempt.status === "succeeded"` 分支写：`signature = clipStates(current)[clipId]?.signature ?? ""`、`index = clipIndex`、`parentJobId = continuationJobId(current.clips[clipIndex - 1])`；`continuationJobId(clip)` **优先取与该镜当前默认版本**（`clip.assetPath || clip.nodeId`）**同键的那条 `succeeded` attempt 的 `jobId`**，没有同键记录时才回退最后一条带 `jobId` 的 `succeeded`；同键记录在但没留 `jobId` 时返回空串、不拿别的版本顶替） | 记录的是**落盘那一刻**的参数签名、时间线位置与续接来源，供 §15.9·5 的 stale 判定逐字段比对 |
 
 - 生成成功时 `multitrackEditor.vue` 的 `writeClipRun` 把 `status` 写成 `generated`、`assetPath` 换成新产物，并追加一条 `succeeded` 的 `attempts`（带 `jobId`——下一镜 `context` 续接靠它；带 `assetPath`——版本身份；带 `signature`/`index`/`parentJobId`——版本签名簿记）。**新产物自动成为该镜默认**，不需要额外确认。
 - 旧版「为每镜在画布上新建视频节点」的 `directDispatch.ts` `ensureNode`/`findClipNodeId` 已退出界面链路（编辑器不再调它），仅作为旧工程节点版次的历史背景存在。
@@ -613,8 +613,8 @@ success data: { text: string, requiresReview: true }   // :107
 **7. Agent 侧口径**：
 
 - 版本台账读 `planOperator mtrackRead` / `node:readClips` 的 `attempts`（`succeeded` 记录即历次版本，按 `assetPath` 去重；旧工程的尝试只有 nodeId 时回退按 nodeId），不必去画布上找节点名。
-- 代切默认版本：`node:editProject` 的 `patch` 里 `nodeId`/`assetPath` 是**普通可写字段**，不属于 `accepted` 那种人工判定，agent 可以先 `readClips` 取某条 `succeeded` 记录的 `assetPath`（媒体任务通道的版本就是它；旧画布节点版次没有 `assetPath` 时才取该节点 `outputs.video.value.url`），再把 `nodeId`/`assetPath` 一起 patch 回去，与工程同一口径。只写其中一个会留下 `nodeId` 与 `assetPath` 不是同一版本的不一致工程。`planOperator mtrackUpdate` 同样收 `nodeId`/`assetPath`，但它的 `attempts` 是**整数组替换**（`packages/tools/planOperator/src/index.ts:107`）——切版本时别带 `attempts`，否则会把历史版本列表整条覆盖掉。
-- **agent 不做删除版本**：`deleteClipVersion` / `deleteAllClipVersions` 是编辑器内的纯函数，`node:editProject` / `mtrackUpdate` 都没有「删一个版本」的 op——agent 要清版本只能整条替换 `attempts` 数组（会连带丢掉该版本记录的结构信息，且不删磁盘文件），不建议这么做。删除是用户在界面里的手动动作。
+- 代切默认版本：`node:editProject` 的 `patch` 里 `nodeId`/`assetPath` 是**普通可写字段**，不属于 `accepted` 那种人工判定，agent 可以先 `readClips` 取某条 `succeeded` 记录的 `assetPath`（媒体任务通道的版本就是它；旧画布节点版次没有 `assetPath` 时才取该节点 `outputs.video.value.url`），再把 `nodeId`/`assetPath` 一起 patch 回去，与工程同一口径。只写其中一个会留下 `nodeId` 与 `assetPath` 不是同一版本的不一致工程。`planOperator mtrackUpdate` 同样收 `nodeId`/`assetPath`，但它的 `attempts` 是**按 `at` upsert 合并**（`packages/tools/planOperator/src/index.ts:128`）——切版本时**不需要也不应该**带 `attempts`，带 `attempts` 只会追加、不会覆盖历史版本列表。
+- **agent 不做删除版本**：`deleteClipVersion` / `deleteAllClipVersions` 是编辑器内的纯函数，`node:editProject` / `mtrackUpdate` 都没有「删一个版本」的 op——`attempts` 现在是 upsert 合并、只增不减，agent 侧**根本清不掉版本**（既不能整条替换，也不删磁盘文件）。删除是用户在界面里的手动动作。
 - **`stale` 是派生值，不落盘**：`ClipState` 由 `clipStates(project)` 实时算出，`attempts` 里存的只是落盘那一刻的 `signature`/`index`/`parentJobId` 三个簿记字段，工程 schema 不新增「stale」字段。
 - 合成仍只认 `accepted`：`patch` 改得动「默认是哪一版」，改不动「哪条镜进成片」。
 - agent 自己按 §十三 逐镜编排时按 §一 步 1.5 复用 `clip.nodeId`（不新建节点），界面「重新生成本镜/重派」入口则是媒体任务通道的新产物追加——两条路径的台账都写进同一份 `attempts`。

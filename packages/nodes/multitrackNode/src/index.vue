@@ -447,7 +447,7 @@ nodeTools.register({
 
 nodeTools.register({
   name: "readClips",
-  description: "读取此节点的分镜片段：from/to 为分镜号（含端点），可省 = 全量。读前已磁盘对账，返回 { clips, updatedAt, missing, conflict }；updatedAt 即后续 planOperator mtrackUpdate 与保存链的 CAS 基线；conflict=true 表示磁盘已被其他操作改过且本节点有未保存修改，此时返回的是内存版本，需先 saveProject 或 reloadProject(discard) 再继续",
+  description: "读取此节点的分镜片段：from/to 为分镜号（含端点），可省 = 全量。读前已磁盘对账，返回 { clips, updatedAt, missing, conflict }；clips[].attempts 逐条原样返回，succeeded 记录里带 jobId（供应商任务号，下一镜承接的续接来源就查这一条）；updatedAt 即后续 planOperator mtrackUpdate 与保存链的 CAS 基线；conflict=true 表示磁盘已被其他操作改过且本节点有未保存修改，此时返回的是内存版本，需先 saveProject 或 reloadProject(discard) 再继续",
   parameters: z.strictObject({ from: clipIdSchema.optional(), to: clipIdSchema.optional() }),
   execute({ from, to }, { signal }) {
     signal?.throwIfAborted();

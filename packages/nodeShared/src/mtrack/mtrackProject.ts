@@ -89,9 +89,18 @@ export interface ClipVersion {
   assetPath: string | null;
 }
 
-/** 该镜可用于续接的任务号：取最后一次成功尝试的记录，没有则空串。 */
+/**
+ * 该镜可用于续接的任务号：优先取当前默认版本那条成功记录（承接的来源是成片里那一版），没有本版本
+ * 记录时才回退最后一次成功尝试（旧工程只有 nodeId 记录时靠它）。本版本记录在但没留 jobId，说明任务号
+ * 未知，直接返回空串让派工报错——不能拿别的版本的任务号顶上，那会静默承接错片子。
+ */
 export function continuationJobId(clip: MtrackClip | undefined): string {
   if (!clip) return "";
+  const key = clip.assetPath || clip.nodeId || "";
+  if (key) {
+    const own = clip.attempts.findLast(attempt => attempt.status === "succeeded" && (attempt.assetPath || attempt.nodeId || "") === key);
+    if (own) return own.jobId ?? "";
+  }
   return clip.attempts.findLast(attempt => attempt.status === "succeeded" && attempt.jobId)?.jobId ?? "";
 }
 

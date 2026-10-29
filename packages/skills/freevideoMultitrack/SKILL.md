@@ -44,7 +44,7 @@ description: 把分镜稿与资产稿接成多轨工程、逐镜生成并合成�
 | `validate` | 只读校验 V1–V16（实际实现 V1/V2/V4/V7/V8/V9/V11–V16，V3/V5/V6/V10 未实现），返回 findings（error 清零才允许下一步） | `mtrackPath`、`snapshot` |
 | `build` | 校验通过后写 `plan/assetIndex.json` + `plan/assetReport.json` | `assetCardsPath`、`mtrackPath`、`snapshot` |
 | `mtrackRead` | 范围读工程（含端点），返回 `global` + `clips` + `missing` | `path`、`from`、`to` |
-| `mtrackUpdate` | 只回写 `status`/`nodeId`/`assetPath`/`attempts` 四字段，带 `expectedUpdatedAt` CAS | `updates[]`（`attempts` 整数组替换） |
+| `mtrackUpdate` | 只回写 `status`/`nodeId`/`assetPath`/`attempts` 四字段，带 `expectedUpdatedAt` CAS | `updates[]`（`attempts` 按 `at` upsert 合并） |
 | `dispatch` | 只出逐镜派工清单，不执行生成 | 必填 `from` + `to` |
 | `assemble` | 按 `assetIndex` 批量建资产节点、镜头节点与连线 | `from`/`to` 可省 |
 | `composite` | 只取 accepted 段出合成清单 `plan/composite.json`，`execute=true` 才调 ffmpeg | `execute` |
@@ -278,7 +278,7 @@ description: 把分镜稿与资产稿接成多轨工程、逐镜生成并合成�
 - 上一镜失败时，下一镜的 `context` 会报「上一镜没有可用的生成任务号」并跳过——这是串行的必然结果；修好上一镜后用 `node:resumeBatch` 续跑该镜（沿用同一 `batchId`）。
 - 不要为了「批量就不能续接」把承接镜改成 `shot`，也不要为了续接把独立镜改成 `context`。
 
-回写只用 `planOperator mtrackUpdate`：`updates: [{ clipId, status, nodeId, assetPath, attempts: [...] }]`，并带 `expectedUpdatedAt` 防并发覆盖；`attempts` 是**整数组替换**，不是追加。
+回写只用 `planOperator mtrackUpdate`：`updates: [{ clipId, status, nodeId, assetPath, attempts: [...] }]`，并带 `expectedUpdatedAt` 防并发覆盖；`attempts` 按 `at` 与盘上记录 **upsert 合并**（不是整数组替换）——只需传本次变更/新增的尝试，盘上其余记录及其内部键（jobId/assetPath/signature/index/parentJobId）自动原样保留，传一个盘上没有的新 `at` 即追加。
 
 续接规则：本镜 `continuity=context` 时，上一镜必须已成功且 `attempts` 里有 `jobId`，否则报错：
 

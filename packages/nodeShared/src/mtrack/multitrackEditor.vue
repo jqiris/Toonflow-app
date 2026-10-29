@@ -1043,11 +1043,9 @@ async function setDefaultVersion(version: string) {
   // 产物路径，也要补：clipVersions 会按 nodeId 兜底补出当前版本，漏记的话同一枚版本只会换一副面孔。
   const currentKey = clip.assetPath || clip.nodeId || "";
   if (currentKey && !clip.attempts.some(attempt => attempt.status === "succeeded" && (attempt.assetPath || attempt.nodeId || "") === currentKey)) {
-    writeClipRun(clip.clipId, { assetPath: clip.assetPath }, {
-      nodeId: clip.nodeId ?? "",
-      status: "succeeded",
-      jobId: clip.attempts.findLast(attempt => attempt.status === "succeeded" && attempt.jobId)?.jobId ?? "",
-    });
+    // 只补版本身份，不补 jobId：这一版的供应商任务号本来就没落过盘，拿最后一次成功尝试的任务号顶上
+    // 会让下一镜的 context 承接错片子（continuationJobId 现在优先认本版本记录），宁可派工时明确报错。
+    writeClipRun(clip.clipId, { assetPath: clip.assetPath }, { nodeId: clip.nodeId ?? "", status: "succeeded" });
   }
   onPatch({ nodeId, assetPath: path });
   ElMessage.success(`已切换默认版本：${path.split("/").pop() || version}`);
@@ -1700,9 +1698,7 @@ async function launchDispatch(clipIds?: string[], options?: { includeFinished?: 
               return index > 0 ? clips.value[index - 1] : undefined;
             })(),
             // 任务号只存在于「成功」的那次尝试里；拿不到就让 composeClipRequest 报错，不静默降级。
-            resolveContinueFrom: previous => ({
-              jobId: previous.attempts.findLast(attempt => attempt.status === "succeeded" && attempt.jobId)?.jobId ?? "",
-            }),
+            resolveContinueFrom: previous => ({ jobId: continuationJobId(previous) }),
           });
           writeClipRun(clip.clipId, { status: "generating", nodeId: null }, { nodeId: "", status: "generating", error: `${marker} task:${taskId}` });
           // ACT: 先登记再提交——提交途中点取消才能取消到这个任务，否则服务端会白跑到超时（审计 P2-2）。
@@ -2109,7 +2105,8 @@ async function reconcileGenerating(): Promise<{ checked: number; restored: numbe
       continue;
     }
     if (found.outcome === "succeeded" && found.assetPath) {
-      writeClipRun(clip.clipId, { status: "generated", nodeId, assetPath: found.assetPath }, { nodeId, status: "succeeded", error: "对账恢复" });
+      // ACT: 画布节点通道的成片也要落 jobId（节点产物元数据里带，见 videoGenerationNode）；丢了它这镜不能被下一镜 context 承接。
+      writeClipRun(clip.clipId, { status: "generated", nodeId, assetPath: found.assetPath }, { nodeId, status: "succeeded", error: "对账恢复", ...(found.jobId ? { jobId: found.jobId } : {}) });
       restored += 1;
       continue;
     }
