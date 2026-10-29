@@ -60,42 +60,15 @@
         </div>
       </div>
     </section>
-    <section class="settingSection" aria-labelledby="asrTitle">
-      <div class="settingHeader">
-        <div class="settingInfo">
-          <h3 id="asrTitle">语音识别</h3>
-          <p class="description">填写 OpenAI 兼容的语音识别服务地址，例如 http://127.0.0.1:8888。模型留空时使用 whisper-1。</p>
-        </div>
-      </div>
-      <div class="asrFields">
-        <el-input v-model="asrDraft.baseUrl" placeholder="服务地址，例如 http://127.0.0.1:8888" aria-label="语音识别服务地址" @blur="commitAsr" @keyup.enter="commitAsr" />
-        <el-input v-model="asrDraft.apiKey" type="password" showPassword autocomplete="off" placeholder="API Key，留空则不发送" aria-label="语音识别服务密钥" @blur="commitAsr" @keyup.enter="commitAsr" />
-        <el-input v-model="asrDraft.model" placeholder="模型，留空使用 whisper-1" aria-label="语音识别模型" @blur="commitAsr" @keyup.enter="commitAsr" />
-      </div>
-    </section>
     <nodeMenuSettings />
     <canvasShortcuts />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from "vue";
-import { asrSettings, defaultUiSettings, generalSettings, uiSettings, updateAsrSettings, updateGeneralSettings, updateUiSettings } from "@/stores/settings";
+import { defaultUiSettings, generalSettings, uiSettings, updateGeneralSettings, updateUiSettings } from "@/stores/settings";
 import canvasShortcuts from "./canvasShortcuts.vue";
 import nodeMenuSettings from "./nodeMenuSettings.vue";
-
-const asrDraft = ref({ ...asrSettings.value });
-
-watch(asrSettings, value => {
-  asrDraft.value = { ...value };
-}, { deep: true });
-
-function commitAsr() {
-  const draft = asrDraft.value;
-  const current = asrSettings.value;
-  if (draft.baseUrl === current.baseUrl && draft.apiKey === current.apiKey && draft.model === current.model) return;
-  updateAsrSettings({ ...draft });
-}
 </script>
 
 <style lang="scss" scoped>
@@ -140,13 +113,6 @@ function commitAsr() {
           line-height: 1.6;
         }
       }
-    }
-
-    .asrFields {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      margin-top: 12px;
     }
   }
 }

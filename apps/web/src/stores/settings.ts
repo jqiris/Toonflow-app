@@ -88,22 +88,6 @@ export const privacySettings = computed(() => {
   };
 });
 
-export const defaultAsrSettings = { baseUrl: "", apiKey: "", model: "" };
-export const asrSettings = computed(() => {
-  const raw = settings.value.asr;
-  const asr = raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
-  return {
-    baseUrl: typeof asr.baseUrl === "string" ? asr.baseUrl : defaultAsrSettings.baseUrl,
-    apiKey: typeof asr.apiKey === "string" ? asr.apiKey : defaultAsrSettings.apiKey,
-    model: typeof asr.model === "string" ? asr.model : defaultAsrSettings.model,
-  };
-});
-
-export function updateAsrSettings(patch: Partial<typeof defaultAsrSettings>) {
-  const current = settings.value.asr;
-  settings.value = { ...settings.value, asr: { ...(current && typeof current === "object" && !Array.isArray(current) ? current : {}), ...patch } };
-}
-
 export type CustomProviderModel = { id: string; label: string; contextWindow?: number; maxOutputTokens?: number; reasoningEfforts?: ReasoningEfforts };
 export type CustomProvider = { id: string; label: string; icon?: string; version?: string; apiUrl: string; apiKey: string; protocol: string; models: CustomProviderModel[] };
 export const customProviders = computed<CustomProvider[]>(() => Array.isArray(settings.value.customProviders)
