@@ -41,9 +41,9 @@
 | 8 | **展示方案并等批准** | 按 §七 的话术逐项展示，得到**明确同意**后才继续；未同意不调用生成 |
 | 9 | **生成** `node:generateVideo` | 空调用；记录提交时刻 |
 | 10 | **追终态** `node:getGenerationStatus` | 同一轮内追到终态；换轮/换会话必须先按 §二 读产物再判断 |
-| 11 | **回写多轨** | 成功 → `status: "generated"`、填 `nodeId`、填 `assetPath`；失败 → `status: "failed"`、`attempts` 追加 `{ at, nodeId, status, error }`。成功那条 attempts 还要带 `jobId`（续接靠它）、`assetPath`（历史版本的身份）以及 `signature`/`index`/`parentJobId`（版本签名簿记，§15.9·5）。回写前按 §二 纪律 3 确认文件可读 |
+| 11 | **回写多轨** | 成功 → `status: "generated"`、填 `nodeId`、填 `assetPath`；失败 → `status: "failed"`、`attempts` 追加 `{ at, nodeId, status, error }`。成功那条 attempts 还要带 `jobId`（续接靠它）、`assetPath`（历史版本的身份）以及 `signature`/`index`/`parentJobId`（版本签名簿记，§15.9·5）。回写前按 §二 纪律 3 确认文件可读。**成功当场就回写，不得攒到用户确认之后再落盘**——生成即默认是工程口径，审核只决定 `accepted` |
 
-> 第 11 步写的是 `generated`，**不是** `accepted`。只有用户看过成片并认可，才由人工改成 `accepted`。
+> 第 11 步写的是 `generated`，**不是** `accepted`。只有用户看过成片并认可，才由人工改成 `accepted`。同理：**回写与验收是两件事，回写不能等验收**——不落盘的最新视频在界面里根本看不到，用户无从验收；落盘之后不满意就切默认版本或删掉这一版（§15.9）。
 
 ---
 

@@ -267,10 +267,16 @@ description: 把分镜稿与资产稿接成多轨工程、逐镜生成并合成�
 
 派工时 `referenceIds` 的位次就是官方 `<Picture N>` / `<Video N>` / `<Audio N>` 的编号基数：正文一律写官方尖括号标记（每类独立从 1 起），旧「双花括号 ref 占位符」会被 `composeClipRequest` 判 error。
 
-两条生成路径，二选一，**绝不同时**：
+两条生成路径，二选一，**绝不同时**；正式生成**优先走派工链路**（它自带回写与设默认，见下条硬规则）：
 
 - 批量：`node:dispatchGenerate({ clipIds })` 或 `({ from: "S001", to: "S010" })`。立即返回 `{batchId, skipped}`；进度看 `node:getStatus.batchClipIds` 或 `planOperator mtrackRead`。
 - 逐镜 SOP（要逐镜盯质量时）：多轨工程里直接 `node:dispatchGenerate({ clipIds: ["S003"] })` 只派一镜；要走镜头节点的老 SOP 时，工具序列见 `generationRunbook.md` §十三 13.2：`planOperator dispatch` → `node:setConfig` → `node:setPrompt` → `node:generateVideo` → `node:getGenerationStatus` 等结果 → `planOperator mtrackUpdate` 回写；建节点与接线的细节同节（`addNode` / `connectNodes`）。参考位次在多轨界面打勾产生（阶段门 4），不靠手工排序。
+
+**生成成功即落盘即默认，不等验收。** 这是工程既有口径（编辑器 `writeClipRun` 在成功结算时直接把 `assetPath` 换成新产物、追加带 `jobId` 的 `succeeded` 尝试，新产物就是该镜默认版本）：
+
+- 走 `node:dispatchGenerate` / 界面派工时编辑器自己会写，agent 不用重复回写。
+- 走 `generateVideo` 直生（派工不可用时的兜底）时，**成功返回的当场**就要 `mtrackUpdate`：`status: "generated"` + `assetPath: <新文件>` + 本镜 `assetPath` 指向它 + attempts 追加一条带 `jobId` 与 `assetPath` 的 `succeeded` 记录。
+- **禁止把回写推迟到用户回复「通过」之后**：那样视频只在磁盘、工程里没有，界面看不到、默认版本不更新、下一镜 `context` 也承接不到。审核（`accepted`）是**回写之后**的人工判定，不是回写的前置条件；用户不满意就切默认版本回旧版或删掉新版，这是版本菜单的活，不是"先别落盘"。
 
 **批量派工是串行的。** `node:dispatchGenerate` 对目标镜**按 `clips` 顺序逐个执行**（编辑器里的批次循环等到上一镜出结果才开始下一镜），不是并发下发。所以：
 
