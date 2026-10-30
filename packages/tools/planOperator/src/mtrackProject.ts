@@ -50,6 +50,8 @@ export interface MtrackClip {
   secondPass?: boolean;
   /** 先出预览（缺省 false）：只支持单个 30 秒以内、不承接上一镜的分块，开启后产出即预览片。 */
   preview?: boolean;
+  /** 随机种子（0 到 2^53-1，缺省由引擎自定）：编辑器逐镜可设的重 roll 复现锚点，镜像归一透传。 */
+  seed?: number;
   prompt: MtrackClipPrompt;
   referenceIds: string[];
   continuity: string;
@@ -197,6 +199,9 @@ export function normalizeProject(value: unknown): MtrackProject {
       ...(isQuality(item.quality) ? { quality: item.quality } : {}),
       ...(typeof item.secondPass === "boolean" ? { secondPass: item.secondPass } : {}),
       ...(typeof item.preview === "boolean" ? { preview: item.preview } : {}),
+      // ACT: seed 与上面三项同理——编辑器逐镜真实请求参数，镜像归一必须透传，
+      // 漏透传会让 mtrackRead 读不回种子、agent 回写时把用户锁定的种子清掉（同类坑见审计 F3）。非法值不带键。
+      ...(typeof item.seed === "number" && Number.isInteger(item.seed) && item.seed >= 0 && item.seed <= Number.MAX_SAFE_INTEGER ? { seed: item.seed } : {}),
       prompt: readPrompt(item.prompt),
       referenceIds: Array.isArray(item.referenceIds) ? item.referenceIds.filter(ref => typeof ref === "string") : [],
       continuity: index === 0 ? "shot" : (item.continuity === "context" || item.continuity === "continue" ? "context" : "shot"),

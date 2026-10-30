@@ -35,3 +35,5 @@ Thumbs.db
 nul
 .tmpDevSync/
 .agent-teams/
+apps/desktop/.hutch/
+apps/desktop/build/

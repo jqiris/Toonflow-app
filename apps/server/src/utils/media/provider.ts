@@ -380,7 +380,7 @@ export async function deleteMediaProvider(fileName: string, revision: string) {
   } finally { release(); }
 }
 
-export async function loadMediaProviderSource(source: string, config: Record<string, unknown> = {}, signal?: AbortSignal, fetchRequest = fetch, cwd?: string) {
+export async function loadMediaProviderSource(source: string, config: Record<string, unknown> = {}, signal?: AbortSignal, fetchRequest = fetch, cwd?: string, onJobStart?: (jobId: string, cancel: () => Promise<void>) => void) {
   signal?.throwIfAborted();
   const { id } = parseProvider(source);
   // ACT: VM 只隔离可信供应商的全局上下文；不可信代码需要独立进程等更强隔离。
@@ -412,6 +412,9 @@ export async function loadMediaProviderSource(source: string, config: Record<str
     sourceRevision: createHash("sha256").update(source).digest("hex"),
     config: providerConfig,
     signal,
+    // ACT: 宿主注入的「任务号已确定」回调，供应商在引擎任务号可用时调用一次；
+    // 只有显式取消链路（tasks.cancel）会用到它登记的 cancel 闭包，断线清理不取消本机引擎任务。
+    ...(onJobStart ? { onJobStart } : {}),
     tool: {
       fetch: signal ? Object.assign((input: Parameters<typeof fetch>[0], init?: RequestInit) => {
         signal.throwIfAborted();

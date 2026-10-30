@@ -15,7 +15,7 @@ const plugin: ToolPlugin = {
     const permissions = configSchema.parse(config);
     const generationTools = ([
       { name: "generateImage", mediaType: "image", enabled: permissions.allowImage, label: "生成图片", parameters: imageGenerationSchema, description: "根据提示词和可选的工作区参考图生成图片。" },
-      { name: "generateVideo", mediaType: "video", enabled: permissions.allowVideo, label: "生成视频", parameters: videoGenerationSchema, description: "根据提示词和可选的工作区图片、视频、音频、首尾帧生成视频。按模型能力设置生成模式、时长、分辨率和音频；quality 为质量档位（light/medium/high/max，对应轻量/标准/精细/极致），secondPass 为二次采样开关，均可省略（供应商默认 light + 开启二次采样）。续接（continueFrom）或 30 秒以上的长镜必须开启二次采样且 quality 用 light/medium，否则供应商会拒绝（引擎限制）；preview 为快速预览模式，只支持单个 30 秒以内分块，开启后产出即预览片（引擎固定 8 步二次采样，无视质量档位），成片需另发 refine 任务。" },
+      { name: "generateVideo", mediaType: "video", enabled: permissions.allowVideo, label: "生成视频", parameters: videoGenerationSchema, description: "根据提示词和可选的工作区图片、视频、音频、首尾帧生成视频。按模型能力设置生成模式、时长、分辨率和音频；quality 为质量档位（light/medium/high/max，对应轻量/标准/精细/极致），secondPass 为二次采样开关，均可省略（供应商默认 light + 开启二次采样）。续接（continueFrom）或 30 秒以上的长镜必须开启二次采样且 quality 用 light/medium，否则供应商会拒绝（引擎限制）；preview 为快速预览模式，只支持单个 30 秒以内分块，开启后产出即预览片（引擎固定 8 步二次采样，无视质量档位），成片需另发 refine 任务。seed 为随机种子（0 到 9007199254740991）：同种子+同提示词产物逐字节一致（实测），重 roll 保住满意镜头、只改一处参数时复用它。" },
       { name: "generateAudio", mediaType: "audio", enabled: permissions.allowAudio, label: "生成音频", parameters: audioGenerationSchema, description: "根据文本或提示词和可选的工作区参考图片和音频生成音频。按模型能力设置音色、语速、音量、语种、采样率和格式。" },
     ] as const).filter(operation => operation.enabled);
     if (!generationTools.length) return [];

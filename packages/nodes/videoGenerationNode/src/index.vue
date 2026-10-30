@@ -135,7 +135,7 @@ const { id, node, nodeProps, nodeEvent, outputs, files, ai, updateNodeInternals 
 type PromptModel = NonNullable<InstanceType<typeof promptInput>["$props"]["modelValue"]>;
 const videoQualityValues = ["light", "medium", "high", "max"] as const;
 type VideoQuality = (typeof videoQualityValues)[number];
-const data = computed(() => node.data as { prompt: string; promptModel: PromptModel; model: string; duration?: number; resolution: string; ratio: string; mode: string; generateAudio: boolean; quality: VideoQuality; secondPass: boolean; preview: boolean });
+const data = computed(() => node.data as { prompt: string; promptModel: PromptModel; model: string; duration?: number; resolution: string; ratio: string; mode: string; generateAudio: boolean; quality: VideoQuality; secondPass: boolean; preview: boolean; seed?: number });
 data.value.prompt ??= "";
 data.value.promptModel ??= [];
 data.value.model ??= "";
@@ -279,6 +279,8 @@ const generationInput = computed<Omit<NodeVideoRequest, "directory"> | undefined
     quality: data.value.quality,
     secondPass: data.value.secondPass,
     preview: data.value.preview,
+    // ACT: seed 省略即不下发（引擎自定种子）；节点设过种子则每次生成都复现。
+    ...(data.value.seed !== undefined ? { seed: data.value.seed } : {}),
     outputDirectory: `assets/${id}`,
     images: frameMode.value ? undefined : images,
     firstFrame: frameMode.value && (selectedMode.value !== "startFrameOptional" || images.length > 1) ? images[0] : undefined,
@@ -451,6 +453,8 @@ function getConfig() {
       quality: data.value.quality,
       secondPass: data.value.secondPass,
       preview: data.value.preview,
+      // seed 未设置时返回 undefined（JSON 序列化后省略键），agent 据此区分「自动」与「锁定」。
+      seed: data.value.seed,
     },
     models: models.value,
     ratios: ratioOptions,
@@ -472,7 +476,7 @@ nodeTools.register({
 
 nodeTools.register({
   name: "setConfig",
-  description: "修改此视频生成节点的模型、时长、分辨率、比例、模式、声音、质量、二次采样或预览；先用 getConfig 查询能力，providerId 与 modelId 必须同时提供；mode 使用返回的原始字符串或数组，须匹配当前引用；quality 用 light/medium/high/max（轻量/标准/精细/极致，默认 light），secondPass 为二次采样开关（默认 true）；续接或 30 秒以上长镜必须 secondPass=true 且 quality 用 light/medium，否则生成会被供应商拒绝；preview 为快速预览模式（默认 false），只支持单个 30 秒以内分块，开启后产出即预览片；不修改提示词、不启动生成",
+  description: "修改此视频生成节点的模型、时长、分辨率、比例、模式、声音、质量、二次采样或预览；先用 getConfig 查询能力，providerId 与 modelId 必须同时提供；mode 使用返回的原始字符串或数组，须匹配当前引用；quality 用 light/medium/high/max（轻量/标准/精细/极致，默认 light），secondPass 为二次采样开关（默认 true）；续接或 30 秒以上长镜必须 secondPass=true 且 quality 用 light/medium，否则生成会被供应商拒绝；preview 为快速预览模式（默认 false），只支持单个 30 秒以内分块，开启后产出即预览片；seed 为随机种子（0 到 9007199254740991 的整数，实测同种子+同提示词产物逐字节一致）——重 roll 想保住不漂移的镜头先设 seed，想回到引擎每次自定传 null，省略则不改；不修改提示词、不启动生成",
   parameters: z.strictObject({
     providerId: z.string().min(1).optional(),
     modelId: z.string().min(1).optional(),
@@ -484,6 +488,8 @@ nodeTools.register({
     quality: z.enum(videoQualityValues).optional(),
     secondPass: z.boolean().optional(),
     preview: z.boolean().optional(),
+    // 随机种子：null 与省略区分——null=清空回到引擎自定，省略=不改。
+    seed: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).nullable().optional(),
   }).refine((args) => (args.providerId === undefined) === (args.modelId === undefined), "providerId 与 modelId 必须同时提供"),
   async execute(args, { signal }) {
     signal?.throwIfAborted();
@@ -511,6 +517,12 @@ nodeTools.register({
     if (args.quality !== undefined) data.value.quality = args.quality;
     if (args.secondPass !== undefined) data.value.secondPass = args.secondPass;
     if (args.preview !== undefined) data.value.preview = args.preview;
+    // ACT: seed 用「键是否存在」区分三态——省略不改、null 清空回引擎自定、数字锁定。
+    // 不能用 !== undefined 判断后直接赋值：null 会被原样写进 data，generationInput 的 seed!==undefined 会把 null 下发给引擎（引擎拒收 null 会 400）。
+    if ("seed" in args) {
+      if (args.seed === null) delete data.value.seed;
+      else data.value.seed = args.seed;
+    }
     return getConfig();
   },
 });

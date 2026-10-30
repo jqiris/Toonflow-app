@@ -41,6 +41,17 @@ interface ProviderContext<TConfig = Record<string, unknown>> {
   signal?: AbortSignal;
   /** 宿主直接注入工具，供应商无需 import；FFmpeg 为按需安装的插件能力。 */
   tool: ProviderTools;
+  /**
+   * 供应商任务号确定后的宿主回调：jobId 是引擎侧任务号，cancel 是供应商构造的取消闭包
+   * （带自己的鉴权与地址知识，宿主不碰引擎协议）。宿主用它实现「显式取消直达引擎」，
+   * 断线清理路径不调用 cancel——本地引擎任务继续跑完不丢产物是既有审计决策。
+   */
+  onJobStart?: (jobId: string, cancel: () => Promise<void>) => void;
+  /**
+   * 不绑定本次生成信号的原始 fetch（宿主注入）：任务被 abort 之后仍要发出的收尾请求
+   * （如引擎取消闭包）用它，`tool.fetch` 在信号中止后会被宿主直接拒。
+   */
+  queryFetch?: typeof globalThis.fetch;
 }
 
 interface MediaRequest {
@@ -162,6 +173,13 @@ interface VideoRequest extends MediaRequest {
   secondPass?: boolean;
   /** 是否开启快速预览模式（引擎只跑预览片，成片需另发 refine 任务）；未传时供应商按自身默认处理。 */
   preview?: boolean;
+  /**
+   * 随机种子；未传时由供应商/引擎决定。重 roll 保种子（同 seed 同提示词≈同结果）
+   * 是跨重试一致性的唯一复现锚点；取值范围由供应商按引擎校验。
+   */
+  seed?: number;
+  /** 本任务完成后立即释放显存/内存中的视频模型；只对批次最后一个任务置 true——中间任务置 true 会让后续任务反复重载模型。 */
+  releaseGpuAfter?: boolean;
 }
 
 /** 基础音频生成参数；text、prompt 至少提供一项，非空校验与模型能力检查由供应商负责。 */
@@ -249,6 +267,11 @@ interface ProviderDefinition<TRules extends readonly ProviderFormRule[] = readon
   generateAudio?: GenerateMedia<AudioRequest, ProviderConfig<TRules>>;
   /** 可选的供应商媒体预处理；未实现时保持原请求。 */
   processMedia?: (this: ProviderContext<ProviderConfig<TRules>>, request: ImageRequest | VideoRequest | AudioRequest) => Promise<ImageRequest | VideoRequest | AudioRequest>;
+  /**
+   * 释放引擎驻留在显存/内存中的视频模型（本机 GPU 供应商能力）；
+   * released=false 属正常状态（引擎空闲无驻留、或正在生成），reason 说明原因（如 nothing_held）。
+   */
+  releaseGpu?: (this: ProviderContext<ProviderConfig<TRules>>) => Promise<{ released: boolean; reason?: string }>;
 }
 
 /** 仅用于展示，不参与余额计算；没有额外提示时 tips 返回空字符串。 */

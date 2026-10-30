@@ -126,6 +126,10 @@ export interface MediaGenerationRequest {
   secondPass?: boolean;
   /** 是否开启快速预览模式（引擎只跑预览片，成片需另发 refine 任务）；未传时走供应商默认。 */
   preview?: boolean;
+  /** 随机种子；未传时由供应商/引擎决定。重 roll 保种子是跨重试一致性的复现锚点。 */
+  seed?: number;
+  /** 本任务完成后立即释放显存/内存中的视频模型；只对批次最后一个任务置 true。 */
+  releaseGpuAfter?: boolean;
   voice?: string;
   speed?: number;
   volume?: number;

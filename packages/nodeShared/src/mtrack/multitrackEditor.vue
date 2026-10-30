@@ -173,6 +173,7 @@
                   <el-button size="small" text @click="batchPanelVisible = true">逐镜面板…</el-button>
                   <el-button size="small" text :loading="loadingReport" @click="loadReport">校验{{ findingsCount ? ` ${findingsCount}` : "" }}</el-button>
                   <el-button size="small" text @click="reconcileFromPanel">刷新状态</el-button>
+                  <el-button size="small" text :loading="releasingGpu" :disabled="dispatching || Boolean(batchHandle)" title="让本机视频引擎归还驻留的显存/内存；引擎正在生成时不会释放" @click="handleReleaseGpu">释放显存</el-button>
                   <el-button size="small" text :disabled="!hasAccepted || compositeBusy" :loading="compositeBusy" @click="handleComposite">合成成片</el-button>
                   <!-- 查看成片 = 把画布视口移到「项目与成片」浮窗（LSC 的独立预览窗口位；我们是画布世界层浮窗，跳转即打开）。 -->
                   <el-button v-if="nodeId" size="small" text @click="focusResults">查看成片</el-button>
@@ -1119,6 +1120,35 @@ type CompositeResult = { manifestPath: string; source: string; output: string; e
 const compositeBusy = ref(false);
 const hasAccepted = computed(() => clips.value.some(clip => clip.status === "accepted"));
 
+const releasingGpu = ref(false);
+/**
+ * 空闲释放显存：让本机视频引擎（FreeVideo）归还驻留的显存/内存模型。
+ * released=false 表示引擎正在生成、supported=false 表示当前视频模型没有该能力——都是正常状态，
+ * 只如实提示不重试（引擎契约：busy 时不释放）。批次运行中按钮已禁用，这里只防 agent 派工等旁路。
+ */
+async function handleReleaseGpu() {
+  if (releasingGpu.value) return;
+  const providerId = project.value?.global.model?.providerId;
+  if (!providerId) return ElMessage.warning("工程还没有视频模型，请先在快捷设置里选择");
+  releasingGpu.value = true;
+  try {
+    const response = await fetch("/api/ai/media/releaseGpu", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-toonflow-workspace": "1" },
+      body: JSON.stringify({ providerId }),
+    });
+    const payload = await response.json().catch(() => undefined) as { data?: { supported: boolean; released: boolean; reason?: string }; message?: string } | undefined;
+    if (!response.ok || !payload?.data) throw new Error(payload?.message || `释放显存请求失败（HTTP ${response.status}）`);
+    if (!payload.data.supported) ElMessage.info("当前视频模型不支持主动释放显存");
+    else if (payload.data.released) ElMessage.success("已释放显存");
+    else ElMessage.info(payload.data.reason === "nothing_held" ? "引擎当前没有驻留的模型，无需释放" : "引擎正在生成任务，未释放");
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : "释放显存失败");
+  } finally {
+    releasingGpu.value = false;
+  }
+}
+
 /** 合成请求：服务端 strict 校验，只发这四个字段；错误响应体里的 message 是可直接展示的原文。 */
 async function postComposite(execute: boolean): Promise<CompositeResult> {
   const response = await fetch("/api/mtrack/composite", {
@@ -1701,6 +1731,9 @@ async function launchDispatch(clipIds?: string[], options?: { includeFinished?: 
             resolveContinueFrom: previous => ({ jobId: continuationJobId(previous) }),
           });
           writeClipRun(clip.clipId, { status: "generating", nodeId: null }, { nodeId: "", status: "generating", error: `${marker} task:${taskId}` });
+          // ACT: 批次最后一镜出片后立即释放显存（本机 GPU 归还给其他程序）；中间镜不置——
+          // 引擎视频之间让模型驻留显存是为下一镜秒启，每镜都释放会反复重载拖慢整批。
+          if (clip === batchClips[batchClips.length - 1]) request.releaseGpuAfter = true;
           // ACT: 先登记再提交——提交途中点取消才能取消到这个任务，否则服务端会白跑到超时（审计 P2-2）。
           activeTaskIds.value = [...activeTaskIds.value, taskId];
           try {

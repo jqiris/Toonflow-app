@@ -18,7 +18,7 @@ const rules = [
   },
 ] as const;
 
-const version = "1.1.2";
+const version = "1.2.0";
 const agentSuffix = "/freevideo/agent/v1";
 /** 图像任务参考图上限：引擎 kind=image 的 images 数组 maxItems=4（超限返回 too_many_images）。视频单块仍是 9，见 models 段。 */
 const maxImageReferences = 4;
@@ -184,6 +184,9 @@ async function download(context: ProviderContext, token: string, origin: string,
  * 提交任务并轮询到终态；失败/取消抛友好错误，interrupted 自动续拍（最多 2 次）。
  * ACT: 成功时把引擎任务号（`j` + 12 hex）附在结果上返回——多轨续接要用
  * `continue_from: { from_job }` 精确引用上一镜任务，而这是唯一能拿到它的地方。
+ * ACT: 任务号一确定就经 onJobStart 向宿主登记取消闭包——宿主显式取消要真停引擎任务，
+ * 光掐本地信号只会让本机 GPU 白跑到自然结束。闭包走 queryFetch（原始 fetch）：
+ * 调用时本次生成的 signal 往往已中止，tool.fetch 会被宿主直接拒发。
  */
 async function runJob(context: ProviderContext, token: string, agent: string, spec: Record<string, unknown>, signal: AbortSignal): Promise<{ job: Record<string, unknown>; jobId: string }> {
   const submit = await context.tool.fetch(`${agent}/jobs`, {
@@ -197,6 +200,18 @@ async function runJob(context: ProviderContext, token: string, agent: string, sp
   const job = object(answer.job ?? answer);
   const jobId = typeof job.id === "string" ? job.id : "";
   if (!jobId) throw new Error("未返回任务ID");
+  context.onJobStart?.(jobId, async () => {
+    const fetchImpl = context.queryFetch ?? context.tool.fetch;
+    try {
+      await fetchImpl(`${agent}/jobs/${jobId}/cancel`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: "{}",
+        signal: AbortSignal.timeout(10_000),
+      });
+      // 已终态任务的取消返回 4xx 属正常竞态，不抛出。
+    } catch { /* 尽力而为：闭包失败不影响本地任务收尾。 */ }
+  });
   let resumeTries = 0;
   while (true) {
     const response = await context.tool.fetch(`${agent}/jobs/${jobId}?wait=25`, { headers: { Authorization: `Bearer ${token}` }, signal });
@@ -251,8 +266,11 @@ export default {
 - ≥30 秒的片段自动分块时开启 first_frame_reference，减少跨块的取景与人物漂移；单段视频不受影响。
 - 提示词按 FreeVideo 约定拼装：有参考图时六段（subject_definitions → summary → retention_analysis → detailed_description → overall_soundscape → non_diegetic_music），无参考时三段；前四段的段首标签由写作者写，两个声音段的段名由多轨引擎补。
 - 生成中断（引擎重启、显存波动）时自动尝试续拍，最多 2 次，已生成部分保留；续拍仍失败会明确报错。
+- 支持随机种子（seed）：同种子 + 同提示词 ≈ 同结果，重 roll 时保住不漂移的镜头；留空由引擎自定。
+- 显存管理：批次最后一个任务出片后自动释放显存；空闲时也可主动释放（引擎正在生成时不释放）。
+- 取消生成会同时取消本机任务（引擎侧真停，不再白跑 GPU）；页面断开不会取消，本机任务照常跑完保留产物。
 - 图像：文生图 / 单参考 / 多参考（最多 4 张），1K / 2K。
-- 生成耗时为分钟级（本机 GPU），请耐心等待；取消生成会同时取消本机任务。`,
+- 生成耗时为分钟级（本机 GPU），请耐心等待。`,
   rules,
   models: [
     {
@@ -278,6 +296,23 @@ export default {
   ] satisfies ProviderModel[],
   async getPrice() {
     return { price: "免费", tips: "本机 GPU 生成，无计费" };
+  },
+  // 空闲时主动归还显存：宿主在生成间隙要跑自己的模型（如审片）前调用。
+  // released=false 是正常状态：reason=nothing_held 表示本无驻留、busy_video 类表示引擎正在生成，调用方不重试。
+  async releaseGpu(): Promise<{ released: boolean; reason?: string }> {
+    const token = this.config.apiKey?.trim();
+    if (!token) throw new Error("请填写 Token");
+    const agent = agentBase(this.config.baseUrl);
+    const fetchImpl = this.queryFetch ?? this.tool.fetch;
+    const response = await fetchImpl(`${agent}/gpu/release`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: "{}",
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!response.ok) throw new Error(this.tool.errorMessage?.(await response.json().catch(() => ({}))) || `释放显存失败：HTTP ${response.status}`);
+    const result = object(await response.json());
+    return { released: result.released === true, ...(typeof result.reason === "string" ? { reason: result.reason } : {}) };
   },
   async generateImage(request: ImageRequest): Promise<MediaAsset[]> {
     const token = this.config.apiKey?.trim();
@@ -382,6 +417,10 @@ export default {
       ...(seconds >= 30 && !continuing ? { first_frame_reference: true } : {}),
       ...(request.continueFrom ? { continue_from: { from_job: request.continueFrom } } : {}),
       ...(Object.keys(media).length ? { media } : {}),
+      // ACT: seed 未传即不发（引擎按 null 自定种子）；传了就是重 roll 复现锚点（范围 0..2^53-1，宿主 zod 已拦）。
+      ...(request.seed !== undefined ? { seed: request.seed } : {}),
+      // 批次最后一个任务置 true 立即还显存；中间任务置 true 会让下一镜反复重载模型，由派工侧把关。
+      ...(request.releaseGpuAfter ? { release_gpu_after: true } : {}),
     }, signal);
     const result = object(job.result ?? {});
     const video = object(result.video ?? {});

@@ -25,6 +25,10 @@
       <label class="field fieldNarrow"><span class="fieldLabel">质量</span><el-select :modelValue="clip.quality" size="small" @change="onQualityChange"><el-option v-for="option in qualityOptions" :key="option.value" :label="option.label" :value="option.value" /></el-select></label>
       <label class="field fieldInline"><span class="fieldLabel">二次采样</span><el-switch :modelValue="clip.secondPass" @change="emit('patch', { secondPass: Boolean($event) })" /></label>
       <label class="field fieldInline"><span class="fieldLabel">先出预览</span><el-switch :modelValue="clip.preview" :disabled="previewDisabled" @change="emit('patch', { preview: Boolean($event) })" /></label>
+      <label class="field fieldNarrow" title="留空由引擎每次自定种子；填上后同种子+同提示词≈同结果，重 roll 复现用">
+        <span class="fieldLabel">随机种子</span>
+        <el-input-number :modelValue="clip.seed ?? null" size="small" :min="0" :max="9007199254740991" :step="1" :stepStrictly="true" :value-on-clear="null" controls-position="right" placeholder="自动" @change="onSeedChange" />
+      </label>
     </div>
     <div class="promptSections">
       <template v-for="section in sections" :key="section.key"><label class="sectionField"><span class="sectionLabel">{{ section.label }}</span><el-input :modelValue="draft[section.key]" type="textarea" :rows="section.rows" resize="vertical" :placeholder="section.placeholder" @input="onSectionInput(section.key, String($event))" /></label></template>
@@ -69,6 +73,12 @@ const rewriteBasisChanged = computed(() => {
 });
 
 function onQualityChange(value: string) { emit("patch", { quality: value as VideoQuality }); }
+
+/** 随机种子：清空发 undefined（onPatch 展开后 JSON 序列化自然丢键），数字即锁定复现。
+ *  null 哨兵只属于 agent 的 editProject 路径（zod union 透传后由 mergePatch 删键），UI 不需要。 */
+function onSeedChange(value: number | null | undefined) {
+  emit("patch", { seed: typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : undefined });
+}
 
 function onContinuityChange(value: string) {
   const continuity = normalizeContinuity(value);

@@ -33,7 +33,12 @@ function indexOfClip(clips: MtrackClip[], clipId: string): number {
 
 /** prompt 三字段浅合并，其余字段整值覆盖——对齐编辑器 onPatch。 */
 function mergePatch(clip: MtrackClip, patch: Partial<MtrackClip>): MtrackClip {
-  return { ...clip, ...patch, prompt: { ...clip.prompt, ...(patch.prompt ?? {}) } };
+  const merged = { ...clip, ...patch, prompt: { ...clip.prompt, ...(patch.prompt ?? {}) } };
+  // ACT: seed:null 是「清空回引擎自定」的哨兵（node:editProject 的 patch 原样带进来，
+  // zod 的 nullish+transform 会把 null 转成省略键、擦不掉原值，故不走 transform）。
+  // 归一为删键再进 validateClip——null 留在字段上会被种子校验误拒。
+  if ((merged as { seed?: unknown }).seed === null) delete merged.seed;
+  return merged;
 }
 
 /** 校验单个片段的字段约束，返回问题列表（空即通过）。跨片段的编号唯一性由批量与 validateProject 拦截。 */
@@ -75,6 +80,9 @@ export function validateClip(clip: MtrackClip): string[] {
   // 不让用户等到派工才看到失败（与上面的续接参考/时长同口径）。
   if (!(videoQualityValues as readonly string[]).includes(clip.quality)) {
     issues.push(`质量 ${clip.quality} 不在可选范围内（轻量/标准/精细/极致）`);
+  }
+  if (clip.seed !== undefined && (!Number.isInteger(clip.seed) || clip.seed < 0 || clip.seed > Number.MAX_SAFE_INTEGER)) {
+    issues.push("随机种子需为 0 到 9007199254740991 的整数（引擎限制），或清空改回引擎自定");
   }
   if (clip.continuity === "context" && clip.quality !== "light" && clip.quality !== "medium") {
     issues.push(`承接上一镜的镜头只能用轻量/标准质量（引擎限制：续接任务是 two-pass），请改为轻量或标准`);

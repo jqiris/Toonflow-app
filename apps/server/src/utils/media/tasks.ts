@@ -10,6 +10,14 @@ type MediaTask = {
   touchedAt: number;
   settledAt?: number;
   result?: ApiResponse<GeneratedMedia[]>;
+  /**
+   * 供应商登记的引擎取消闭包（引擎任务号确定后由 onJobStart 注入）。
+   * ACT: 只有显式取消（用户点停止）才调用它；断线清理（cleanup 的 30 分钟路径）不调——
+   * 本机引擎任务继续跑完不丢产物是既有审计决策（P1-2），真取消会毁掉已生成部分。
+   */
+  cancelRemote?: () => Promise<void>;
+  /** 显式取消发生在任务号登记之前时置位；onJobStart 拿到闭包后立即补取消。 */
+  cancelRequested?: boolean;
 };
 
 /*
@@ -82,7 +90,12 @@ export function start(cwd: string, taskId: string, mediaType: "image" | "video" 
   if (tasks.size >= 1000) throw Object.assign(new Error("生成任务过多，请稍后重试"), { status: 429 });
   const task: MediaTask = { cwd, controller: new AbortController(), touchedAt: Date.now() };
   tasks.set(taskId, task);
-  void generateMedia(cwd, mediaType, request, task.controller.signal).then(
+  const onJobStart = (jobId: string, cancel: () => Promise<void>) => {
+    task.cancelRemote = cancel;
+    // 任务号确定之前已被显式取消：补一刀，不让引擎白跑。
+    if (task.cancelRequested) void cancel().catch(() => undefined);
+  };
+  void generateMedia(cwd, mediaType, request, task.controller.signal, onJobStart).then(
     files => { task.result ??= success(files); },
     cause => { task.result ??= { ...errorFromCause(cause), data: null }; },
   ).finally(() => {
@@ -113,6 +126,11 @@ export function status(cwd: string, taskIds: string[]) {
 export function cancel(cwd: string, taskIds: string[]) {
   for (const taskId of taskIds) {
     const task = tasks.get(taskId);
-    if (task?.cwd === cwd) stop(task, "生成已取消");
+    if (task?.cwd !== cwd) continue;
+    const message = "生成已取消";
+    // 显式取消：除掐本地信号外，还要通知引擎真停——否则本机 GPU 继续白跑到自然结束。
+    task.cancelRequested = true;
+    if (task.cancelRemote) void task.cancelRemote().catch(() => undefined);
+    stop(task, message);
   }
 }

@@ -56,6 +56,10 @@ export const videoGenerationSchema = z.strictObject({
    * 成片需另发 refine 任务）；未传时供应商按自身默认值处理。
    */
   preview: z.boolean().optional(),
+  /** 随机种子（引擎取值 0 到 2^53-1）；未传时由供应商/引擎决定。重 roll 保种子用于跨重试复现。 */
+  seed: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+  /** 本任务完成后立即释放显存/内存中的视频模型；只对批次最后一个任务置 true。 */
+  releaseGpuAfter: z.boolean().optional(),
   mode: z.union([
     z.enum(["singleImage", "startEndRequired", "endFrameOptional", "startFrameOptional", "text"]),
     z.array(referenceMode).min(1).max(3),

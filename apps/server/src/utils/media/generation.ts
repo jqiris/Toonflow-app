@@ -167,14 +167,16 @@ async function prepareRequest<T>(directory: string | undefined, mediaType: "imag
     ratio: request.ratio, resolution: request.resolution, duration: request.duration, generateAudio: request.generateAudio, mode: request.mode,
     quality: request.quality, secondPass: request.secondPass,
     preview: request.preview,
+    ...(request.seed !== undefined ? { seed: request.seed } : {}),
+    ...(request.releaseGpuAfter !== undefined ? { releaseGpuAfter: request.releaseGpuAfter } : {}),
   };
 }
 
-async function configuredProvider(request: MediaGenerationRequest, mediaType: "image" | "video" | "audio", signal?: AbortSignal, directory?: string) {
+async function configuredProvider(request: MediaGenerationRequest, mediaType: "image" | "video" | "audio", signal?: AbortSignal, directory?: string, onJobStart?: (jobId: string, cancel: () => Promise<void>) => void) {
   const info = await getMediaProvider(request.providerId);
   if (!info.models.some(model => model.id === request.modelId && model.type === mediaType)) invalid("所选媒体模型不存在或类型不匹配，请重新选择");
   const configurations = record(conf.get("settings", {}).mediaProviderConfigs);
-  return loadMediaProviderSource(info.source, record(configurations[info.id]), signal, undefined, directory);
+  return loadMediaProviderSource(info.source, record(configurations[info.id]), signal, undefined, directory, onJobStart);
 }
 
 async function preparePriceRequest(directory: string | undefined, mediaType: "image" | "video" | "audio", request: MediaGenerationRequest, signal?: AbortSignal) {
@@ -197,18 +199,35 @@ export async function getMediaPrice(directory: string | undefined, mediaType: "i
   return getProviderPrice(provider, prepared);
 }
 
+/**
+ * 空闲时释放供应商驻留显存/内存的视频模型（本机 GPU 供应商能力，如 FreeVideo）。
+ * 返回 { supported, released, reason? }：供应商没有该能力时 supported=false；
+ * released=false 是正常状态（reason=nothing_held 本无驻留 / 引擎正忙），调用方不重试。
+ */
+export async function releaseProviderGpu(providerId: string): Promise<{ supported: boolean; released: boolean; reason?: string }> {
+  const info = await getMediaProvider(providerId);
+  if (!info.models.some(model => model.type === "video")) return { supported: false, released: false };
+  const configurations = record(conf.get("settings", {}).mediaProviderConfigs);
+  const provider = await loadMediaProviderSource(info.source, record(configurations[info.id]));
+  if (typeof provider.releaseGpu !== "function") return { supported: false, released: false };
+  const result = await provider.releaseGpu.call(provider);
+  return { supported: true, ...result };
+}
+
 export async function generateMedia(
   cwd: string,
   mediaType: "image" | "video" | "audio",
   request: MediaGenerationRequest,
   signal?: AbortSignal,
+  /** 供应商任务号确定后的回调（jobId + 引擎取消闭包）；异步任务通道用它实现显式取消直达引擎。 */
+  onJobStart?: (jobId: string, cancel: () => Promise<void>) => void,
 ): Promise<GeneratedMedia[]> {
   signal?.throwIfAborted();
   if (!request.prompt.trim()) invalid("请输入生成提示词");
   const directory = await realpath(cwd);
   const outputDirectory = request.outputDirectory ?? "assets/generated";
   await resolveWorkspacePath(directory, outputDirectory, true);
-  const provider = await configuredProvider(request, mediaType, signal, directory);
+  const provider = await configuredProvider(request, mediaType, signal, directory, onJobStart);
   const generate = mediaType === "image" ? provider.generateImage : mediaType === "video" ? provider.generateVideo : provider.generateAudio;
   if (typeof generate !== "function") invalid(t`此供应商不支持${translateMessage({ image: "图片", video: "视频", audio: "音频" }[mediaType])}生成`);
   const rules = Array.isArray(provider.rules) ? provider.rules : [];

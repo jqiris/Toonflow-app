@@ -130,6 +130,13 @@ export interface MtrackClip {
   secondPass: boolean;
   /** 先出预览（preview）：快速低清预览片，只支持单个 30 秒以内的独立镜头；开启后产出即预览片，不会自动精修成成片。 */
   preview: boolean;
+  /**
+   * 随机种子（引擎取值 0 到 2^53-1）；缺省不发给引擎、由引擎每次自定。
+   * 重 roll 保种子：同 seed + 同提示词 ≈ 同结果，是跨重试复现的锚点。
+   * ACT: 与 quality/secondPass/preview 同口径不进 clipSignature——它是渲染参数不是镜头身份，
+   * 纳入会让旧工程升级后全片误判 stale。
+   */
+  seed?: number;
   prompt: ClipPrompt;
   referenceIds: string[];
   /** `shot` | `context`；旧工程的 start/continue/cut 由 normalizeContinuity 归一。 */
@@ -306,6 +313,8 @@ export function normalizeProject(value: unknown): MtrackProject {
       quality: readQuality(item.quality),
       secondPass: readBoolean(item.secondPass, true),
       preview: readBoolean(item.preview, false),
+      // ACT: seed 是 additive 可选字段：合法整数才带，缺失/坏值即省略——不能落 0，0 是合法种子值，落 0 会把「未设置」错写成「锁定种子 0」。
+      ...(typeof item.seed === "number" && Number.isInteger(item.seed) && item.seed >= 0 && item.seed <= Number.MAX_SAFE_INTEGER ? { seed: item.seed } : {}),
       prompt: readPrompt(item.prompt),
       referenceIds: Array.isArray(item.referenceIds) ? item.referenceIds.filter(ref => typeof ref === "string") : [],
       // ACT: 首镜永远 shot（没有上一镜可接），其余缺省 shot；旧工程的 continue 归一为 context。

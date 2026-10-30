@@ -36,7 +36,7 @@
 | 3 | **接线** `connectNodes` | 资产图节点 → 视频节点 `in` 端口，**严格按 `referenceIds` 数组顺序**逐条连 |
 | 4 | **核对顺序** `getCanvasNodes` | `fields: ["ports"]`、`dataKeys: ["referenceOrder", "mode", "model"]`，比对实际引用顺序与 `referenceIds` 是否逐位一致；不一致先修连线，不进入下一步。**这一步是人工核对，不是等校验器报错**：V15 只在 `validate` 收到 `snapshot`（`packages/tools/planOperator/src/index.ts` 的 `snapshotSchema`/`snapshotNodeSchema`，按名 grep，形如 `{ nodes, incomingEdges, referenceOrder? }`，其中 `nodes[]` 只接受 `id`/`type`/`status`/`outputs`）时才生效，不传快照它一句话都不会说；V6（画布入边数 = 参考数）在 `planValidator.ts` 里根本没有实现，只能靠这里逐位比对 |
 | 5 | **读配置** `node:getConfig` | 读当前 `matchingModes`、可用 `duration`、`resolution`、`ratio`。**不许跳过本步**——模式按当前实际参考集合决定（见 §三） |
-| 6 | **下发配置** `node:setConfig` | `{ providerId: "freevideo", modelId: "MiniMax-H3", duration: <seconds>, resolution: <768P\|2K>, ratio, generateAudio, mode }`；`duration` 必须等于 `seconds` 且为 **2–60 的整数** |
+| 6 | **下发配置** `node:setConfig` | `{ providerId: "freevideo", modelId: "MiniMax-H3", duration: <seconds>, resolution: <768P\|2K>, ratio, generateAudio, mode }`；`duration` 必须等于 `seconds` 且为 **2–60 的整数**；重 roll 要保住已满意镜头的画面时补 `seed`——先 `node:getConfig` 读回本节点 `config.seed` 原样带回（同种子+同提示词产物逐字节一致，实测），传 `seed: null` 清空回引擎自定，省略不改 |
 | 7 | **写提示词** `node:setPrompt` | 写作者已写在 `clips[].prompt` 里的官方六段原样下发（每段字段首行写官方段名、参考标记一律写官方 `<Picture N>` / `<Video N>` / `<Audio N>`，引擎不代写），格式见 §四 |
 | 8 | **展示方案并等批准** | 按 §七 的话术逐项展示，得到**明确同意**后才继续；未同意不调用生成 |
 | 9 | **生成** `node:generateVideo` | 空调用；记录提交时刻 |
@@ -307,7 +307,7 @@ planOperator { action: "dispatch", path: "plan/story.mtrack", from: "S003", to: 
 | c | 接线 | `connectNodes`，按 `referencePlan` 顺序把资产节点 → 视频节点 `in` 端口；单批上限 64 条（`packages/tools/canvas/src/runtime.ts:61`） |
 | d | 核对参考顺序 | `nodeTools` `node:getReferenceOrder`（`packages/nodeShared/src/useNodeReferences.ts:52`）；不一致用 `node:setReferenceOrder`（`packages/nodeShared/src/useNodeReferences.ts:67`）按 `referencePlan` 顺序重写。节点端口上的参考顺序由 `referenceOrder` 决定，不看连线手势；**但落到具体镜头的官方参考标记位次以 `clip.referenceIds` 为准**——编辑器「参考素材」勾选直接写它（文档下方「把资产图接进多轨」），勾选路径不要拿 `setReferenceOrder` 去模拟 |
 | e | 读配置 | `nodeTools` `node:getConfig`（`packages/nodes/videoGenerationNode/src/index.vue:399`），取 `matchingModes`/`duration`/`resolution`/`ratio`/`audio` |
-| f | 下发配置 | `nodeTools` `node:setConfig`（`packages/nodes/videoGenerationNode/src/index.vue:411`）：`{ providerId, modelId, duration: <seconds>, resolution, ratio, generateAudio, mode }`；`duration` 必须等于 `seconds` 且为 2–60 整数 |
+| f | 下发配置 | `nodeTools` `node:setConfig`（`packages/nodes/videoGenerationNode/src/index.vue:411`）：`{ providerId, modelId, duration: <seconds>, resolution, ratio, generateAudio, mode }`；`duration` 必须等于 `seconds` 且为 2–60 整数；重 roll 保画面时从 e 步 `getConfig` 的 `config.seed` 原样带回 `seed`（null 清空、省略不改） |
 | g | 写提示词 | `nodeTools` `node:setPrompt`（`packages/nodes/videoGenerationNode/src/index.vue:450`），写作者已写好的官方六段原样下发（每段字段首行写官方段名、参考标记按 §四 的 `<Picture N>` / `<Video N>` / `<Audio N>` 口径） |
 | h | 展示方案等批准 | 按 §七 逐项展示（含费用行），得到明确同意才继续 |
 | i | 生成 | `nodeTools` `node:generateVideo`（`packages/nodes/videoGenerationNode/src/index.vue:462`），空参调用，记录提交时刻 |

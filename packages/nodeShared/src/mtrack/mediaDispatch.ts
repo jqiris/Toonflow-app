@@ -41,6 +41,10 @@ export type ClipGenerationRequest = {
   secondPass?: boolean;
   /** 先出预览（preview）；省略走供应商默认关闭。 */
   preview?: boolean;
+  /** 随机种子；省略即不下发，由引擎自定。重 roll 保种子用于跨重试复现。 */
+  seed?: number;
+  /** 本任务完成后立即释放显存；批次派工只给最后一镜置 true。 */
+  releaseGpuAfter?: boolean;
   mode: unknown;
   outputDirectory: string;
   /** 参考位次 → 素材来源，仅用于回执与排错。 */
@@ -316,6 +320,7 @@ export async function composeClipRequest(options: {
     quality: clip.quality,
     secondPass: clip.secondPass,
     preview: clip.preview,
+    ...(clip.seed !== undefined ? { seed: clip.seed } : {}),
     /*
      * 生成模式按 LSC 的 task_mode 判定（`ref` / `image` / `text`），不再只看参考数量：
      *  - `image`：单图首帧，仅一张图；时长按 startFrameOptional 走；
