@@ -72,6 +72,8 @@ export async function submitClipTask(directory: string, clip: ClipGenerationRequ
       ...(clip.preview !== undefined ? { preview: clip.preview } : {}),
       ...(clip.seed !== undefined ? { seed: clip.seed } : {}),
       ...(clip.releaseGpuAfter ? { releaseGpuAfter: true } : {}),
+      ...(clip.takes !== undefined ? { takes: clip.takes } : {}),
+      ...(clip.partPrompts?.length ? { partPrompts: clip.partPrompts } : {}),
       mode: clip.mode,
       outputDirectory: clip.outputDirectory,
     }, controller.signal);

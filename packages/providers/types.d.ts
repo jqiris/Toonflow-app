@@ -180,6 +180,21 @@ interface VideoRequest extends MediaRequest {
   seed?: number;
   /** 本任务完成后立即释放显存/内存中的视频模型；只对批次最后一个任务置 true——中间任务置 true 会让后续任务反复重载模型。 */
   releaseGpuAfter?: boolean;
+  /**
+   * 一次提交连出 N 条候选（引擎 takes，1–8）：给了 seed 时候选种子为 seed、seed+1…（引擎逐条 +1），
+   * 整批可复现。返回多个 MediaAsset（每条候选一个，各带自己的 jobId）；部分候选失败时只返回成功条。
+   */
+  takes?: number;
+  /**
+   * 预览转正片：传预览任务的 jobId，引擎从该预览直接精修成片。
+   * 设置后 prompt/时长/媒体等生成参数一律忽略（引擎契约：refine_from 与它们互斥），只产出成片一条。
+   */
+  refineFrom?: string;
+  /**
+   * 长镜分块时逐块描述（顺序与引擎 chain_plan.blocks 一一对应，条数必须相等，≤5）：
+   * 每块演自己那段剧情，而不是重播整段。省略则引擎自动切分提示词。仅对会分块的长镜有意义（先 planVideo 拿块数）。
+   */
+  partPrompts?: string[];
 }
 
 /** 基础音频生成参数；text、prompt 至少提供一项，非空校验与模型能力检查由供应商负责。 */
@@ -272,6 +287,27 @@ interface ProviderDefinition<TRules extends readonly ProviderFormRule[] = readon
    * released=false 属正常状态（引擎空闲无驻留、或正在生成），reason 说明原因（如 nothing_held）。
    */
   releaseGpu?: (this: ProviderContext<ProviderConfig<TRules>>) => Promise<{ released: boolean; reason?: string }>;
+  /**
+   * 提交前预检（本机引擎供应商能力）：返回该请求在本机的分块计划与实际几何。
+   * chainPlan.blocks 给出每块秒数/帧数（partPrompts 的条数必须等于 blocks.length）；
+   * 校验失败时抛错并带引擎原文。
+   */
+  planVideo?: (this: ProviderContext<ProviderConfig<TRules>>, request: VideoRequest) => Promise<{
+    geometry: { width: number; height: number; seconds: number; frames: number; fps: number };
+    chainPlan: { seconds: number; single: boolean; blocks: { seconds: number; frames: number }[] };
+    warnings: string[];
+  }>;
+  /**
+   * 本机视觉模型问答（引擎 kind=vlm，走 /jobs 排队、与视频共 GPU 但引擎自动错峰）：
+   * 对图片/视频（引擎自动采样帧）提问，answers 与 questions 一一对应。
+   * 素材用宿主 MediaInput，由供应商上传换成引擎内部路径；单题最多 16 图、全任务图+视频帧 ≤24（引擎限制）。
+   */
+  askVlm?: (this: ProviderContext<ProviderConfig<TRules>>, input: {
+    questions: (string | { text: string; images?: MediaInput[]; video?: MediaInput })[];
+    system?: string;
+    format?: "text" | "json";
+    label?: string;
+  }) => Promise<{ answers: unknown[] }>;
 }
 
 /** 仅用于展示，不参与余额计算；没有额外提示时 tips 返回空字符串。 */

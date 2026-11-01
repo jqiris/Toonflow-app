@@ -378,6 +378,9 @@ const clipPatchSchema = z.strictObject({
   // 但 nullish+transform 会把 null 转成 undefined 后 zod 干脆不落键——所以这里不收 transform，
   // null 原样透传，由 applyOperations 前的 normalizeSeedPatch 把 null 转成「删键」动作。
   seed: z.union([z.number().int().min(0).max(Number.MAX_SAFE_INTEGER), z.null()]).optional(),
+  // takes/partPrompts 同口径：agent 要能为高废片率镜头设候选条数、为长镜逐块写剧情。
+  takes: z.union([z.number().int().min(1).max(8), z.null()]).optional(),
+  partPrompts: z.union([z.array(z.string().trim().min(1).max(20000)).min(1).max(5), z.null()]).optional(),
   // ACT: prompt 六字段全部可省——与 mergePatch 的字段级浅合并（mtrackEdit.ts:35-36）对齐，
   // agent 补写单段时只带一段即可，其余由原 clip 保留，不必「读-改-写」整组；
   // 显式传空串视为「清空这一段」（区别于省略键=不改），与 UI「留空则该段不下发」同口径。
@@ -604,7 +607,7 @@ async function readActualOrder(call: CanvasCall, nodeId: string, signal?: AbortS
 
 nodeTools.register({
   name: "editProject",
-  description: "批量编辑工程（编辑器等价能力，内核 mtrackEdit.applyClipOperations）：operations 1–100 条，六种 op——add{clipId?,after?,patch?} / patch{clipId,patch} / duplicate{clipId} / move{clipId,to|after} / remove{clipId} / setGlobal{ratio?,style?,systemPrompt?,model?}。整批原子：任一 op 校验失败整批拒收，问题在 issues 返回、不抛错。真源字段可写，但生成前仍必须跑 planOperator validate 且 error 清零，本工具不代跑完整契约校验。save=true（默认）成功后立即落盘，不等防抖。patch.status 只接受 pending/generating/generated/failed；accepted 由用户在界面验收产生，agent 不能代写。patch 也可写本镜的 quality（light/medium/high/max，缺省 light）、secondPass（二次采样，缺省 true）与 preview（先出预览，缺省 false）：承接上一镜（continuity=context）的镜头只能用 light/medium 且必须 secondPass=true、不能开 preview，preview 只支持单个 30 秒以内镜头；越界由 validateClip 整批拒收，issues 会带原因。patch.seed 为随机种子（0 到 9007199254740991 的整数）：同种子+同提示词产物逐字节一致（实测），重 roll 保住满意镜头就带上 readClips 读回的 seed；传 null 清空回到引擎自定，省略不改",
+  description: "批量编辑工程（编辑器等价能力，内核 mtrackEdit.applyClipOperations）：operations 1–100 条，六种 op——add{clipId?,after?,patch?} / patch{clipId,patch} / duplicate{clipId} / move{clipId,to|after} / remove{clipId} / setGlobal{ratio?,style?,systemPrompt?,model?}。整批原子：任一 op 校验失败整批拒收，问题在 issues 返回、不抛错。真源字段可写，但生成前仍必须跑 planOperator validate 且 error 清零，本工具不代跑完整契约校验。save=true（默认）成功后立即落盘，不等防抖。patch.status 只接受 pending/generating/generated/failed；accepted 由用户在界面验收产生，agent 不能代写。patch 也可写本镜的 quality（light/medium/high/max，缺省 light）、secondPass（二次采样，缺省 true）与 preview（先出预览，缺省 false）：承接上一镜（continuity=context）的镜头只能用 light/medium 且必须 secondPass=true、不能开 preview，preview 只支持单个 30 秒以内镜头；越界由 validateClip 整批拒收，issues 会带原因。patch.seed 为随机种子（0 到 9007199254740991 的整数）：同种子+同提示词产物逐字节一致（实测），重 roll 保住满意镜头就带上 readClips 读回的 seed；传 null 清空回到引擎自定，省略不改。patch.takes 为候选条数（1–8，缺省 1）：一次派工连出 N 条候选版本供逐条预览挑选，带 seed 时候选种子逐条 +1 整批可复现；null 清空回单条。patch.partPrompts 为长镜逐块描述（1–5 条非空文本，条数必须等于 mediaGeneration planVideo 预检返回的 chainPlan.blocks 数）：每块演自己那段剧情而不是重播整段，只对 30 秒以上会分块的镜头有意义；null 清空回引擎自动切分",
   parameters: z.strictObject({
     operations: z.array(editOpSchema).min(1).max(100),
     save: z.boolean().default(true),

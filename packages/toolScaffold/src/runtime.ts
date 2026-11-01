@@ -130,6 +130,12 @@ export interface MediaGenerationRequest {
   seed?: number;
   /** 本任务完成后立即释放显存/内存中的视频模型；只对批次最后一个任务置 true。 */
   releaseGpuAfter?: boolean;
+  /** 一次提交连出 N 条候选（引擎 takes 1–8）；结果按条返回，各带自己的 jobId。 */
+  takes?: number;
+  /** 预览转正片：传预览任务 jobId，引擎从预览直接精修；设置后其余生成参数忽略（引擎互斥约束）。 */
+  refineFrom?: string;
+  /** 长镜分块的逐块描述（条数=POST /plan 的 blocks 数，≤5）；省略由引擎自动切分提示词。 */
+  partPrompts?: string[];
   voice?: string;
   speed?: number;
   volume?: number;
@@ -157,6 +163,27 @@ export interface MediaContext {
   generateImage(request: MediaGenerationRequest, signal?: AbortSignal): Promise<GeneratedMedia[]>;
   generateVideo(request: MediaGenerationRequest, signal?: AbortSignal): Promise<GeneratedMedia[]>;
   generateAudio(request: MediaGenerationRequest, signal?: AbortSignal): Promise<GeneratedMedia[]>;
+  /**
+   * 提交前预检（可选能力，本机引擎供应商实现）：返回该请求的分块计划与实际几何。
+   * chainPlan.blocks 数 = partPrompts 应拆的条数。供应商不支持时抛错。
+   */
+  planVideo?(request: MediaGenerationRequest, signal?: AbortSignal): Promise<{
+    geometry: { width: number; height: number; seconds: number; frames: number; fps: number };
+    chainPlan: { seconds: number; single: boolean; blocks: { seconds: number; frames: number }[] };
+    warnings: string[];
+  }>;
+  /**
+   * 本机视觉模型问答（可选能力）：对图片/视频（自动采样帧）提问，answers 与 questions 一一对应。
+   * 素材引用工作区相对路径（与生成请求的 MediaReference 同口径）。供应商不支持时抛错。
+   */
+  askVlm?(input: {
+    providerId: string;
+    modelId?: string;
+    questions: (string | { text: string; images?: MediaReference[]; video?: MediaReference })[];
+    system?: string;
+    format?: "text" | "json";
+    label?: string;
+  }, signal?: AbortSignal): Promise<{ answers: unknown[] }>;
 }
 
 export interface QuestionField {

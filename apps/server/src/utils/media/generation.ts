@@ -169,6 +169,9 @@ async function prepareRequest<T>(directory: string | undefined, mediaType: "imag
     preview: request.preview,
     ...(request.seed !== undefined ? { seed: request.seed } : {}),
     ...(request.releaseGpuAfter !== undefined ? { releaseGpuAfter: request.releaseGpuAfter } : {}),
+    ...(request.takes !== undefined ? { takes: request.takes } : {}),
+    ...(request.refineFrom !== undefined ? { refineFrom: request.refineFrom } : {}),
+    ...(request.partPrompts !== undefined ? { partPrompts: request.partPrompts } : {}),
   };
 }
 
@@ -212,6 +215,69 @@ export async function releaseProviderGpu(providerId: string): Promise<{ supporte
   if (typeof provider.releaseGpu !== "function") return { supported: false, released: false };
   const result = await provider.releaseGpu.call(provider);
   return { supported: true, ...result };
+}
+
+/** 预检结果：分块计划与实际几何（与 provider planVideo 返回同型）。 */
+export type PlanMediaResult = {
+  geometry: { width: number; height: number; seconds: number; frames: number; fps: number };
+  chainPlan: { seconds: number; single: boolean; blocks: { seconds: number; frames: number }[] };
+  warnings: string[];
+};
+
+/**
+ * 提交前预检（引擎 /plan）：返回分块计划与实际几何。供应商没有 planVideo 能力时明确报错，
+ * 不静默返回假计划——派工侧靠 blocks 数决定 partPrompts 拆几条。
+ */
+export async function planMedia(cwd: string, request: MediaGenerationRequest, signal?: AbortSignal): Promise<PlanMediaResult> {
+  const directory = await realpath(cwd);
+  const provider = await configuredProvider(request, "video", signal, directory);
+  if (typeof provider.planVideo !== "function") throw Object.assign(new Error("当前视频供应商不支持提交前预检"), { status: 400 });
+  const prepared = await prepareRequest(directory, "video", request, readPriceReference, signal);
+  const { type, ...parameters } = prepared;
+  if (type !== "video") invalid("预检只支持视频请求");
+  // ACT: 解构后的 rest 变量不随判别式收窄（TS 限制），与 generateMedia 的分发处同样按分支收窄请求类型。
+  return provider.planVideo.call(provider, parameters as VideoRequest);
+}
+
+/**
+ * 本机视觉模型问答（引擎 kind=vlm）：素材按工作区相对路径读取转 base64 后交给供应商上传。
+ * 供应商没有 askVlm 能力时明确报错。
+ */
+export async function askVlmMedia(cwd: string, input: {
+  providerId: string;
+  modelId?: string;
+  questions: (string | { text: string; images?: MediaReference[]; video?: MediaReference })[];
+  system?: string;
+  format?: "text" | "json";
+  label?: string;
+}, signal?: AbortSignal): Promise<{ answers: unknown[] }> {
+  const directory = await realpath(cwd);
+  const info = await getMediaProvider(input.providerId);
+  const modelId = input.modelId ?? info.models.find(model => model.type === "video")?.id;
+  if (!modelId || !info.models.some(model => model.id === modelId)) invalid("所选媒体模型不存在，请重新选择");
+  const configurations = record(conf.get("settings", {}).mediaProviderConfigs);
+  const provider = await loadMediaProviderSource(info.source, record(configurations[info.id]), signal, undefined, directory);
+  if (typeof provider.askVlm !== "function") throw Object.assign(new Error("当前视频供应商不支持本机视觉问答"), { status: 400 });
+  if (!input.questions.length) invalid("至少提一个问题");
+  const questions = [] as (string | { text: string; images?: Extract<MediaInput, { type: "base64" }>[]; video?: Extract<MediaInput, { type: "base64" }> })[];
+  for (const question of input.questions) {
+    if (typeof question === "string") { questions.push(question); continue; }
+    const images = question.images?.length ? await referencesToInputs(directory, question.images, "image", signal) : undefined;
+    const video = question.video ? (await referencesToInputs(directory, [question.video], "video", signal))[0] : undefined;
+    questions.push({ text: question.text, ...(images?.length ? { images } : {}), ...(video ? { video } : {}) });
+  }
+  return provider.askVlm.call(provider, {
+    questions,
+    ...(input.system ? { system: input.system } : {}),
+    ...(input.format ? { format: input.format } : {}),
+    ...(input.label ? { label: input.label } : {}),
+  });
+}
+
+async function referencesToInputs(directory: string, items: MediaReference[], mediaType: string, signal?: AbortSignal) {
+  const result = [];
+  for (const item of items) result.push(await readReference(directory, item, mediaType, signal));
+  return result;
 }
 
 export async function generateMedia(

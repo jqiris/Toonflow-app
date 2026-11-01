@@ -307,7 +307,7 @@ planOperator { action: "dispatch", path: "plan/story.mtrack", from: "S003", to: 
 | c | 接线 | `connectNodes`，按 `referencePlan` 顺序把资产节点 → 视频节点 `in` 端口；单批上限 64 条（`packages/tools/canvas/src/runtime.ts:61`） |
 | d | 核对参考顺序 | `nodeTools` `node:getReferenceOrder`（`packages/nodeShared/src/useNodeReferences.ts:52`）；不一致用 `node:setReferenceOrder`（`packages/nodeShared/src/useNodeReferences.ts:67`）按 `referencePlan` 顺序重写。节点端口上的参考顺序由 `referenceOrder` 决定，不看连线手势；**但落到具体镜头的官方参考标记位次以 `clip.referenceIds` 为准**——编辑器「参考素材」勾选直接写它（文档下方「把资产图接进多轨」），勾选路径不要拿 `setReferenceOrder` 去模拟 |
 | e | 读配置 | `nodeTools` `node:getConfig`（`packages/nodes/videoGenerationNode/src/index.vue:399`），取 `matchingModes`/`duration`/`resolution`/`ratio`/`audio` |
-| f | 下发配置 | `nodeTools` `node:setConfig`（`packages/nodes/videoGenerationNode/src/index.vue:411`）：`{ providerId, modelId, duration: <seconds>, resolution, ratio, generateAudio, mode }`；`duration` 必须等于 `seconds` 且为 2–60 整数；重 roll 保画面时从 e 步 `getConfig` 的 `config.seed` 原样带回 `seed`（null 清空、省略不改） |
+| f | 下发配置 | `nodeTools` `node:setConfig`（`packages/nodes/videoGenerationNode/src/index.vue:411`）：`{ providerId, modelId, duration: <seconds>, resolution, ratio, generateAudio, mode }`；`duration` 必须等于 `seconds` 且为 2–60 整数；重 roll 保画面时从 e 步 `getConfig` 的 `config.seed` 原样带回 `seed`（null 清空、省略不改）。候选条数（takes）与长镜逐块描述（partPrompts）走多轨工程字段 `node:editProject` 的 patch，不在节点 setConfig 里——细则见 `freevideoMultitrack` 技能第 9 条 |
 | g | 写提示词 | `nodeTools` `node:setPrompt`（`packages/nodes/videoGenerationNode/src/index.vue:450`），写作者已写好的官方六段原样下发（每段字段首行写官方段名、参考标记按 §四 的 `<Picture N>` / `<Video N>` / `<Audio N>` 口径） |
 | h | 展示方案等批准 | 按 §七 逐项展示（含费用行），得到明确同意才继续 |
 | i | 生成 | `nodeTools` `node:generateVideo`（`packages/nodes/videoGenerationNode/src/index.vue:462`），空参调用，记录提交时刻 |

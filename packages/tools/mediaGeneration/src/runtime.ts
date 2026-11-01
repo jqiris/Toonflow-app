@@ -60,6 +60,12 @@ export const videoGenerationSchema = z.strictObject({
   seed: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
   /** 本任务完成后立即释放显存/内存中的视频模型；只对批次最后一个任务置 true。 */
   releaseGpuAfter: z.boolean().optional(),
+  /** 一次提交连出 N 条候选（引擎 takes，1–8）：结果按条返回、各带 jobId；带 seed 时候选种子逐条 +1，整批可复现。 */
+  takes: z.number().int().min(1).max(8).optional(),
+  /** 预览转正片：传预览任务的 jobId（j+12hex），引擎从预览直接精修成片；设置后 prompt/时长/媒体等参数一律忽略（引擎互斥约束）。 */
+  refineFrom: z.string().regex(/^j[0-9a-f]{12}$/).optional(),
+  /** 长镜分块的逐块描述（1–5 条，条数必须等于 POST /plan 返回的 chain_plan.blocks 数）：每块演自己那段剧情。 */
+  partPrompts: z.array(z.string().trim().min(1).max(20000)).min(1).max(5).optional(),
   mode: z.union([
     z.enum(["singleImage", "startEndRequired", "endFrameOptional", "startFrameOptional", "text"]),
     z.array(referenceMode).min(1).max(3),
@@ -80,4 +86,24 @@ export const audioGenerationSchema = z.strictObject({
   language: z.string().trim().min(1).max(64).optional(),
   format: z.string().trim().min(1).max(64).optional(),
   sampleRate: z.number().int().positive().optional(),
+});
+
+/** 提交前预检（引擎 /plan）：入参与 generateVideo 同形（复用 videoGenerationSchema），返回分块计划与实际几何。 */
+export const planVideoSchema = videoGenerationSchema;
+
+/** 本机视觉模型问答（引擎 kind=vlm）：questions 1–8 条，每条可带工作区图片（≤16）或视频（自动采样帧）；全任务素材合计 ≤24。 */
+export const askVlmSchema = z.strictObject({
+  providerId: sharedFields.providerId,
+  modelId: z.string().trim().min(1).max(256).optional(),
+  questions: z.array(z.union([
+    z.string().trim().min(1).max(8000),
+    z.strictObject({
+      text: z.string().trim().min(1).max(8000),
+      images: z.array(imageReference).max(16).optional(),
+      video: videoReference.optional(),
+    }),
+  ])).min(1).max(8),
+  system: z.string().trim().min(1).max(4000).optional(),
+  format: z.enum(["text", "json"]).optional(),
+  label: z.string().trim().min(1).max(120).optional(),
 });

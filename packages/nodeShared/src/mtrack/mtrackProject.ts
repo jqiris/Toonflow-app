@@ -137,6 +137,18 @@ export interface MtrackClip {
    * 纳入会让旧工程升级后全片误判 stale。
    */
   seed?: number;
+  /**
+   * 候选条数（引擎 takes，1–8，缺省 1）：一次提交连出 N 条候选、各成该镜一个版本。
+   * 带 seed 时候选种子逐条 +1，整批可复现。动作戏/多人等高废片率镜头直接多候选比事后重派省排队。
+   * 不进 clipSignature（同 seed 口径，渲染参数不是镜头身份）。
+   */
+  takes?: number;
+  /**
+   * 长镜分块的逐块描述（条数必须等于引擎 POST /plan 的 chain_plan.blocks 数，1–5）：
+   * 每块演自己那段剧情而不是重播整段；省略由引擎自动切分提示词。仅对 ≥30 秒会分块的镜头有意义。
+   * 不进 clipSignature（下发参数）。
+   */
+  partPrompts?: string[];
   prompt: ClipPrompt;
   referenceIds: string[];
   /** `shot` | `context`；旧工程的 start/continue/cut 由 normalizeContinuity 归一。 */
@@ -315,6 +327,10 @@ export function normalizeProject(value: unknown): MtrackProject {
       preview: readBoolean(item.preview, false),
       // ACT: seed 是 additive 可选字段：合法整数才带，缺失/坏值即省略——不能落 0，0 是合法种子值，落 0 会把「未设置」错写成「锁定种子 0」。
       ...(typeof item.seed === "number" && Number.isInteger(item.seed) && item.seed >= 0 && item.seed <= Number.MAX_SAFE_INTEGER ? { seed: item.seed } : {}),
+      // takes 同口径：只有 2–8 才带键（1 是引擎默认，落键只是噪音）；坏值省略回默认。
+      ...(typeof item.takes === "number" && Number.isInteger(item.takes) && item.takes >= 2 && item.takes <= 8 ? { takes: item.takes } : {}),
+      // partPrompts：非空字符串数组、1–5 条才带；块数与 blocks 是否一致由派工时 planVideo 核对，读盘不拦。
+      ...(Array.isArray(item.partPrompts) && item.partPrompts.length >= 1 && item.partPrompts.length <= 5 && item.partPrompts.every(part => typeof part === "string" && part.trim()) ? { partPrompts: item.partPrompts.map(part => part.trim()) } : {}),
       prompt: readPrompt(item.prompt),
       referenceIds: Array.isArray(item.referenceIds) ? item.referenceIds.filter(ref => typeof ref === "string") : [],
       // ACT: 首镜永远 shot（没有上一镜可接），其余缺省 shot；旧工程的 continue 归一为 context。

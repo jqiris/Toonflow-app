@@ -18,7 +18,7 @@ const rules = [
   },
 ] as const;
 
-const version = "1.2.0";
+const version = "1.3.0";
 const agentSuffix = "/freevideo/agent/v1";
 /** 图像任务参考图上限：引擎 kind=image 的 images 数组 maxItems=4（超限返回 too_many_images）。视频单块仍是 9，见 models 段。 */
 const maxImageReferences = 4;
@@ -187,8 +187,10 @@ async function download(context: ProviderContext, token: string, origin: string,
  * ACT: 任务号一确定就经 onJobStart 向宿主登记取消闭包——宿主显式取消要真停引擎任务，
  * 光掐本地信号只会让本机 GPU 白跑到自然结束。闭包走 queryFetch（原始 fetch）：
  * 调用时本次生成的 signal 往往已中止，tool.fetch 会被宿主直接拒发。
+ * ACT: takes>1 时引擎一次提交展开成多条任务（响应 jobs 数组，每条 take 独立 jobId、
+ * seed 逐条 +1）；这里逐条轮询，返回全部成功条——部分失败不拖垮整批，全失败才抛错。
  */
-async function runJob(context: ProviderContext, token: string, agent: string, spec: Record<string, unknown>, signal: AbortSignal): Promise<{ job: Record<string, unknown>; jobId: string }> {
+async function runJobs(context: ProviderContext, token: string, agent: string, spec: Record<string, unknown>, signal: AbortSignal): Promise<{ job: Record<string, unknown>; jobId: string }[]> {
   const submit = await context.tool.fetch(`${agent}/jobs`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -197,10 +199,10 @@ async function runJob(context: ProviderContext, token: string, agent: string, sp
   });
   if (!submit.ok) throw new Error(context.tool.errorMessage?.(await submit.json().catch(() => ({}))) || `提交失败：HTTP ${submit.status}`);
   const answer = object(await submit.json());
-  const job = object(answer.job ?? answer);
-  const jobId = typeof job.id === "string" ? job.id : "";
-  if (!jobId) throw new Error("未返回任务ID");
-  context.onJobStart?.(jobId, async () => {
+  const rows = Array.isArray(answer.jobs) ? answer.jobs : [object(answer.job ?? answer)];
+  const jobIds = rows.map(row => typeof object(row).id === "string" ? String(object(row).id) : "");
+  if (!jobIds.length || jobIds.some(id => !id)) throw new Error("未返回任务ID");
+  jobIds.forEach(jobId => context.onJobStart?.(jobId, async () => {
     const fetchImpl = context.queryFetch ?? context.tool.fetch;
     try {
       await fetchImpl(`${agent}/jobs/${jobId}/cancel`, {
@@ -211,35 +213,55 @@ async function runJob(context: ProviderContext, token: string, agent: string, sp
       });
       // 已终态任务的取消返回 4xx 属正常竞态，不抛出。
     } catch { /* 尽力而为：闭包失败不影响本地任务收尾。 */ }
-  });
-  let resumeTries = 0;
-  while (true) {
-    const response = await context.tool.fetch(`${agent}/jobs/${jobId}?wait=25`, { headers: { Authorization: `Bearer ${token}` }, signal });
-    if (!response.ok) throw new Error(context.tool.errorMessage?.(await response.json().catch(() => ({}))) || `轮询失败：HTTP ${response.status}`);
-    const answer = object(await response.json());
-    const current = object(answer.job ?? answer);
-    const status = String(current.status);
-    if (status === "succeeded") return { job: current, jobId };
-    if (status === "failed" || status === "cancelled") {
-      throw new Error(context.tool.errorMessage?.(current) || `生成${status === "cancelled" ? "已取消" : "失败"}`);
+  }));
+  const succeeded: { job: Record<string, unknown>; jobId: string }[] = [];
+  const failures: string[] = [];
+  for (const jobId of jobIds) {
+    let resumeTries = 0;
+    for (;;) {
+      const response = await context.tool.fetch(`${agent}/jobs/${jobId}?wait=25`, { headers: { Authorization: `Bearer ${token}` }, signal });
+      if (!response.ok) throw new Error(context.tool.errorMessage?.(await response.json().catch(() => ({}))) || `轮询失败：HTTP ${response.status}`);
+      const answer = object(await response.json());
+      const current = object(answer.job ?? answer);
+      const status = String(current.status);
+      if (status === "succeeded") { succeeded.push({ job: current, jobId }); break; }
+      if (status === "failed" || status === "cancelled") {
+        const message = context.tool.errorMessage?.(current) || `生成${status === "cancelled" ? "已取消" : "失败"}`;
+        // 单条候选失败只记账；整批全失败才抛错（takes 的意义就是留成功条给用户挑）。
+        if (jobIds.length === 1) throw new Error(message);
+        failures.push(`第 ${jobIds.indexOf(jobId) + 1} 条：${message}`);
+        break;
+      }
+      if (status === "interrupted") {
+        // ACT: 仅 interrupted 自动续拍，上限 2——failed 多需换提示词/参数、cancelled 是用户意图，都不自动恢复；已成功块保留由引擎侧完成，供应商无需分段记账。
+        if (resumeTries >= 2) {
+          if (jobIds.length === 1) throw new Error("生成中断，自动续拍两次仍未成功；请检查 FreeVideo 引擎状态后重试本镜头");
+          failures.push(`第 ${jobIds.indexOf(jobId) + 1} 条：生成中断，自动续拍两次仍未成功`);
+          break;
+        }
+        resumeTries++;
+        const resume = await context.tool.fetch(`${agent}/jobs/${jobId}/resume`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: "{}",
+          signal,
+        });
+        const resumeAnswer = await resume.json().catch(() => ({}));
+        if (!resume.ok) throw new Error(context.tool.errorMessage?.(resumeAnswer) || `续拍失败：HTTP ${resume.status}`);
+        object(resumeAnswer);
+        continue;
+      }
+      await wait(signal, Math.max(500, Number(current.poll_after_ms) || 2000));
     }
-    if (status === "interrupted") {
-      // ACT: 仅 interrupted 自动续拍，上限 2——failed 多需换提示词/参数、cancelled 是用户意图，都不自动恢复；已成功块保留由引擎侧完成，供应商无需分段记账。
-      if (resumeTries >= 2) throw new Error("生成中断，自动续拍两次仍未成功；请检查 FreeVideo 引擎状态后重试本镜头");
-      resumeTries++;
-      const resume = await context.tool.fetch(`${agent}/jobs/${jobId}/resume`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: "{}",
-        signal,
-      });
-      const resumeAnswer = await resume.json().catch(() => ({}));
-      if (!resume.ok) throw new Error(context.tool.errorMessage?.(resumeAnswer) || `续拍失败：HTTP ${resume.status}`);
-      object(resumeAnswer);
-      continue;
-    }
-    await wait(signal, Math.max(500, Number(current.poll_after_ms) || 2000));
   }
+  if (!succeeded.length) throw new Error(failures.join("；") || "生成失败");
+  return succeeded;
+}
+
+/** 兼容旧调用名：单任务路径。 */
+async function runJob(context: ProviderContext, token: string, agent: string, spec: Record<string, unknown>, signal: AbortSignal): Promise<{ job: Record<string, unknown>; jobId: string }> {
+  const [first] = await runJobs(context, token, agent, spec, signal);
+  return first!;
 }
 
 /** 每次调用生成新 ref；不复用——spec 含每次不同的上传文件名，内容哈希幂等会把「同参数再抽一次」误合并回旧任务。需要断线找回时应在请求级持有同一 ref 重发（当前无此需求）。 */
@@ -349,8 +371,30 @@ export default {
     if (!token) throw new Error("请填写 Token");
     const agent = agentBase(this.config.baseUrl);
     const origin = originOf(agent);
-    // ACT: 本机 GPU 生成较慢，单次最多等待 30 分钟。
-    const signal = AbortSignal.any([AbortSignal.timeout(30 * 60_000), ...(this.signal ? [this.signal] : [])]);
+    // ACT: takes 条候选在引擎侧串行排队，超时按条数放大（30 分钟/条，封顶 150 分钟）。
+    const takes = request.takes === undefined ? 1 : Math.round(request.takes);
+    if (takes < 1 || takes > 8) throw new Error(`候选条数仅支持 1–8（引擎限制），当前 ${request.takes}`);
+    const signal = AbortSignal.any([AbortSignal.timeout(Math.min(150, 30 * takes) * 60_000), ...(this.signal ? [this.signal] : [])]);
+
+    // ACT: refine_from 与 prompt/seconds/media/quality 等全部生成参数互斥（引擎 schema 硬约束：
+    // if refine_from then 其余字段一律 False），请求里带了 refineFrom 就走精修早退分支——
+    // 不上传媒体、不拼提示词，只发 kind/refine_from/label/ref；预览片的参数由引擎从源任务继承。
+    if (request.refineFrom) {
+      if (!/^j[0-9a-f]{12}$/.test(request.refineFrom)) throw new Error(`预览任务号格式不对（应为 j+12 位十六进制）：${request.refineFrom.slice(0, 20)}`);
+      const { job, jobId } = await runJob(this, token, agent, {
+        kind: "generate",
+        label: jobLabel(request, "video"),
+        ref: makeRef('vid', request),
+        refine_from: request.refineFrom,
+        ...(request.releaseGpuAfter ? { release_gpu_after: true } : {}),
+      }, signal);
+      const result = object(job.result ?? {});
+      const video = object(result.video ?? {});
+      const url = video.url ?? result.url;
+      if (typeof url !== "string" || !url) throw new Error("未返回生成结果");
+      const data = await download(this, token, origin, url, signal);
+      return [{ mediaType: "video", type: "binary", data, mimeType: "video/mp4", jobId }];
+    }
 
     // ACT: 续接（continue_from）时引擎只允许 media.references，first/last 必须为空
     // （freevideo_engine/agent/schema.py 的 "only references when continue_from is supplied"）。
@@ -403,7 +447,13 @@ export default {
     // ACT: first_frame_reference 只在 ≥30s 自动分块时减少跨块漂移；单段视频不受影响，
     // 运镜大/需要变化的场景规范建议关闭——保守取「≥30s 才开」，不引入开关面。
     // 续接任务由引擎自己维护上下文，不需要这个降级锚点。
-    const { job, jobId } = await runJob(this, token, agent, {
+    // ACT: part_prompts 条数必须等于引擎 chain_plan.blocks 数（≤5），条数不对引擎整任务拒收；
+    // 派工侧先用 planVideo 拿块数再拆分，这里只做形状兜底（非空数组、每条非空）。
+    const partPrompts = (request.partPrompts ?? []).map(item => item.trim()).filter(Boolean);
+    if (partPrompts.length && (partPrompts.length > 5 || partPrompts.length !== (request.partPrompts?.length ?? 0))) {
+      throw new Error(`逐块描述需为 1–5 条且与 POST /plan 的 blocks 数一致（引擎限制），当前有效 ${partPrompts.length} 条 / 传入 ${request.partPrompts?.length ?? 0} 条`);
+    }
+    const jobs = await runJobs(this, token, agent, {
       kind: "generate",
       label: jobLabel(request, "video"),
       ref: makeRef('vid', request),
@@ -421,12 +471,87 @@ export default {
       ...(request.seed !== undefined ? { seed: request.seed } : {}),
       // 批次最后一个任务置 true 立即还显存；中间任务置 true 会让下一镜反复重载模型，由派工侧把关。
       ...(request.releaseGpuAfter ? { release_gpu_after: true } : {}),
+      // takes 条候选：引擎逐条展开，带 seed 时候选种子 seed、seed+1…（整批可复现）。
+      ...(takes > 1 ? { takes } : {}),
+      ...(partPrompts.length ? { part_prompts: partPrompts } : {}),
+    }, signal);
+    const assets: MediaAsset[] = [];
+    for (const { job, jobId } of jobs) {
+      const result = object(job.result ?? {});
+      const video = object(result.video ?? {});
+      const url = video.url ?? result.url;
+      if (typeof url !== "string" || !url) continue;
+      const data = await download(this, token, origin, url, signal);
+      assets.push({ mediaType: "video", type: "binary", data, mimeType: "video/mp4", jobId });
+    }
+    if (!assets.length) throw new Error("未返回生成结果");
+    return assets;
+  },
+  // 提交前预检：POST /plan 的 body 就是裸 generate spec（与 /jobs 同形状，无 kind 包装差异），
+  // 返回 geometry / chain_plan / warnings。校验失败引擎按 422 逐字段报错，经 errorMessage 透传。
+  async planVideo(request: VideoRequest) {
+    const token = this.config.apiKey?.trim();
+    if (!token) throw new Error("请填写 Token");
+    const agent = agentBase(this.config.baseUrl);
+    const spec: Record<string, unknown> = {
+      kind: "generate",
+      prompt: request.prompt,
+      seconds: clampSeconds(request.duration),
+      quality: request.quality ?? "light",
+      sampling: { two_pass: request.secondPass ?? true },
+      ...(request.ratio ? { aspect: request.ratio } : {}),
+      ...(request.resolution ? { megapixels: megapixels(request.resolution) } : {}),
+      ...(request.seed !== undefined ? { seed: request.seed } : {}),
+    };
+    const response = await this.tool.fetch(`${agent}/plan`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(spec),
+      // ACT: 有宿主信号时也要叠加 30s 上限——预检是同步接口，引擎重启/卡死时不能让 HTTP 路由无限挂。
+      signal: this.signal ? AbortSignal.any([this.signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
+    });
+    if (!response.ok) throw new Error(this.tool.errorMessage?.(await response.json().catch(() => ({}))) || `预检失败：HTTP ${response.status}`);
+    const answer = object(await response.json());
+    const chain = object(answer.chain_plan ?? {});
+    const geo = object(answer.geometry ?? {});
+    return {
+      geometry: { width: Number(geo.width) || 0, height: Number(geo.height) || 0, seconds: Number(geo.seconds) || 0, frames: Number(geo.frames) || 0, fps: Number(geo.fps) || 24 },
+      chainPlan: { seconds: Number(chain.seconds) || 0, single: chain.single === true, blocks: Array.isArray(chain.blocks) ? chain.blocks.map(block => ({ seconds: Number(object(block).seconds) || 0, frames: Number(object(block).frames) || 0 })) : [] },
+      warnings: Array.isArray(answer.warnings) ? answer.warnings.map(String) : [],
+    };
+  },
+  // 本机视觉模型问答（kind=vlm，走 /jobs 排队，与视频共 GPU 但引擎自动错峰）。
+  // 素材经 upload() 换内部路径后随题下发；answers 与 questions 一一对应。
+  // 引擎限制：单题 ≤16 图、全任务（图 + 视频采样帧）≤24；一次 ≤8 题。
+  async askVlm(input: { questions: (string | { text: string; images?: MediaInput[]; video?: MediaInput })[]; system?: string; format?: "text" | "json"; label?: string }) {
+    const token = this.config.apiKey?.trim();
+    if (!token) throw new Error("请填写 Token");
+    if (!input.questions.length) throw new Error("至少提一个问题");
+    if (input.questions.length > 8) throw new Error(`一次最多 8 个问题（引擎限制），当前 ${input.questions.length} 个`);
+    const agent = agentBase(this.config.baseUrl);
+    // ACT: vlm 走 /jobs 排队，与视频共 GPU——引擎忙时排队时间不可控，10 分钟封顶（宿主信号存在时叠加）。
+    // 原 5 分钟会在「前面有长视频在跑」时把正常排队的问答误判为失败。
+    const signal = this.signal ? AbortSignal.any([this.signal, AbortSignal.timeout(10 * 60_000)]) : AbortSignal.timeout(10 * 60_000);
+    const questions = [];
+    let mediaCount = 0;
+    for (const question of input.questions) {
+      if (typeof question === "string") { questions.push(question); continue; }
+      const images: string[] = [];
+      for (const image of question.images ?? []) images.push(await upload(this, token, agent, image, signal));
+      const video = question.video ? await upload(this, token, agent, question.video, signal) : undefined;
+      mediaCount += images.length + (video ? 1 : 0);
+      questions.push({ text: question.text, ...(images.length ? { images } : {}), ...(video ? { video } : {}) });
+    }
+    if (mediaCount > 24) throw new Error(`一次问答最多 24 个素材（引擎限制：图片 + 视频采样帧合计），当前 ${mediaCount} 个`);
+    const { job } = await runJob(this, token, agent, {
+      kind: "vlm",
+      label: (input.label ?? "Toonflow 审片").slice(0, 120),
+      ref: `toonflow-vlm-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`.slice(0, 128),
+      questions,
+      ...(input.format ? { format: input.format } : {}),
+      ...(input.system ? { system: input.system } : {}),
     }, signal);
     const result = object(job.result ?? {});
-    const video = object(result.video ?? {});
-    const url = video.url ?? result.url;
-    if (typeof url !== "string" || !url) throw new Error("未返回生成结果");
-    const data = await download(this, token, origin, url, signal);
-    return [{ mediaType: "video", type: "binary", data, mimeType: "video/mp4", jobId }];
+    return { answers: Array.isArray(result.answers) ? result.answers : [] };
   },
 } satisfies ProviderDefinition<typeof rules>;

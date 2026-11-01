@@ -1637,14 +1637,15 @@ function finishDispatchRun(controller: AbortController) {
  * 把一次生成尝试写回镜头：状态、节点号、产物路径和 attempts 记录一起落盘，
  * 使「生成中」在界面、状态快照和 agent 的 mtrackRead 里都可见。
  */
-function writeClipRun(clipId: string, patch: Partial<MtrackClip>, attempt?: { nodeId: string; status: string; error?: string; jobId?: string }) {
+function writeClipRun(clipId: string, patch: Partial<MtrackClip>, attempt?: { nodeId: string; status: string; error?: string; jobId?: string; assetPath?: string }) {
   const current = project.value;
   const clip = current?.clips.find(item => item.clipId === clipId);
   if (!current || !clip) return;
   Object.assign(clip, patch);
   if (attempt) {
     // 成功尝试把产物路径一起记下：历史版本的身份就是它（服务端通道不建画布节点，nodeId 恒为空）。
-    const succeededPath = attempt.status === "succeeded" ? patch.assetPath : undefined;
+    // attempt.assetPath 显式指定时优先——takes 多候选的第 2..N 条要各自成版本但不改默认位（默认位由 patch.assetPath 给）。
+    const succeededPath = attempt.status === "succeeded" ? attempt.assetPath ?? patch.assetPath : undefined;
     // 成功尝试同时记下设置签名与时间线位置：clipStates 靠这两个值判定这条成片是否已落后于当前设置。
     const clipIndex = current.clips.findIndex(item => item.clipId === clipId);
     const parentJobId = continuationJobId(clipIndex > 0 ? current.clips[clipIndex - 1] : undefined);
@@ -1745,11 +1746,17 @@ async function launchDispatch(clipIds?: string[], options?: { includeFinished?: 
           const result = await waitClipTask(directory, taskId, controller.signal);
           activeTaskIds.value = activeTaskIds.value.filter(id => id !== taskId);
           if (result.state === "succeeded") {
-            const file = result.files[0];
-            if (!file?.path) throw new Error("服务端报告生成成功但没有返回文件路径");
+            const files = result.files.filter(file => file?.path);
+            if (!files.length) throw new Error("服务端报告生成成功但没有返回文件路径");
             // jobId 一定要存进 attempts：它是下一镜「承接本镜」时 continue_from.from_job 的唯一来源。
-            writeClipRun(clip.clipId, { status: "generated", nodeId: null, assetPath: file.path },
-              { nodeId: "", status: "succeeded", error: `${marker} task:${taskId}`, ...(file.jobId ? { jobId: file.jobId } : {}) });
+            // takes 多候选：第一条成默认版本（patch.assetPath），其余各自成版本但不占默认位——
+            // 用户在版本菜单逐条预览挑一条「设为默认」，continuationJobId 只认默认版本那条记录的 jobId，承接链不断。
+            const [first, ...rest] = files;
+            writeClipRun(clip.clipId, { status: "generated", nodeId: null, assetPath: first!.path },
+              { nodeId: "", status: "succeeded", error: `${marker} task:${taskId}`, ...(first!.jobId ? { jobId: first!.jobId } : {}) });
+            for (const extra of rest) {
+              writeClipRun(clip.clipId, {}, { nodeId: "", status: "succeeded", error: `${marker} task:${taskId} 候选`, ...(extra.jobId ? { jobId: extra.jobId } : {}), assetPath: extra.path });
+            }
           } else if (result.state === "cancelled" || result.state === "lost") {
             // ACT: 任务在服务端已不存在（重启/过期）时也退回 pending，不能落 failed——用户没做错任何事（审计 P2-1）。
             writeClipRun(clip.clipId, { status: "pending" }, { nodeId: "", status: "cancelled", error: `${marker} task:${taskId}${result.state === "lost" ? " 任务已丢失，已退回待生成" : ""}` });

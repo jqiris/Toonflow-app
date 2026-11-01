@@ -45,6 +45,10 @@ export type ClipGenerationRequest = {
   seed?: number;
   /** 本任务完成后立即释放显存；批次派工只给最后一镜置 true。 */
   releaseGpuAfter?: boolean;
+  /** 候选条数（引擎 takes 1–8）：一次提交连出 N 条候选，各带 jobId；省略走单条。 */
+  takes?: number;
+  /** 长镜分块的逐块描述（条数=引擎 chain_plan.blocks 数，1–5）；省略由引擎自动切分提示词。 */
+  partPrompts?: string[];
   mode: unknown;
   outputDirectory: string;
   /** 参考位次 → 素材来源，仅用于回执与排错。 */
@@ -321,6 +325,8 @@ export async function composeClipRequest(options: {
     secondPass: clip.secondPass,
     preview: clip.preview,
     ...(clip.seed !== undefined ? { seed: clip.seed } : {}),
+    ...(clip.takes !== undefined ? { takes: clip.takes } : {}),
+    ...(clip.partPrompts?.length ? { partPrompts: clip.partPrompts } : {}),
     /*
      * 生成模式按 LSC 的 task_mode 判定（`ref` / `image` / `text`），不再只看参考数量：
      *  - `image`：单图首帧，仅一张图；时长按 startFrameOptional 走；

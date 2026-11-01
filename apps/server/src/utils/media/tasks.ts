@@ -12,10 +12,12 @@ type MediaTask = {
   result?: ApiResponse<GeneratedMedia[]>;
   /**
    * 供应商登记的引擎取消闭包（引擎任务号确定后由 onJobStart 注入）。
-   * ACT: 只有显式取消（用户点停止）才调用它；断线清理（cleanup 的 30 分钟路径）不调——
+   * ACT: takes 多候选会对同一宿主任务登记多条闭包——全部保留、取消时逐个调；
+   * 只留最后一条会让前面的候选在引擎白跑（阶段 2 复盘修正）。
+   * 只有显式取消（用户点停止）才调用；断线清理（cleanup 的 30 分钟路径）不调——
    * 本机引擎任务继续跑完不丢产物是既有审计决策（P1-2），真取消会毁掉已生成部分。
    */
-  cancelRemote?: () => Promise<void>;
+  cancelRemotes: (() => Promise<void>)[];
   /** 显式取消发生在任务号登记之前时置位；onJobStart 拿到闭包后立即补取消。 */
   cancelRequested?: boolean;
 };
@@ -88,10 +90,10 @@ export function start(cwd: string, taskId: string, mediaType: "image" | "video" 
   if (tasks.has(taskId) || settled.has(taskId)) throw Object.assign(new Error("生成任务已存在，请勿重复提交"), { status: 409 });
   // ACT: 最多 1000 个任务；取消后仍等待生成 Promise 收尾，避免忽略取消的供应商绕过上限。
   if (tasks.size >= 1000) throw Object.assign(new Error("生成任务过多，请稍后重试"), { status: 429 });
-  const task: MediaTask = { cwd, controller: new AbortController(), touchedAt: Date.now() };
+  const task: MediaTask = { cwd, controller: new AbortController(), touchedAt: Date.now(), cancelRemotes: [] };
   tasks.set(taskId, task);
   const onJobStart = (jobId: string, cancel: () => Promise<void>) => {
-    task.cancelRemote = cancel;
+    task.cancelRemotes.push(cancel);
     // 任务号确定之前已被显式取消：补一刀，不让引擎白跑。
     if (task.cancelRequested) void cancel().catch(() => undefined);
   };
@@ -129,8 +131,9 @@ export function cancel(cwd: string, taskIds: string[]) {
     if (task?.cwd !== cwd) continue;
     const message = "生成已取消";
     // 显式取消：除掐本地信号外，还要通知引擎真停——否则本机 GPU 继续白跑到自然结束。
+    // takes 多候选登记了多条闭包，逐个取消（已终态的 4xx 由闭包内部静默）。
     task.cancelRequested = true;
-    if (task.cancelRemote) void task.cancelRemote().catch(() => undefined);
+    for (const cancelRemote of task.cancelRemotes) void cancelRemote().catch(() => undefined);
     stop(task, message);
   }
 }

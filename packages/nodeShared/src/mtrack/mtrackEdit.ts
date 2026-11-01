@@ -34,10 +34,12 @@ function indexOfClip(clips: MtrackClip[], clipId: string): number {
 /** prompt 三字段浅合并，其余字段整值覆盖——对齐编辑器 onPatch。 */
 function mergePatch(clip: MtrackClip, patch: Partial<MtrackClip>): MtrackClip {
   const merged = { ...clip, ...patch, prompt: { ...clip.prompt, ...(patch.prompt ?? {}) } };
-  // ACT: seed:null 是「清空回引擎自定」的哨兵（node:editProject 的 patch 原样带进来，
+  // ACT: seed/takes/partPrompts 的 null 是「清空回引擎默认」哨兵（node:editProject 的 patch 原样带进来，
   // zod 的 nullish+transform 会把 null 转成省略键、擦不掉原值，故不走 transform）。
-  // 归一为删键再进 validateClip——null 留在字段上会被种子校验误拒。
-  if ((merged as { seed?: unknown }).seed === null) delete merged.seed;
+  // 归一为删键再进 validateClip——null 留在字段上会被各字段校验误拒。
+  for (const key of ["seed", "takes", "partPrompts"] as const) {
+    if (merged[key] === null) delete merged[key];
+  }
   return merged;
 }
 
@@ -83,6 +85,16 @@ export function validateClip(clip: MtrackClip): string[] {
   }
   if (clip.seed !== undefined && (!Number.isInteger(clip.seed) || clip.seed < 0 || clip.seed > Number.MAX_SAFE_INTEGER)) {
     issues.push("随机种子需为 0 到 9007199254740991 的整数（引擎限制），或清空改回引擎自定");
+  }
+  if (clip.takes !== undefined && (!Number.isInteger(clip.takes) || clip.takes < 1 || clip.takes > 8)) {
+    issues.push(`候选条数需为 1–8 的整数（引擎限制），当前 ${clip.takes}`);
+  }
+  if (clip.partPrompts !== undefined) {
+    // ACT: 只校形状（1–5 条非空）；条数是否等于 blocks 数取决于本机分块能力，由派工前 planVideo 核对，
+    // 这里不按秒数硬拦——单块镜头给 1 条描述引擎也接受。
+    if (!Array.isArray(clip.partPrompts) || clip.partPrompts.length < 1 || clip.partPrompts.length > 5 || !clip.partPrompts.every(part => typeof part === "string" && part.trim())) {
+      issues.push("逐块描述需为 1–5 条非空文本（引擎限制，条数须等于 POST /plan 的 blocks 数）");
+    }
   }
   if (clip.continuity === "context" && clip.quality !== "light" && clip.quality !== "medium") {
     issues.push(`承接上一镜的镜头只能用轻量/标准质量（引擎限制：续接任务是 two-pass），请改为轻量或标准`);

@@ -29,6 +29,10 @@
         <span class="fieldLabel">随机种子</span>
         <el-input-number :modelValue="clip.seed ?? null" size="small" :min="0" :max="9007199254740991" :step="1" :stepStrictly="true" :value-on-clear="null" controls-position="right" placeholder="自动" @change="onSeedChange" />
       </label>
+      <label class="field fieldNarrow" title="一次生成连出 N 条候选（引擎 takes）：各成该镜一个版本，在版本菜单逐条预览挑一条设为默认；带种子时候选种子逐条 +1，整批可复现。动作戏/多人等高废片率镜头建议 3">
+        <span class="fieldLabel">候选条数</span>
+        <el-input-number :modelValue="clip.takes ?? 1" size="small" :min="1" :max="8" :step="1" :stepStrictly="true" controls-position="right" @change="onTakesChange" />
+      </label>
     </div>
     <div class="promptSections">
       <template v-for="section in sections" :key="section.key"><label class="sectionField"><span class="sectionLabel">{{ section.label }}</span><el-input :modelValue="draft[section.key]" type="textarea" :rows="section.rows" resize="vertical" :placeholder="section.placeholder" @input="onSectionInput(section.key, String($event))" /></label></template>
@@ -78,6 +82,12 @@ function onQualityChange(value: string) { emit("patch", { quality: value as Vide
  *  null 哨兵只属于 agent 的 editProject 路径（zod union 透传后由 mergePatch 删键），UI 不需要。 */
 function onSeedChange(value: number | null | undefined) {
   emit("patch", { seed: typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : undefined });
+}
+
+/** 候选条数：1 即回到单条（发 undefined 删键，与引擎默认一致）；2–8 一次多出 N-1 条候选版本。 */
+function onTakesChange(value: number | null | undefined) {
+  const takes = typeof value === "number" && Number.isInteger(value) ? Math.min(8, Math.max(1, value)) : 1;
+  emit("patch", { takes: takes > 1 ? takes : undefined });
 }
 
 function onContinuityChange(value: string) {

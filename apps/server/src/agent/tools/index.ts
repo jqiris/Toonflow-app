@@ -1,5 +1,5 @@
 import { t } from "@/lib/i18n";
-import { listMediaModels, generateMedia } from "@/utils/media/generation";
+import { listMediaModels, generateMedia, planMedia, askVlmMedia } from "@/utils/media/generation";
 import { createWorkspaceFfmpeg } from "@/utils/ffmpeg";
 import { createBrowserContext } from "@/utils/browser";
 import { importImage } from "@/utils/workspace/chatImages";
@@ -95,6 +95,8 @@ export function createAgentToolContext(cwd: string, config: Record<string, unkno
       generateImage: (request, signal) => generateMedia(cwd, "image", request, signal),
       generateVideo: (request, signal) => generateMedia(cwd, "video", request, signal),
       generateAudio: (request, signal) => generateMedia(cwd, "audio", request, signal),
+      planVideo: (request, signal) => planMedia(cwd, request, signal),
+      askVlm: (input, signal) => askVlmMedia(cwd, input, signal),
     } : undefined,
     sdk: {
       defineTool, createWriteToolDefinition, createEditToolDefinition, createLsToolDefinition,
