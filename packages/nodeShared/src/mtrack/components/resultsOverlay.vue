@@ -87,6 +87,7 @@
             :stale="states?.[previewClip.clipId]?.stale ?? false"
             @watch="selectPreviewNode"
             @setDefault="version => previewClip && emit('setDefaultVersion', previewClip.clipId, version)"
+            @refine="version => previewClip && emit('refineVersion', previewClip.clipId, version)"
             @deleteVersion="version => previewClip && emit('deleteVersion', previewClip.clipId, version)"
             @deleteAllVersions="previewClip && emit('deleteAllVersions', previewClip.clipId)" />
         </template>
@@ -168,6 +169,8 @@ const emit = defineEmits<{
   (event: "previewSelect", clipId: string): void;
   (event: "deleteVersion", clipId: string, version: string): void;
   (event: "deleteAllVersions", clipId: string): void;
+  /** 把该镜这版预览片精修成成片（refine_from 用该版 jobId）。 */
+  (event: "refineVersion", clipId: string, version: string): void;
   /** 校验发现的「定位」：把工作台选中镜切到该 finding 对应的镜头（浮窗→工作台方向）。 */
   (event: "locateFinding", clipId: string): void;
 }>();
@@ -432,6 +435,8 @@ function versionsOf(clip: MtrackClip | undefined): VersionMenuItem[] {
     number: index + 1,
     isDefault: version.key === current,
     watching: watchingClip && version.key === previewVersion.value,
+    // 预览片且落了任务号才能精修（refine_from 的引擎契约要求源任务存在）。
+    refineable: Boolean(version.preview && version.jobId),
   }));
 }
 

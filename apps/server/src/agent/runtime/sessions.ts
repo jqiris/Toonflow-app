@@ -43,6 +43,24 @@ export function getActiveAgentSession(path: string) {
   return activeSessions.get(sessionKey(path));
 }
 
+/**
+ * 最近活跃的 agent 会话文件名（内存表最后注册的一条）。
+ *
+ * ACT: 画布节点/编辑器这类「不是 agent 直接调用、但由 agent 触发」的路径拿不到 sessionFile，
+ * 而白模、3D 导演台又要默认用用户当前聊天的模型——这里给出本进程最近的活跃会话，
+ * 调用方再经 getSessionTextModel 反查模型。
+ * 上限：只认本进程内存表；同时开多个对话时取最后注册的那条（不区分哪个对话触发的）；
+ * 拿不到时返回 undefined，调用方必须回落到设置里第一个模型，不能猜。
+ */
+export function getRecentActiveSessionFile(): string | undefined {
+  let file: string | undefined;
+  for (const [key, active] of activeSessions) {
+    const name = basename(active.history.getSessionFile() ?? key);
+    if (name) file = name;
+  }
+  return file;
+}
+
 export function hasPendingAgentQuestion(active: ActiveAgentSession, visited = new Set<ActiveAgentSession>()): boolean {
   if (visited.has(active)) return false;
   visited.add(active);

@@ -34,10 +34,10 @@ function indexOfClip(clips: MtrackClip[], clipId: string): number {
 /** prompt 三字段浅合并，其余字段整值覆盖——对齐编辑器 onPatch。 */
 function mergePatch(clip: MtrackClip, patch: Partial<MtrackClip>): MtrackClip {
   const merged = { ...clip, ...patch, prompt: { ...clip.prompt, ...(patch.prompt ?? {}) } };
-  // ACT: seed/takes/partPrompts 的 null 是「清空回引擎默认」哨兵（node:editProject 的 patch 原样带进来，
+  // ACT: seed/takes/partPrompts/whitebox 的 null 是「清空回引擎默认」哨兵（node:editProject 的 patch 原样带进来，
   // zod 的 nullish+transform 会把 null 转成省略键、擦不掉原值，故不走 transform）。
   // 归一为删键再进 validateClip——null 留在字段上会被各字段校验误拒。
-  for (const key of ["seed", "takes", "partPrompts"] as const) {
+  for (const key of ["seed", "takes", "partPrompts", "whitebox"] as const) {
     if (merged[key] === null) delete merged[key];
   }
   return merged;
@@ -94,6 +94,14 @@ export function validateClip(clip: MtrackClip): string[] {
     // 这里不按秒数硬拦——单块镜头给 1 条描述引擎也接受。
     if (!Array.isArray(clip.partPrompts) || clip.partPrompts.length < 1 || clip.partPrompts.length > 5 || !clip.partPrompts.every(part => typeof part === "string" && part.trim())) {
       issues.push("逐块描述需为 1–5 条非空文本（引擎限制，条数须等于 POST /plan 的 blocks 数）");
+    }
+  }
+  if (clip.whitebox != null) {
+    // 白模只需作品号格式正确：其余字段（seconds/earlyRatio/at）是记录值，early_steps 在派工时按质量档重算。
+    // 用 != null 同时放过 null 与 undefined——编辑器清除白模走 undefined（同 seed），agent 走 null 由 mergePatch 删键，
+    // 但编辑器直连 patch 不经 mergePatch，若只判 undefined 会把清除动作误报成格式错误。
+    if (!/^\d{4}-\d{2}-\d{2}\/[0-9a-f]{32}$/.test(clip.whitebox.library)) {
+      issues.push("白模作品号格式不对（应为 日期/32位十六进制），请重新生成白模或清除该参考");
     }
   }
   if (clip.continuity === "context" && clip.quality !== "light" && clip.quality !== "medium") {

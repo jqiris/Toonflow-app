@@ -44,6 +44,13 @@
           :title="item.isDefault ? '已是默认版本' : `设为默认 · ${item.name}`"
           @click.prevent.stop="emit('setDefault', item.key)">默认</button>
         <button
+          v-if="item.refineable"
+          type="button"
+          class="versionRefine"
+          :disabled="disabled"
+          title="把这版预览片精修成成片（引擎从预览直接细化，不重烧参数、不重新构图）"
+          @click.prevent.stop="emit('refine', item.key)">精修</button>
+        <button
           type="button"
           class="versionDelete"
           :disabled="disabled"
@@ -61,6 +68,8 @@ export interface VersionMenuItem {
   number: number;
   isDefault: boolean;
   watching: boolean;
+  /** 预览片且带任务号：可「精修成成片」（refine_from 用该版 jobId）。 */
+  refineable?: boolean;
 }
 </script>
 
@@ -85,6 +94,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   (event: "watch", version: string): void;
   (event: "setDefault", version: string): void;
+  (event: "refine", version: string): void;
   (event: "toggleAccept"): void;
   (event: "deleteVersion", version: string): void;
   (event: "deleteAllVersions"): void;
@@ -94,7 +104,7 @@ const emit = defineEmits<{
 const rows = computed(() => props.versions.map(item => ({
   ...item,
   name: item.key.split("/").pop() || item.key,
-  status: [item.isDefault ? "最新" : "", item.watching ? "正在观看" : ""].filter(Boolean).join(" · "),
+  status: [item.isDefault ? "最新" : "", item.refineable ? "预览片" : "", item.watching ? "正在观看" : ""].filter(Boolean).join(" · "),
 })));
 </script>
 
@@ -231,6 +241,26 @@ const rows = computed(() => props.versions.map(item => ({
 }
 
 .versionSetDefault:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.versionRefine {
+  flex: none;
+  padding: 5px 8px;
+  border: 1px solid var(--el-color-primary-light-5, #a0cfff);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--el-color-primary, #409eff);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.versionRefine:hover:not(:disabled) {
+  border-color: var(--el-color-primary, #409eff);
+}
+
+.versionRefine:disabled {
   opacity: 0.45;
   cursor: default;
 }

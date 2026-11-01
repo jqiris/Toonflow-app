@@ -34,6 +34,10 @@ export interface MtrackClipAttempt {
   signature?: string;
   index?: number;
   parentJobId?: string;
+  /** 本次尝试是预览片（版本菜单可精修成成片）；读侧透传，agent 靠它 + jobId 判断可精修。 */
+  preview?: boolean;
+  /** 自动质检结论（视觉模型判定）：agent 读得到才能向用户汇报哪镜未过、为什么。 */
+  qc?: { verdict: "pass" | "fail" | "unknown"; note?: string; at: string };
 }
 
 export interface MtrackClip {
@@ -56,6 +60,8 @@ export interface MtrackClip {
   takes?: number;
   /** 长镜分块逐块描述（1–5 条）：条数须等于引擎 chain_plan.blocks 数。 */
   partPrompts?: string[];
+  /** 白模参考（3D blocking）：library 为引擎作品号，earlyRatio 在派工时按质量档换算 early_steps。 */
+  whitebox?: { library: string; seconds: number; earlyRatio: number; summary?: string; at: string };
   prompt: MtrackClipPrompt;
   referenceIds: string[];
   continuity: string;
@@ -101,6 +107,19 @@ function readNumber(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
+/** 白模参考：作品号格式不对整块丢弃（坏作品号会让整镜派工被引擎拒绝）。 */
+function readWhitebox(value: unknown): MtrackClip["whitebox"] {
+  if (!isRecord(value) || typeof value.library !== "string" || !/^\d{4}-\d{2}-\d{2}\/[0-9a-f]{32}$/.test(value.library)) return undefined;
+  const ratio = readNumber(value.earlyRatio, 0.375);
+  return {
+    library: value.library,
+    seconds: readNumber(value.seconds, 0),
+    earlyRatio: ratio > 0 && ratio <= 1 ? ratio : 0.375,
+    ...(typeof value.summary === "string" && value.summary.trim() ? { summary: value.summary.trim() } : {}),
+    at: readString(value.at),
+  };
+}
+
 function isQuality(value: unknown): value is (typeof videoQualityValues)[number] {
   return typeof value === "string" && (videoQualityValues as readonly string[]).includes(value);
 }
@@ -132,6 +151,12 @@ function readAttempts(value: unknown): MtrackClipAttempt[] {
     ...(typeof item.assetPath === "string" ? { assetPath: item.assetPath } : {}),
     ...(typeof item.index === "number" ? { index: item.index } : {}),
     ...(typeof item.parentJobId === "string" ? { parentJobId: item.parentJobId } : {}),
+    // 预览片标记：agent 靠它 + jobId 判断该版本可精修成成片。
+    ...(item.preview === true ? { preview: true } : {}),
+    // 自动质检结论：agent 读得到才能向用户汇报「哪镜质检未过、为什么」。
+    ...(isRecord(item.qc) && (item.qc.verdict === "pass" || item.qc.verdict === "fail" || item.qc.verdict === "unknown")
+      ? { qc: { verdict: item.qc.verdict, ...(typeof item.qc.note === "string" ? { note: item.qc.note } : {}), at: readString(item.qc.at) } }
+      : {}),
   })) : [];
 }
 
@@ -209,6 +234,8 @@ export function normalizeProject(value: unknown): MtrackProject {
       // takes（2–8 才带键）与 partPrompts（1–5 条非空）同口径透传，非法值不带键。
       ...(typeof item.takes === "number" && Number.isInteger(item.takes) && item.takes >= 2 && item.takes <= 8 ? { takes: item.takes } : {}),
       ...(Array.isArray(item.partPrompts) && item.partPrompts.length >= 1 && item.partPrompts.length <= 5 && item.partPrompts.every(part => typeof part === "string" && part.trim()) ? { partPrompts: item.partPrompts.map(part => (part as string).trim()) } : {}),
+      // whitebox 同口径透传：作品号格式校验通过才带键（见 readWhitebox），漏透传会让 mtrackRead 读不回白模。
+      ...(readWhitebox(item.whitebox) ? { whitebox: readWhitebox(item.whitebox) } : {}),
       prompt: readPrompt(item.prompt),
       referenceIds: Array.isArray(item.referenceIds) ? item.referenceIds.filter(ref => typeof ref === "string") : [],
       continuity: index === 0 ? "shot" : (item.continuity === "context" || item.continuity === "continue" ? "context" : "shot"),

@@ -195,6 +195,12 @@ interface VideoRequest extends MediaRequest {
    * 每块演自己那段剧情，而不是重播整段。省略则引擎自动切分提示词。仅对会分块的长镜有意义（先 planVideo 拿块数）。
    */
   partPrompts?: string[];
+  /**
+   * 白模参考（3D blocking 视频）：library 是引擎作品库 id（`YYYY-MM-DD/32hex`，白模 ready 的 work），
+   * earlySteps 是它只引导采样的前 K 步（≈ early_ratio × 首轮步数，派工侧按质量档换算）。
+   * 组装进 media.references **末位**、不占 `<Video N>` 编号；占续接 ≤3 的一个槽位。
+   */
+  whitebox?: { library: string; earlySteps: number };
 }
 
 /** 基础音频生成参数；text、prompt 至少提供一项，非空校验与模型能力检查由供应商负责。 */
@@ -308,6 +314,19 @@ interface ProviderDefinition<TRules extends readonly ProviderFormRule[] = readon
     format?: "text" | "json";
     label?: string;
   }) => Promise<{ answers: unknown[] }>;
+  /**
+   * 白模（3D blocking）能力（本机引擎供应商）：
+   * - `getWhiteboxPrompt()` 取引擎权威的场景代码生成规范（guide.whitebox_scene_prompt，含 {SHOT} 占位）；
+   * - `createWhitebox(code, summary)` 提交一段 `build(THREE)` 场景代码，返回待渲染的任务号；
+   * - `getWhitebox(id)` 读进度：waiting/rendering/ready（带 work 作品号、seconds、earlyRatio、earlySteps）/failed（带 error）。
+   * 白模渲染在用户打开的 FreeVideo 页面里跑，页面没开 createWhitebox 抛 page_required。
+   */
+  whitebox?: {
+    available: boolean;
+    getPrompt(this: ProviderContext<ProviderConfig<TRules>>): Promise<string>;
+    create(this: ProviderContext<ProviderConfig<TRules>>, code: string, summary: string): Promise<{ id: string; status: string }>;
+    get(this: ProviderContext<ProviderConfig<TRules>>, id: string): Promise<{ id: string; status: string; work?: string; seconds?: number; earlySteps?: number; earlyRatio?: number; error?: string }>;
+  };
 }
 
 /** 仅用于展示，不参与余额计算；没有额外提示时 tips 返回空字符串。 */

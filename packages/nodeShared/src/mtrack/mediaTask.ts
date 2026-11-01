@@ -74,6 +74,8 @@ export async function submitClipTask(directory: string, clip: ClipGenerationRequ
       ...(clip.releaseGpuAfter ? { releaseGpuAfter: true } : {}),
       ...(clip.takes !== undefined ? { takes: clip.takes } : {}),
       ...(clip.partPrompts?.length ? { partPrompts: clip.partPrompts } : {}),
+      ...(clip.refineFrom ? { refineFrom: clip.refineFrom } : {}),
+      ...(clip.whitebox ? { whitebox: clip.whitebox } : {}),
       mode: clip.mode,
       outputDirectory: clip.outputDirectory,
     }, controller.signal);
@@ -110,6 +112,44 @@ export async function cancelClipTasks(directory: string, taskIds: string[], sign
     return true;
   } catch {
     return false;
+  }
+}
+
+/** 自动质检判定：pass = 达标；fail = 明显不符（note 带原因）；unknown = 判不了（模型不可用/超时/回答不合式）。 */
+export type ClipQcVerdict = { verdict: "pass" | "fail" | "unknown"; note?: string };
+
+/**
+ * 本机视觉模型质检一条成片：拿本镜提示词对照成片问一遍，要求按 JSON 回答。
+ * ACT: vlm 与视频共 GPU 排队，批内同步等 3 分钟封顶——质检是辅助信号，
+ * 任何失败（引擎离线/模型缺装/排队超时/回答不是 JSON）一律落 unknown、不抛错，
+ * 绝不因质检问题打断批次或改变镜头状态（重拍与否由人决定）。
+ */
+export async function qcClipVideo(directory: string, providerId: string, videoPath: string, prompt: string, signal: AbortSignal): Promise<ClipQcVerdict> {
+  const question = [
+    "你是短剧成片质检员。下面给出一个镜头的生成提示词与该镜头的成片。",
+    "对照提示词检查成片画面：主要主体/动作是否出现、有没有提示词之外的字幕或水印、画面是否明显崩坏（肢体错乱、面部融化、大面积伪影）。",
+    `提示词（节选）：\n${prompt.slice(0, 4000)}`,
+    '只回答一个 JSON 对象，不要其他文字：{"pass": true 或 false, "problems": "不通过时列出的具体问题，通过时留空"}',
+  ].join("\n");
+  try {
+    const data = await request<{ answers: unknown[] }>("/api/ai/media/askVlm", {
+      directory,
+      providerId,
+      questions: [{ text: question, video: { path: videoPath, mimeType: "video/mp4" } }],
+      format: "json",
+      label: "多轨自动质检",
+    }, AbortSignal.any([signal, AbortSignal.timeout(3 * 60_000)]));
+    const raw = data?.answers?.[0];
+    const text = typeof raw === "string" ? raw : typeof raw === "object" && raw !== null ? String((raw as { text?: unknown }).text ?? "") : "";
+    const matched = /\{[\s\S]*\}/.exec(text);
+    if (!matched) return { verdict: "unknown", note: "视觉模型没有按 JSON 回答" };
+    const parsed = JSON.parse(matched[0]) as { pass?: unknown; problems?: unknown };
+    if (parsed.pass === true) return { verdict: "pass" };
+    if (parsed.pass === false) return { verdict: "fail", note: String(parsed.problems ?? "").slice(0, 500) || "视觉模型判定画面不符" };
+    return { verdict: "unknown", note: "视觉模型判定无法解析" };
+  } catch (reason) {
+    if (signal.aborted) throw reason;
+    return { verdict: "unknown", note: reason instanceof Error ? reason.message.slice(0, 200) : "质检请求失败" };
   }
 }
 

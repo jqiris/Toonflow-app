@@ -139,7 +139,9 @@ export async function run(
       abort: () => { controller.abort(); onCancel?.(); return finished.promise; },
     };
     unregister = registerAgentSession(history.getSessionFile()!, active);
-    const tools = await createAgentTools(cwd, canvas, question);
+    // ACT: 会话模型直接取本轮 run 的参数（就是用户这次发消息实际用的模型），不读会话文件——
+    // 本轮可能刚切过模型，文件里最后一条 model_change 未必等于本次实际请求的模型。
+    const tools = await createAgentTools(cwd, canvas, question, true, { providerId, modelId });
     if (isMemoryEnabled()) {
       const memoryTool = createMemoryTool();
       if (tools.some(tool => tool.name === memoryTool.name)) throw new Error("工具名称 memory 已被内置全局记忆工具占用");

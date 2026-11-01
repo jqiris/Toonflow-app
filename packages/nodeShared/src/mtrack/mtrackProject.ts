@@ -79,6 +79,13 @@ export interface ClipAttempt {
   index?: number;
   /** 承接镜的续接来源：生成时上一镜的 continuationJobId，独立镜为空串。 */
   parentJobId?: string;
+  /** 本次尝试是「先出预览」的预览片（低清、8 步两遍）：版本菜单标「预览片」、可一键精修成成片。 */
+  preview?: boolean;
+  /**
+   * 生成后自动质检结论（本机视觉模型看片判定）：只标记镜头、不改状态——
+   * VLM 是模糊信号，重拍与否由人决定；fail 的镜头在页签与镜头面板给徽标与原因。
+   */
+  qc?: { verdict: "pass" | "fail" | "unknown"; note?: string; at: string };
 }
 
 /** 一次成功生成的历史版本。服务端通道不建画布节点，key 就是产物路径。 */
@@ -87,6 +94,10 @@ export interface ClipVersion {
   key: string;
   nodeId: string | null;
   assetPath: string | null;
+  /** 该版本成功尝试的供应商任务号（精修成成片的 refine_from 来源）；旧记录未落为 undefined。 */
+  jobId?: string;
+  /** 该版本是预览片（attempts 的 preview 标记透传）。 */
+  preview?: boolean;
 }
 
 /**
@@ -115,6 +126,12 @@ export const videoQualityLabels: Record<VideoQuality, string> = {
   high: "精细",
   max: "极致",
 };
+
+/** 白模渲染任务状态：渲染在用户打开的 FreeVideo 页面里跑，所以只能轮询；ready 由编辑器写入 clip.whitebox 后清掉任务。 */
+export type WhiteboxJob = { id: string; status: "waiting" | "rendering" | "failed"; error?: string };
+
+/** 白模操作：submit 由调用方直接交代码（agent 路径，零模型调用），clear 只清本镜参考。 */
+export type WhiteboxAction = { type: "clear" | "submit" };
 
 export interface MtrackClip {
   clipId: string;
@@ -149,6 +166,23 @@ export interface MtrackClip {
    * 不进 clipSignature（下发参数）。
    */
   partPrompts?: string[];
+  /**
+   * 白模参考（3D blocking）：library 是引擎作品库 id（`YYYY-MM-DD/32hex`），earlyRatio 是引擎 ready
+   * 回答给的引导比例，派工时按当前质量档换算成 early_steps 下发。
+   * 白模只定构图/机位/走位，不保证长相——角色/道具长相仍由资产卡与提示词负责，两者互补可同用。
+   * 不进 clipSignature（同 seed 口径，渲染参数不是镜头身份）。
+   */
+  whitebox?: {
+    library: string;
+    /** 白模片长（秒），与生成镜长不必相等，仅记录。 */
+    seconds: number;
+    /** 引导比例（引擎 early_ratio，通常 0.375）；early_steps = round(earlyRatio × 首轮步数)。 */
+    earlyRatio: number;
+    /** 生成该白模时的镜头描述，便于复现与重生成。 */
+    summary?: string;
+    /** 生成时间（ISO），用于展示与判断是否过期。 */
+    at: string;
+  };
   prompt: ClipPrompt;
   referenceIds: string[];
   /** `shot` | `context`；旧工程的 start/continue/cut 由 normalizeContinuity 归一。 */
@@ -265,6 +299,22 @@ function readNumber(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
+/** 白模作品号格式：引擎作品库 id，`YYYY-MM-DD/32位十六进制`。 */
+const whiteboxLibraryPattern = /^\d{4}-\d{2}-\d{2}\/[0-9a-f]{32}$/;
+
+/** 白模参考：作品号格式不对整块丢弃（宁缺勿错——坏作品号会让整镜派工被引擎拒绝）。 */
+function readWhitebox(value: unknown): MtrackClip["whitebox"] {
+  if (!isRecord(value) || typeof value.library !== "string" || !whiteboxLibraryPattern.test(value.library)) return undefined;
+  const ratio = readNumber(value.earlyRatio, 0.375);
+  return {
+    library: value.library,
+    seconds: readNumber(value.seconds, 0),
+    earlyRatio: ratio > 0 && ratio <= 1 ? ratio : 0.375,
+    ...(typeof value.summary === "string" && value.summary.trim() ? { summary: value.summary.trim() } : {}),
+    at: readString(value.at),
+  };
+}
+
 function readStatus(value: unknown): ClipStatus {
   return value === "generating" || value === "generated" || value === "accepted" || value === "failed" ? value : "pending";
 }
@@ -292,6 +342,10 @@ function readAttempts(value: unknown): ClipAttempt[] {
     ...(typeof item.signature === "string" ? { signature: item.signature } : {}),
     ...(typeof item.index === "number" ? { index: item.index } : {}),
     ...(typeof item.parentJobId === "string" ? { parentJobId: item.parentJobId } : {}),
+    ...(item.preview === true ? { preview: true } : {}),
+    ...(isRecord(item.qc) && (item.qc.verdict === "pass" || item.qc.verdict === "fail" || item.qc.verdict === "unknown")
+      ? { qc: { verdict: item.qc.verdict, ...(typeof item.qc.note === "string" ? { note: item.qc.note } : {}), at: readString(item.qc.at) } }
+      : {}),
   })) : [];
 }
 
@@ -331,6 +385,8 @@ export function normalizeProject(value: unknown): MtrackProject {
       ...(typeof item.takes === "number" && Number.isInteger(item.takes) && item.takes >= 2 && item.takes <= 8 ? { takes: item.takes } : {}),
       // partPrompts：非空字符串数组、1–5 条才带；块数与 blocks 是否一致由派工时 planVideo 核对，读盘不拦。
       ...(Array.isArray(item.partPrompts) && item.partPrompts.length >= 1 && item.partPrompts.length <= 5 && item.partPrompts.every(part => typeof part === "string" && part.trim()) ? { partPrompts: item.partPrompts.map(part => part.trim()) } : {}),
+      // whitebox：作品号格式校验通过才带（见 readWhitebox），坏值整块丢弃。
+      ...(readWhitebox(item.whitebox) ? { whitebox: readWhitebox(item.whitebox) } : {}),
       prompt: readPrompt(item.prompt),
       referenceIds: Array.isArray(item.referenceIds) ? item.referenceIds.filter(ref => typeof ref === "string") : [],
       // ACT: 首镜永远 shot（没有上一镜可接），其余缺省 shot；旧工程的 continue 归一为 context。
@@ -703,7 +759,9 @@ function succeededVersionEntries(clip: MtrackClip): ClipVersion[] {
     // 新版本就从列表里消失。
     const key = versionKeyOf(attempt);
     if (!key || versions.some(item => item.key === key)) continue;
-    versions.push({ key, nodeId: attempt.nodeId, assetPath: attempt.assetPath || null });
+    // ACT: jobId/preview 随版本透传——版本菜单的「精修成成片」要用该版自己的任务号做 refine_from，
+    // 不能拿别的版本的任务号顶上（同 continuationJobId 的假承接教训）。
+    versions.push({ key, nodeId: attempt.nodeId, assetPath: attempt.assetPath || null, ...(attempt.jobId ? { jobId: attempt.jobId } : {}), ...(attempt.preview ? { preview: true } : {}) });
   }
   return versions;
 }
@@ -716,6 +774,22 @@ export function clipVersions(clip: MtrackClip | undefined): ClipVersion[] {
     versions.push({ key: current, nodeId: clip.nodeId, assetPath: current });
   }
   return versions;
+}
+
+/**
+ * 该镜「当前默认版本」对应的那条成功尝试：版本身份与 continuationJobId 同口径
+ * （assetPath/nodeId 键匹配优先，旧工程没有同键记录时回退最后一条成功尝试）。
+ * 质检结论、预览标记都挂在版本上，findLast(succeeded) 在 takes 多候选时会命中
+ * 最后一条候选而不是默认版本——读 qc/preview 一律走这个函数，别直接 findLast。
+ */
+export function currentClipAttempt(clip: MtrackClip | undefined): ClipAttempt | undefined {
+  if (!clip) return undefined;
+  const key = clip.assetPath || clip.nodeId || "";
+  if (key) {
+    const own = clip.attempts.findLast(attempt => attempt.status === "succeeded" && (attempt.assetPath || attempt.nodeId || "") === key);
+    if (own) return own;
+  }
+  return clip.attempts.findLast(attempt => attempt.status === "succeeded");
 }
 
 export interface ClipState {

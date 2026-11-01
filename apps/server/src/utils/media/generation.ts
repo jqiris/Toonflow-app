@@ -172,6 +172,7 @@ async function prepareRequest<T>(directory: string | undefined, mediaType: "imag
     ...(request.takes !== undefined ? { takes: request.takes } : {}),
     ...(request.refineFrom !== undefined ? { refineFrom: request.refineFrom } : {}),
     ...(request.partPrompts !== undefined ? { partPrompts: request.partPrompts } : {}),
+    ...(request.whitebox !== undefined ? { whitebox: request.whitebox } : {}),
   };
 }
 

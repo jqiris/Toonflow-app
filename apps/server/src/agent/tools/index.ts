@@ -19,7 +19,7 @@ import { createAssetContext } from "@/agent/assets";
 import { readDocument } from "@/utils/documents";
 import { createMcpAgentTools } from "@/utils/mcp/servers";
 
-export function createAgentToolContext(cwd: string, config: Record<string, unknown> = {}, canvas?: CanvasContext, question?: QuestionContext, workspaceAvailable = true): ToolContext {
+export function createAgentToolContext(cwd: string, config: Record<string, unknown> = {}, canvas?: CanvasContext, question?: QuestionContext, workspaceAvailable = true, sessionModel?: { providerId: string; modelId: string }): ToolContext {
   const skillsDirectory = join(dirname(conf.path), "skills");
   const requireWorkspace = () => { if (!workspaceAvailable) throw new Error("此对话未提供工作目录，无法使用文件或媒体操作"); };
   const resolvePath = async (path: string, readOnly = false) => {
@@ -114,13 +114,15 @@ export function createAgentToolContext(cwd: string, config: Record<string, unkno
       },
       detectSupportedImageMimeTypeFromFile: path => files.detectImageMimeType(path, true),
     },
+    // ACT: 会话模型是可选的展示上下文；没有会话（MCP 直连、UI 面板）就不带这个键，让调用方回落。
+    ...(sessionModel ? { sessionModel } : {}),
   };
 }
 
-export async function createAgentTools(cwd: string, canvas?: CanvasContext, question?: QuestionContext, includeMcp = true): Promise<ToolDefinition[]> {
+export async function createAgentTools(cwd: string, canvas?: CanvasContext, question?: QuestionContext, includeMcp = true, sessionModel?: { providerId: string; modelId: string }): Promise<ToolDefinition[]> {
   const tools: ToolDefinition[] = [];
   const names = new Set<string>();
-  const context = createAgentToolContext(cwd, {}, canvas, question);
+  const context = createAgentToolContext(cwd, {}, canvas, question, true, sessionModel);
   for (const item of await listTools()) {
     if (!item.enabled) continue;
     if (item.loadError) throw new Error(`${item.displayName}：${item.loadError}`);

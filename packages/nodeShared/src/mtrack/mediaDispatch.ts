@@ -14,6 +14,15 @@
 import { resolveReferenceSources, type CanvasCall } from "./directDispatch";
 import { resolveClipMode, videoQualityValues, type AssetIndexCard, type MtrackClip } from "./mtrackProject";
 
+/** 质量档位对应的首轮采样步数（引擎口径）：light/medium 8 步、high 16 步、max 20 步。 */
+const firstPassSteps: Record<string, number> = { light: 8, medium: 8, high: 16, max: 20 };
+
+/** 白模引导步数 = early_ratio × 首轮步数四舍五入，夹在 1–32（引擎上限）之间。 */
+function whiteboxEarlySteps(clip: MtrackClip): number {
+  const ratio = clip.whitebox?.earlyRatio ?? 0.375;
+  return Math.max(1, Math.min(32, Math.round(ratio * (firstPassSteps[clip.quality] ?? 8))));
+}
+
 /** 一镜的组装结果：可以直接作为 /api/ai/media/generate 的请求体。 */
 export type ClipGenerationRequest = {
   clipId: string;
@@ -49,6 +58,16 @@ export type ClipGenerationRequest = {
   takes?: number;
   /** 长镜分块的逐块描述（条数=引擎 chain_plan.blocks 数，1–5）；省略由引擎自动切分提示词。 */
   partPrompts?: string[];
+  /**
+   * 白模参考（3D blocking）：library 为引擎作品号，earlySteps 是它只引导采样的前 K 步。
+   * 白模只定构图/机位/走位；角色与道具长相仍由资产卡和提示词负责，两者互补可同传。
+   */
+  whitebox?: { library: string; earlySteps: number };
+  /**
+   * 预览转正片（一次性动作，不落 clip 字段）：传预览版本的 jobId（j+12hex），
+   * 供应商走 refine_from 早退分支——引擎从该预览直接精修，prompt/时长/媒体参数全部忽略。
+   */
+  refineFrom?: string;
   mode: unknown;
   outputDirectory: string;
   /** 参考位次 → 素材来源，仅用于回执与排错。 */
@@ -327,6 +346,7 @@ export async function composeClipRequest(options: {
     ...(clip.seed !== undefined ? { seed: clip.seed } : {}),
     ...(clip.takes !== undefined ? { takes: clip.takes } : {}),
     ...(clip.partPrompts?.length ? { partPrompts: clip.partPrompts } : {}),
+    ...(clip.whitebox ? { whitebox: { library: clip.whitebox.library, earlySteps: whiteboxEarlySteps(clip) } } : {}),
     /*
      * 生成模式按 LSC 的 task_mode 判定（`ref` / `image` / `text`），不再只看参考数量：
      *  - `image`：单图首帧，仅一张图；时长按 startFrameOptional 走；

@@ -66,6 +66,11 @@ export const videoGenerationSchema = z.strictObject({
   refineFrom: z.string().regex(/^j[0-9a-f]{12}$/).optional(),
   /** 长镜分块的逐块描述（1–5 条，条数必须等于 POST /plan 返回的 chain_plan.blocks 数）：每块演自己那段剧情。 */
   partPrompts: z.array(z.string().trim().min(1).max(20000)).min(1).max(5).optional(),
+  /** 白模参考：library 为引擎作品号（YYYY-MM-DD/32hex），earlySteps 为它只引导采样的前 K 步（1–32）。 */
+  whitebox: z.strictObject({
+    library: z.string().regex(/^\d{4}-\d{2}-\d{2}\/[0-9a-f]{32}$/),
+    earlySteps: z.number().int().min(1).max(32),
+  }).optional(),
   mode: z.union([
     z.enum(["singleImage", "startEndRequired", "endFrameOptional", "startFrameOptional", "text"]),
     z.array(referenceMode).min(1).max(3),

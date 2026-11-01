@@ -34,6 +34,23 @@
         <el-input-number :modelValue="clip.takes ?? 1" size="small" :min="1" :max="8" :step="1" :stepStrictly="true" controls-position="right" @change="onTakesChange" />
       </label>
     </div>
+    <div class="whiteboxRow">
+      <span class="fieldLabel">白模参考</span>
+      <template v-if="whiteboxJob && whiteboxJob.status !== 'failed'">
+        <span class="whiteboxState">{{ whiteboxJob.status === "waiting" ? "排队中" : "渲染中" }}…需要在 FreeVideo 页面打开时进行</span>
+      </template>
+      <template v-else-if="whiteboxJob">
+        <span class="whiteboxState whiteboxStateWarn">渲染失败：{{ whiteboxJob.error || "引擎未给出原因" }}</span>
+        <el-button size="small" @click="emit('whitebox', { type: 'clear' })">清除</el-button>
+      </template>
+      <template v-else-if="clip.whitebox">
+        <span class="whiteboxState" :title="clip.whitebox.summary || clip.whitebox.library">{{ clip.whitebox.library }}（{{ clip.whitebox.seconds.toFixed(1) }} 秒）</span>
+        <el-button size="small" @click="emit('whitebox', { type: 'clear' })">清除</el-button>
+      </template>
+      <template v-else>
+        <span class="whiteboxState">未使用：白模定构图/机位/走位，不保证长相（长相靠资产卡与提示词，两者可同用）。生成请让 Agent 用 node:whitebox（<code>prompt</code> 取规范 → 它自己写代码 → <code>submit</code> 提交）</span>
+      </template>
+    </div>
     <div class="promptSections">
       <template v-for="section in sections" :key="section.key"><label class="sectionField"><span class="sectionLabel">{{ section.label }}</span><el-input :modelValue="draft[section.key]" type="textarea" :rows="section.rows" resize="vertical" :placeholder="section.placeholder" @input="onSectionInput(section.key, String($event))" /></label></template>
     </div>
@@ -43,7 +60,9 @@
     <p v-else class="continuityHint">独立起拍 / 有意切镜：不读取上一镜的上下文，参考素材最多 4 个。</p>
     <p v-if="isContext && clip.referenceIds.length > 3" class="continuityHint continuityHintWarn" role="alert">本镜已选 {{ clip.referenceIds.length }} 个参考素材，超出续接上限 3 个（图片/视频/音频合计）；请减少参考，或把衔接方式改为独立起拍。</p>
     <p v-if="isContext && clip.seconds < 10" class="continuityHint continuityHintWarn" role="alert">本镜时长 {{ clip.seconds }} 秒，短于续接下限 10 秒；请加长本镜，或把衔接方式改为独立起拍。</p>
-    <p class="continuityHint">质量档位：轻量/标准为两遍生成（开二次采样），精细/极致为 20 步单遍；先出预览出片更快但是低清预览片、不会自动精修成成片。</p>
+    <p class="continuityHint">质量档位：轻量/标准为两遍生成（开二次采样），精细/极致为 20 步单遍；先出预览出片更快但是低清预览片，满意后在「项目与成片」的版本菜单点「精修」直接细化成成片（不重烧参数）。</p>
+    <p v-if="qcInfo?.verdict === 'fail'" class="continuityHint continuityHintWarn" role="alert">自动质检未过：{{ qcInfo.note || "视觉模型判定画面与提示词不符" }}。建议重新生成本镜或调整提示词。</p>
+    <p v-else-if="qcInfo?.verdict === 'unknown'" class="continuityHint">自动质检未能判定{{ qcInfo.note ? `（${qcInfo.note}）` : "" }}，请人工看片。</p>
     <p v-if="isContext && (clip.quality !== 'light' && clip.quality !== 'medium')" class="continuityHint continuityHintWarn" role="alert">承接上一镜的镜头只能用轻量/标准质量（引擎限制：续接任务是 two-pass），请改一下。</p>
     <p v-if="isContext && !clip.secondPass" class="continuityHint continuityHintWarn" role="alert">承接上一镜的镜头必须开启二次采样（引擎限制），请开启。</p>
     <p v-if="previewDisabled && clip.preview" class="continuityHint continuityHintWarn" role="alert">先出预览只支持单个 30 秒以内、不承接上一镜的镜头，请关闭。</p>
@@ -56,18 +75,20 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { ElButton, ElInput, ElInputNumber, ElOption, ElSelect, ElSwitch } from "element-plus";
-import { continuityLabels, continuityOptions, normalizeContinuity, promptToText, ratioOptions, resolutionOptions, videoQualityLabels, videoQualityValues, type ClipPrompt, type MtrackClip, type VideoQuality } from "../mtrackProject";
+import { continuityLabels, continuityOptions, currentClipAttempt, normalizeContinuity, promptToText, ratioOptions, resolutionOptions, videoQualityLabels, videoQualityValues, type ClipPrompt, type MtrackClip, type VideoQuality, type WhiteboxAction, type WhiteboxJob } from "../mtrackProject";
 import { firstFrameInstruction } from "../mediaDispatch";
 
 type RewriteBasis = { text: string; seconds: number; rules: string };
 type RewritePending = { clipId: string; text: string; basis: RewriteBasis };
 
-const props = defineProps<{ clip?: MtrackClip; index: number; clipCount: number; previousClipId?: string; previousClipJobId?: string; rewriteBusy?: boolean; rewritePending?: RewritePending; canUndo?: boolean; batchRunning?: boolean; batchPaused?: boolean; }>();
+const props = defineProps<{ clip?: MtrackClip; index: number; clipCount: number; previousClipId?: string; previousClipJobId?: string; rewriteBusy?: boolean; rewritePending?: RewritePending; canUndo?: boolean; batchRunning?: boolean; batchPaused?: boolean; whiteboxJob?: WhiteboxJob; whiteboxBusy?: boolean; }>();
 
-const emit = defineEmits<{ (e: "patch", patch: Partial<MtrackClip>): void; (e: "duplicate"): void; (e: "move", offset: number): void; (e: "remove"): void; (e: "accept", accepted: boolean): void; (e: "rewrite", rules: string): void; (e: "regenerate"): void; (e: "adoptRewrite", text: string): void; (e: "discardRewrite"): void; (e: "updateRewriteDraft", text: string): void; (e: "undoRemove"): void; }>();
+const emit = defineEmits<{ (e: "patch", patch: Partial<MtrackClip>): void; (e: "duplicate"): void; (e: "move", offset: number): void; (e: "remove"): void; (e: "accept", accepted: boolean): void; (e: "rewrite", rules: string): void; (e: "regenerate"): void; (e: "adoptRewrite", text: string): void; (e: "discardRewrite"): void; (e: "updateRewriteDraft", text: string): void; (e: "undoRemove"): void; (e: "whitebox", action: WhiteboxAction): void; }>();
 
 const rewriteRules = ref("");
 const isContext = computed(() => Boolean(props.clip && props.clip.continuity === "context"));
+/** 当前默认版本那条成功尝试的自动质检结论（走 currentClipAttempt，takes 多候选时不会命中错版本）。 */
+const qcInfo = computed(() => currentClipAttempt(props.clip)?.qc);
 const rewriteEligible = computed(() => { const clip = props.clip; if (!clip) return false; return Object.values(clip.prompt).some(value => value.trim()); });
 
 const rewriteBasisChanged = computed(() => {
@@ -181,6 +202,9 @@ function onSectionInput(key: keyof ClipPrompt, value: string) {
 .sectionField { display: flex; flex-direction: column; gap: 4px; }
 .sectionLabel { color: var(--el-text-color-secondary); font-size: 12px; font-weight: 600; font-family: "Cascadia Mono", Consolas, monospace; letter-spacing: 0.02em; }
 .continuityField { display: flex; align-items: center; gap: 8px; width: 240px; }
+.whiteboxRow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.whiteboxState { color: var(--el-text-color-secondary); font-size: 12px; overflow-wrap: anywhere; }
+.whiteboxStateWarn { color: var(--el-color-warning-dark-2); }
 .continuityHint { margin: -2px 0 2px; color: var(--el-text-color-secondary); font-size: 12px; line-height: 1.6; }
 .continuityHintActive { padding: 8px 10px; border: 1px solid var(--el-color-primary-light-7); border-radius: 8px; color: var(--el-text-color-regular); background: var(--el-color-primary-light-9); }
 .continuityHintWarn { padding: 8px 10px; border: 1px solid var(--el-color-warning-light-5); border-radius: 8px; color: var(--el-color-warning-dark-2); background: var(--el-color-warning-light-9); }

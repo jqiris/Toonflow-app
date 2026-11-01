@@ -107,6 +107,35 @@ export function getConfiguredModel(providerId: string, modelId: string) {
   return { provider, model: { ...model, ...getModelReasoning(providerId, model, provider.protocol), contextWindow: limits.contextWindow, maxOutputTokens: limits.maxTokens }, baseUrl: baseUrl.href.replace(/\/+$/, "") };
 }
 
+/**
+ * 解析「该用哪个文本模型」：显式指定 → 当前 agent 会话模型 → 设置里第一个可用文本模型。
+ *
+ * ACT: agent 触发的文本模型调用（白模场景代码、3D 导演台生成）必须优先用用户当前会话选的模型——
+ * 设置里排第一的供应商可能限流额度紧（实测 429），且用别的模型等于背着用户换掉他的选择。
+ * 显式传入且有效时以调用方为准（用户/agent 明确点名时不该被会话覆盖）。
+ * 上限：不校验该模型是否支持所需能力（如工具调用），供应商自身会在请求层报错。
+ */
+export function resolveTextModel(preferred?: { providerId?: string; modelId?: string; sessionProviderId?: string; sessionModelId?: string }): { providerId: string; modelId: string } {
+  type ProviderEntry = { id?: unknown; models?: { id?: unknown }[] };
+  const providers = (): ProviderEntry[] => {
+    const raw = conf.get("settings", {}).customProviders;
+    return Array.isArray(raw) ? raw as ProviderEntry[] : [];
+  };
+  const usable = (providerId?: string, modelId?: string) => {
+    if (!providerId || !modelId) return false;
+    const provider = providers().find(item => item?.id === providerId);
+    return Boolean(provider && Array.isArray(provider.models) && provider.models.some(model => String(model?.id ?? "").trim() === modelId));
+  };
+  if (usable(preferred?.providerId, preferred?.modelId)) return { providerId: preferred!.providerId!, modelId: preferred!.modelId! };
+  if (usable(preferred?.sessionProviderId, preferred?.sessionModelId)) return { providerId: preferred!.sessionProviderId!, modelId: preferred!.sessionModelId! };
+  const first = providers()
+    .flatMap(item => (Array.isArray(item?.models) ? item.models : [])
+      .filter(model => String(model?.id ?? "").trim())
+      .map(model => ({ providerId: String(item.id), modelId: String(model.id) })))[0];
+  if (!first) throw Object.assign(new Error("尚未配置可用的文本模型，请先在设置中启用模型供应商"), { status: 400 });
+  return first;
+}
+
 export function listAiModels() {
   const providers = conf.get("settings", {}).customProviders;
   if (!Array.isArray(providers)) return [];

@@ -136,6 +136,8 @@ export interface MediaGenerationRequest {
   refineFrom?: string;
   /** 长镜分块的逐块描述（条数=POST /plan 的 blocks 数，≤5）；省略由引擎自动切分提示词。 */
   partPrompts?: string[];
+  /** 白模参考（3D blocking）：library 为引擎作品号，earlySteps 为它只引导采样的前 K 步（1–32）。 */
+  whitebox?: { library: string; earlySteps: number };
   voice?: string;
   speed?: number;
   volume?: number;
@@ -260,6 +262,13 @@ export interface ToolContext {
   canvas?: CanvasContext;
   question?: QuestionContext;
   skills?: SkillContext;
+  /**
+   * 当前 agent 会话正在使用的文本模型（宿主读会话文件解析，跨进程一致）。
+   * agent 触发的文本模型调用（白模场景代码、3D 导演台生成等）默认用它，
+   * 不要再自己去挑「设置里第一个模型」——那可能与用户当前选择不符或撞限流。
+   * 独立进程/无会话上下文（如 MCP 直连、UI 面板按钮）时为 undefined，调用方回落到自身默认。
+   */
+  sessionModel?: { providerId: string; modelId: string };
   cwd: string;
   config: Record<string, unknown>;
   files: ToolFiles;

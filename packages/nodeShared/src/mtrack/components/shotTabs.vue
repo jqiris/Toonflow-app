@@ -12,6 +12,7 @@
       @click="onTabClick(tab.clip.clipId, $event)"
     >
       <b class="tabTitle">{{ index + 1 }}. {{ tab.clip.title || tab.clip.clipId || "未命名" }}</b>
+      <small v-if="tab.qcFail" class="tabQcFail" :title="tab.qcNote ? `质检未过：${tab.qcNote}` : '视觉模型判定画面不符'">质检未过</small>
       <small class="tabRange">{{ tab.start.toFixed(2) }}–{{ tab.end.toFixed(2) }}秒</small>
       <small class="tabStatus">{{ clipStatusLabels[tab.clip.status] }}</small>
     </button>
@@ -22,7 +23,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { ClipStatus, MtrackClip } from "../mtrackProject";
-import { clipStatusLabels } from "../mtrackProject";
+import { clipStatusLabels, currentClipAttempt } from "../mtrackProject";
 
 const props = defineProps<{
   clips: MtrackClip[];
@@ -43,7 +44,9 @@ const tabs = computed(() => {
   return props.clips.map(clip => {
     const start = offset;
     offset += Number(clip.seconds) || 0;
-    return { clip, start, end: offset };
+    // 质检结论取当前默认版本那条成功尝试的 qc（走 currentClipAttempt，takes 多候选时不会命中错版本）。
+    const qc = currentClipAttempt(clip)?.qc;
+    return { clip, start, end: offset, qcFail: qc?.verdict === "fail", qcNote: qc?.note };
   });
 });
 
@@ -177,6 +180,16 @@ function statusClass(status: ClipStatus) {
 .tabRange {
   color: var(--el-text-color-secondary);
   font-variant-numeric: tabular-nums;
+}
+
+/* 质检未过徽标：警示色小标签，悬停 title 给模型判定的具体问题。 */
+.tabQcFail {
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--el-color-warning-light-9);
+  color: var(--el-color-warning);
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 /* 状态文字的颜色由上面五个状态类给（此处只定字重与数字对齐，避免同特异性下盖掉语义色）。 */

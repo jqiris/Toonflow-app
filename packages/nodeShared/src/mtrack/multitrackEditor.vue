@@ -96,6 +96,8 @@
               :canUndo="undoStack.length > 0"
               :batchRunning="batchRunning"
               :batchPaused="batchPaused"
+              :whiteboxJob="selectedWhiteboxJob"
+              :whiteboxBusy="Boolean(selectedClip && whiteboxBusy[selectedClip.clipId])"
               @patch="onPatch"
               @duplicate="duplicateClip"
               @move="moveClip"
@@ -107,6 +109,7 @@
               @discardRewrite="discardRewrite"
               @updateRewriteDraft="updateRewriteDraft"
               @undoRemove="undoRemove"
+              @whitebox="handleWhitebox"
             />
             <referencePicker
               v-if="selectedClip"
@@ -168,6 +171,7 @@
                 <div class="rangeRow">
                   <el-checkbox v-model="includeFinished" size="small">包含已生成</el-checkbox>
                   <el-checkbox v-model="autoMerge" size="small">完成后自动合并</el-checkbox>
+                  <el-checkbox v-model="autoQc" size="small" title="每镜出片后让本机视觉模型对照提示词看一遍，明显不符的镜头标「质检未过」；只标记不自动重拍">生成后自动质检</el-checkbox>
                   <!-- ACT: 「带上前面已完成镜头」不引入新状态（契约 §3.2）：合成清单本就是 accepted 镜按工程顺序拼接，勾上验收即带上。 -->
                   <el-checkbox :modelValue="true" size="small" disabled title="合成按工程顺序包含全部已验收镜头（V14 连续性复核），断点会明确报错">合并时带上前面已完成镜头</el-checkbox>
                   <el-button size="small" text @click="batchPanelVisible = true">逐镜面板…</el-button>
@@ -246,6 +250,7 @@
       @toggleAccept="toggleClipAccept"
       @deleteVersion="deleteVersionInClip"
       @deleteAllVersions="deleteAllVersionsInClip"
+      @refineVersion="refineVersionInClip"
       @locateFinding="locateFinding"
     />
   </div>
@@ -255,7 +260,7 @@
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { ElButton, ElCheckbox, ElInput, ElInputNumber, ElMessage, ElMessageBox, ElOption, ElSelect } from "element-plus";
 import { useVueFlow } from "@vue-flow/core";
-import type { AssetIndex, AssetIndexCard, AssetReport, ClipState, EditorFiles, MtrackClip, MtrackProject, ResultsUiGeometry } from "./mtrackProject";
+import type { AssetIndex, AssetIndexCard, AssetReport, ClipAttempt, ClipState, EditorFiles, MtrackClip, MtrackProject, ResultsUiGeometry, WhiteboxAction, WhiteboxJob } from "./mtrackProject";
 import {
   assetIndexPath,
   assetReportPath,
@@ -263,6 +268,7 @@ import {
   normalizeProject,
   normalizeResultsUi,
   continuationJobId,
+  currentClipAttempt,
   createClip,
   nextClipId,
   localizeTime,
@@ -278,8 +284,8 @@ import {
   hasPrompt,
 } from "./mtrackProject";
 import { readClipGeneration, resolveCanvasBridge, findCardNodeIds, imagePathOf, labelMatchesCard, readNodeDetail, type CanvasCall } from "./directDispatch";
-import { composeClipRequest } from "./mediaDispatch";
-import { cancelClipTasks, readClipTask, submitClipTask, waitClipTask, type MediaTaskStatus } from "./mediaTask";
+import { buildPromptText, composeClipRequest, type ClipGenerationRequest } from "./mediaDispatch";
+import { cancelClipTasks, qcClipVideo, readClipTask, submitClipTask, waitClipTask, type MediaTaskStatus } from "./mediaTask";
 import { attemptsOfBatch, batchMarker } from "./batchMark";
 import { applyClipOperations } from "./mtrackEdit";
 import type { EditOp } from "./mtrackEdit";
@@ -601,6 +607,8 @@ const rangeStart = ref(1);
 const rangeCount = ref(-1);
 /** 「完成后自动合并」：纯 UI 会话态，不持久化进工程（契约 §3.2）。 */
 const autoMerge = ref(false);
+/** 生成后自动质检：每镜出片后让本机视觉模型对照提示词看一遍片，结论只标记镜头不改状态（重拍由人决定）。 */
+const autoQc = ref(false);
 
 function clampRange() {
   const total = clips.value.length;
@@ -1238,63 +1246,34 @@ async function loadTextModels(force = false) {
   }
 }
 
-/** 取第一个可用的文本模型：与派工时 resolveAgentModel 的回退顺序一致（第一个有模型的供应商）。 */
-function firstTextModel(): TextModelOption | undefined {
-  return textModels.value[0];
-}
-
-/**
- * 整理请求：POST /api/mtrack/rewriteShot 的公共请求体，UI 与命令式 rewritePrompt 共用。
- * 失败原样抛出服务端文案（生成中的 409、模型未配置、模型报错），不包装成通用失败提示。
- */
-async function requestRewrite(clip: MtrackClip, rules: string): Promise<{ text: string; requiresReview: boolean }> {
-  const model = firstTextModel();
-  if (!model) throw new Error("尚未配置可用的文本模型，请先在设置中启用模型供应商");
-  const trimmedRules = rules.trim();
-  const response = await fetch("/api/mtrack/rewriteShot", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-toonflow-workspace": "1" },
-    body: JSON.stringify({
-      directory: props.directory,
-      providerId: model.providerId,
-      modelId: model.modelId,
-      prompt: { ...clip.prompt },
-      referenceIds: clip.referenceIds,
-      ...(trimmedRules ? { rules: trimmedRules } : {}),
-    }),
-  });
-  const payload = await response.json().catch(() => undefined) as { data?: { text: string; requiresReview?: boolean }; message?: string } | undefined;
-  if (!response.ok || !payload?.data) throw new Error(payload?.message || `整理请求失败（HTTP ${response.status}）`);
-  const text = payload.data.text.trim();
-  if (!text) throw new Error("模型没有返回整理结果，请重试");
-  return { text, requiresReview: payload.data.requiresReview !== false };
-}
-
 /**
  * 整理本镜提示词：结果只进「待采用」区块，绝不自动覆盖画面描述。
  * 环境声与配乐原样保留（服务端只整理画面描述段，不改这两段）。
  * rules 留空时不传该字段，由服务端回落到内置规则；传了就把本次整理规则一并记进 basis 供一致性守卫比对。
+ */
+/**
+ * UI「整理本镜提示词」按钮。
+ *
+ * ACT: 原实现让服务端内部再起一次文本模型（`/api/mtrack/rewriteShot`），实测撞供应商 429
+ * （insufficient_quota）。现在面板不再代整理：把规则与原文取出来提示用户交给 Agent 做——
+ * 整理是语言活，该由用户当前在聊的那个会话完成，不额外打第三方模型。
  */
 async function rewriteClipPrompt(rules: string) {
   const clip = selectedClip.value;
   if (!clip) return;
   if (!props.directory) return ElMessage.warning("当前没有工作目录，无法整理提示词");
   if (rewriteBusy.value) return;
-  if (!firstTextModel()) {
-    await loadTextModels(true);
-    if (!firstTextModel()) return ElMessage.warning("尚未配置可用的文本模型，请先在设置中启用模型供应商");
-  }
-  // 请求发出这一刻的快照：正文、原文画面描述、时长与规则一起定格，之后用户再改就由一致性守卫拦下旧稿。
-  const prompt = { ...clip.prompt };
-  const trimmedRules = rules.trim();
-  const basis: RewriteBasis = { text: prompt.detailedDescription, seconds: clip.seconds, rules: trimmedRules };
   rewriteBusy.value = true;
   try {
-    const { text } = await requestRewrite(clip, rules);
-    rewritePending.value = { clipId: clip.clipId, text, basis };
-    ElMessage.success("已整理，请核对后采用");
+    // 先确认规则可取（顺带把硬性纪律暴露给用户，便于贴给 Agent）。
+    const { rules: baseRules, hardDiscipline } = await rewritePrompt({ clipId: clip.clipId, rules });
+    ElMessageBox.alert(
+      `整理提示词需要语言模型。为避免额外占用供应商额度，面板不再代你调用——请在对话里让 Agent 整理本镜（它用 \`node:rewritePrompt\` 拿到同一份规则与原文，整理后用 \`node:editProject\` 写回）。\n\n当前规则：\n${(rules.trim() || baseRules).slice(0, 400)}…\n\n${hardDiscipline.slice(0, 300)}…`,
+      "整理本镜提示词",
+      { confirmButtonText: "知道了", type: "info" },
+    );
   } catch (reason) {
-    ElMessage.error(reason instanceof Error ? reason.message : "整理提示词失败");
+    ElMessage.error(reason instanceof Error ? reason.message : "读取整理规则失败");
   } finally {
     rewriteBusy.value = false;
   }
@@ -1304,12 +1283,187 @@ async function rewriteClipPrompt(rules: string) {
  * 命令式整理：与 UI 共用同一条请求，但只返回整理稿，不写待采用区块、不改工程，采用与否交给调用方。
  * clipId 缺省取当前选中镜；错误原样抛出（含服务端「正在生成」的 409 与模型未配置文案）。
  */
-async function rewritePrompt(args: { clipId?: string; rules?: string }): Promise<{ text: string; requiresReview: boolean }> {
-  if (!props.directory) throw new Error("当前没有工作目录，无法整理提示词");
+/**
+ * 取「整理本镜提示词」的规则与当前原文，交给 agent 自己整理。
+ *
+ * ACT: 原实现调 `/api/mtrack/rewriteShot`，由服务端内部再起一次文本模型——实测撞供应商 429
+ * （insufficient_quota），也等于用别的模型替用户做决定。现在改成**只读**：返回规则 + 本镜六段原文 +
+ * 段名顺序，整理由 agent 会话自己做，产出后用 `node:editProject` 写回。零模型调用。
+ */
+async function rewritePrompt(args: { clipId?: string; rules?: string }): Promise<{
+  rules: string; hardDiscipline: string; promptHeadings: [string, string][];
+  current: { clipId: string; prompt: Record<string, string>; referenceIds: string[]; seconds: number };
+  instruction: string;
+}> {
+  if (!props.directory) throw new Error("当前没有工作目录，无法读取整理规则");
   const clip = args.clipId ? clips.value.find(item => item.clipId === args.clipId) : selectedClip.value;
   if (!clip) throw new Error(args.clipId ? `未找到分镜 ${args.clipId}` : "当前没有选中的分镜，请先选中一镜或传入 clipId");
-  if (!firstTextModel()) await loadTextModels(true);
-  return requestRewrite(clip, args.rules ?? "");
+  const payload = await postWhitebox<{ rules: string; hardDiscipline: string; promptHeadings: [string, string][] }>("/api/mtrack/rewriteRules", {});
+  const custom = args.rules?.trim();
+  return {
+    // 调用方给了自定义规则就整段替换内置的可配置部分（硬性纪律永远追加，不可覆盖）。
+    rules: custom || payload.rules,
+    hardDiscipline: payload.hardDiscipline,
+    promptHeadings: payload.promptHeadings,
+    current: { clipId: clip.clipId, prompt: { ...clip.prompt } as unknown as Record<string, string>, referenceIds: [...clip.referenceIds], seconds: clip.seconds },
+    instruction: "按 rules + hardDiscipline 整理 current.prompt，产出按 promptHeadings 顺序的六段正文；整理完用 node:editProject 的 patch 把六段写回 current.clipId，不要自己新增剧情或改时长。",
+  };
+}
+
+/**
+ * 白模参考（3D blocking）：把本镜提示词交给文本模型，按引擎权威规范写成 build(THREE) 场景代码，
+ * 提交引擎后在用户打开的 FreeVideo 页面里渲染成一段白模短片，再把作品号挂回本镜。
+ * ACT: 白模只定构图/机位/走位，不保证长相——角色与道具长相仍由资产卡与提示词负责，两者可同用。
+ */
+const whiteboxJobs = ref<Record<string, WhiteboxJob>>({});
+const whiteboxBusy = ref<Record<string, boolean>>({});
+const whiteboxTimers = new Map<string, number>();
+const selectedWhiteboxJob = computed(() => {
+  const clip = selectedClip.value;
+  return clip ? whiteboxJobs.value[clip.clipId] : undefined;
+});
+
+/** 白模场景描述取本镜已写的画面描述：detailed_description 是画面正文，空则回落到 summary。 */
+function whiteboxShotText(clip: MtrackClip): string {
+  const prompt = clip.prompt;
+  return (prompt.detailedDescription.trim() || prompt.summary.trim()).slice(0, 4000);
+}
+
+/** 白模两条路由共用：带工作区头的 POST + 统一解包，失败原样抛出服务端文案。 */
+async function postWhitebox<T>(path: string, body: Record<string, unknown>): Promise<T> {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-toonflow-workspace": "1" },
+    body: JSON.stringify({ directory: props.directory, ...body }),
+  });
+  const payload = await response.json().catch(() => undefined) as { data?: T; message?: string } | undefined;
+  if (!response.ok || !payload?.data) throw new Error(payload?.message || `白模请求失败（HTTP ${response.status}）`);
+  return payload.data;
+}
+
+function stopWhiteboxPolling(clipId: string) {
+  const timer = whiteboxTimers.get(clipId);
+  if (timer !== undefined) { window.clearTimeout(timer); whiteboxTimers.delete(clipId); }
+}
+
+/** 轮询白模进度：3 秒一次、最多 200 次（约 10 分钟；白模单段 ≤5 秒，正常几十秒内出）。 */
+function pollWhitebox(clipId: string, providerId: string, attempt = 0) {
+  stopWhiteboxPolling(clipId);
+  whiteboxTimers.set(clipId, window.setTimeout(async () => {
+    const job = whiteboxJobs.value[clipId];
+    if (!job) return;
+    try {
+      const result = await postWhitebox<{ status: string; work?: string; seconds?: number; earlyRatio?: number; error?: string }>("/api/mtrack/whiteboxStatus", { providerId, id: job.id });
+      if (result.status === "ready" && result.work) {
+        const index = clips.value.findIndex(clip => clip.clipId === clipId);
+        if (index >= 0) {
+          const clip = clips.value[index];
+          const summary = whiteboxShotText(clip).slice(0, 500);
+          clips.value[index] = { ...clip, whitebox: { library: result.work, seconds: result.seconds ?? 0, earlyRatio: result.earlyRatio ?? 0.375, ...(summary ? { summary } : {}), at: new Date().toISOString() } };
+        }
+        delete whiteboxJobs.value[clipId];
+        // ACT: 轮询回调里改的是 clips，不走 onPatch，所以必须显式推进版本号——
+        // 白模渲染要几十秒，期间用户很可能已经改过别的字段（dirty 早已为 true），
+        // watch(dirty) 不会再触发，不推进这次写入就排不上防抖写盘，作品号随刷新丢失。
+        dirtyVersion.value += 1;
+        ElMessage.success("白模已就绪，已挂到本镜参考");
+        return;
+      }
+      if (result.status === "failed") {
+        whiteboxJobs.value[clipId] = { ...job, status: "failed", error: result.error || "" };
+        return;
+      }
+      whiteboxJobs.value[clipId] = { ...job, status: result.status === "rendering" ? "rendering" : "waiting" };
+      if (attempt < 200) pollWhitebox(clipId, providerId, attempt + 1);
+    } catch (reason) {
+      whiteboxJobs.value[clipId] = { ...job, status: "failed", error: reason instanceof Error ? reason.message : "读取白模进度失败" };
+    }
+  }, 3000));
+}
+
+/**
+ * 白模生成的可复用内核（UI 与 node:whitebox 工具共用同一条链路）。
+ *
+ * ACT: 只有一条产出路径——调用方（agent 会话）按 `action=prompt` 的规范自己写好
+ * `export function build(THREE)` 代码，这里只提交引擎 + 轮询 + 回收作品号。
+ * 原先还有「服务端代写代码」的 generate 分支，实测会打供应商 API 并撞 429 insufficient_quota，
+ * 也等于用别的模型替用户做决定，已删除。
+ */
+async function runWhitebox(clipId: string | undefined, type: WhiteboxAction["type"], code?: string, summaryText?: string): Promise<{ clipId: string; type: string; jobId?: string; status?: string }> {
+  const clip = clipId ? clips.value.find(item => item.clipId === clipId) : selectedClip.value;
+  if (!clip) throw new Error(clipId ? `未找到分镜 ${clipId}` : "当前没有选中的分镜，请先选中一镜或传入 clipId");
+  if (type === "clear") {
+    stopWhiteboxPolling(clip.clipId);
+    delete whiteboxJobs.value[clip.clipId];
+    const index = clips.value.findIndex(item => item.clipId === clip.clipId);
+    if (index >= 0) {
+      const next = { ...clips.value[index] } as Record<string, unknown>;
+      delete next.whitebox;
+      clips.value[index] = next as unknown as MtrackClip;
+      dirtyVersion.value += 1;
+    }
+    return { clipId: clip.clipId, type };
+  }
+  if (!props.directory) throw new Error("当前没有工作目录，无法生成白模");
+  const providerId = project.value?.global.model?.providerId;
+  if (!providerId) throw new Error("尚未配置可用的视频模型，请先在上方选择视频模型");
+
+  let created: { id: string; status: string };
+  if (code?.trim()) {
+    // 只有一条产出路径：调用方（agent 会话）写好代码，这里只提交引擎。
+    // ACT: summary 优先用调用方给的那句（agent 明确说要拍什么，比从提示词截断更准）；没给才回落到提示词。
+    created = await postWhitebox<{ id: string; status: string }>("/api/mtrack/whiteboxSubmit", {
+      providerId, code,
+      summary: (summaryText?.trim() || whiteboxShotText(clip) || clip.clipId).slice(0, 500),
+    });
+  } else {
+    // ACT: 不再有「服务端代写代码」分支。实测那条路径会打供应商 API 且撞 429 insufficient_quota，
+    // 也等于用别的模型替用户做决定；白模场景代码一律由 agent 会话按 action=prompt 的规范自己写。
+    throw new Error("提交白模需要场景代码：先用 action=prompt 取引擎规范，写好 export function build(THREE) 后再以 action=submit 传 code");
+  }
+  whiteboxJobs.value = { ...whiteboxJobs.value, [clip.clipId]: { id: created.id, status: created.status === "rendering" ? "rendering" : "waiting" } };
+  pollWhitebox(clip.clipId, providerId);
+  return { clipId: clip.clipId, type, jobId: created.id, status: created.status };
+}
+
+/**
+ * 读某镜的白模状态。phase 是调用方唯一需要的判据，省得自己从 job/whitebox 两个可空字段拼语义：
+ * none = 从未生成过、attached = 已挂在参考上（可直接派工）、rendering = 有任务在渲染、
+ * failed = 任务失败（job.error 带引擎原文）、stale = 有白模但渲染任务也在（罕见，按 rendering 处理）。
+ */
+function whiteboxState(clipId: string) {
+  const clip = clips.value.find(item => item.clipId === clipId);
+  if (!clip) throw new Error(`未找到分镜 ${clipId}`);
+  const job = whiteboxJobs.value[clipId];
+  const whitebox = clip.whitebox;
+  const phase = job
+    ? (job.status === "failed" ? "failed" : "rendering")
+    : whitebox ? "attached" : "none";
+  return { clipId, phase, job, whitebox };
+}
+
+/** 取引擎权威的白模场景代码规范（含 {SHOT} 占位）：agent 自己写代码前先读它，不写死规范。 */
+async function whiteboxPrompt(): Promise<{ prompt: string }> {
+  const providerId = project.value?.global.model?.providerId;
+  if (!providerId) throw new Error("尚未配置可用的视频模型，请先在上方选择视频模型");
+  if (!props.directory) throw new Error("当前没有工作目录，无法读取白模规范");
+  return postWhitebox<{ prompt: string }>("/api/mtrack/whiteboxPrompt", { providerId });
+}
+
+async function handleWhitebox(action: WhiteboxAction) {
+  const clip = selectedClip.value;
+  if (!clip) return;
+  whiteboxBusy.value = { ...whiteboxBusy.value, [clip.clipId]: true };
+  try {
+    await runWhitebox(clip.clipId, action.type);
+    if (action.type !== "clear") ElMessage.success("已提交白模渲染，请保持 FreeVideo 页面打开");
+  } catch (reason) {
+    ElMessage.error(reason instanceof Error ? reason.message : "白模操作失败");
+  } finally {
+    const next = { ...whiteboxBusy.value };
+    delete next[clip.clipId];
+    whiteboxBusy.value = next;
+  }
 }
 
 /** 采用整理结果：只写回发起整理的那一镜（不看当前选中），写完清掉待采用稿。 */
@@ -1351,6 +1505,9 @@ function onPatch(patch: Partial<MtrackClip>) {
   const prompt = { ...current.prompt, ...(patch.prompt ?? {}) };
   clips.value[index] = { ...current, ...patch, prompt };
   selectedId.value = clips.value[index].clipId;
+  // ACT: 显式推进防抖写盘版本号。dirty 是内容比较，字段值没有语义变化时（如 patch 只带已相同的值）
+  // 或 dirty 早已为 true（watch 不会再触发）时，仅靠 watch(dirty) 排不上这一轮的写盘。
+  dirtyVersion.value += 1;
 }
 
 function duplicateClip() {
@@ -1503,6 +1660,78 @@ async function setClipDefaultVersion(clipId: string, version: string) {
   await setDefaultVersion(version);
 }
 
+/**
+ * 版本菜单「精修成成片」：把该镜这版预览片交给引擎 refine_from 直接细化成成片，不重新生成、不重烧参数。
+ * ACT: 一次性动作，不落 clip 字段——组装一份最小请求（prompt 用本镜六段拼一份占位过 zod 非空校验，
+ * provider 的 refine_from 早退分支会忽略 prompt/时长/媒体，只认 refine_from）。产物替换该镜默认版本，
+ * 预览片那条 attempts 保留在版本列表（历史不删，与「设为默认」同一套版本簿记）。
+ * 与派工互斥：dispatching 或已有批次在跑时拒绝，避免同一镜双份计费。
+ */
+async function refineVersionInClip(clipId: string, version: string) {
+  if (dispatching.value || batchHandle.value) return ElMessage.warning("有派工正在进行，请等本批结束再精修");
+  if (!props.directory) return ElMessage.warning("当前没有工作目录，无法精修");
+  const index = clips.value.findIndex(clip => clip.clipId === clipId);
+  if (index < 0) return;
+  const clip = clips.value[index];
+  if (clip.status === "generating") return ElMessage.warning("该镜头正在生成，请等生成结束");
+  const videoModel = project.value?.global.model;
+  if (!videoModel?.providerId || !videoModel.modelId) return ElMessage.warning("工程没有指定视频模型，无法精修");
+  const entry = clipVersions(clip).find(item => item.key === version);
+  if (!entry?.preview || !entry.jobId) return ElMessage.error("该版本不是可精修的预览片（缺预览标记或任务号）");
+  const refineFrom = entry.jobId;
+  const request: ClipGenerationRequest = {
+    clipId: clip.clipId,
+    providerId: videoModel.providerId,
+    modelId: videoModel.modelId,
+    // 精修请求的 prompt 会被 provider 忽略（refine_from 早退分支），这里只填一份非空文本过服务端 zod 的 min(1)。
+    prompt: buildPromptText(clip) || "refine preview to final",
+    images: [], audios: [], videos: [],
+    ratio: clip.ratio, resolution: clip.resolution, duration: clip.seconds, generateAudio: clip.generateAudio,
+    // ACT: mode 必须给服务端 zod 认的引擎模式枚举（clip.mode 是编辑器口径 "ref"，zod 会 400）；
+    // 精修请求的 mode 会被 provider 早退分支忽略，填 "text" 只为过校验。
+    mode: "text", outputDirectory: `assets/${clip.clipId}`, referenceMap: [],
+    refineFrom,
+  };
+  const taskId = crypto.randomUUID();
+  const marker = batchMarker(`refine-${clipId}`);
+  const controller = new AbortController();
+  // 原状态留底：精修失败/取消退回它（accepted 的镜不能因精修失败被降成 generated）。
+  const previousStatus = clip.status;
+  dispatching.value = true;
+  dispatchController = controller;
+  dispatchKind = "generate";
+  writeClipRun(clip.clipId, { status: "generating" }, { nodeId: "", status: "generating", error: `${marker} task:${taskId} 精修` });
+  activeTaskIds.value = [...activeTaskIds.value, taskId];
+  try {
+    await submitClipTask(props.directory, request, taskId, controller.signal);
+    const result = await waitClipTask(props.directory, taskId, controller.signal);
+    activeTaskIds.value = activeTaskIds.value.filter(id => id !== taskId);
+    if (result.state === "succeeded") {
+      const file = result.files.find(item => item?.path);
+      if (!file?.path) throw new Error("精修完成但没有返回文件路径");
+      // 成片替换默认版本；jobId 落进 attempts，下一镜 context 能承接这版精修成片。
+      // 状态统一回 generated——产物换了，此前的 accepted 判定作废，需重新验收。
+      writeClipRun(clip.clipId, { status: "generated", nodeId: null, assetPath: file.path },
+        { nodeId: "", status: "succeeded", error: `${marker} task:${taskId} 精修成片`, ...(file.jobId ? { jobId: file.jobId } : {}) });
+      ElMessage.success("预览片已精修成成片");
+    } else if (result.state === "cancelled" || result.state === "lost") {
+      writeClipRun(clip.clipId, { status: previousStatus }, { nodeId: "", status: "cancelled", error: `${marker} task:${taskId} 精修${result.state === "lost" ? "任务已丢失" : "已取消"}` });
+      ElMessage.info(result.state === "lost" ? "精修任务已丢失，成片仍是预览片" : "精修已取消，成片仍是预览片");
+    } else {
+      writeClipRun(clip.clipId, { status: previousStatus }, { nodeId: "", status: "failed", error: `${marker} ${result.error}` });
+      ElMessage.error(`精修失败：${result.error}`);
+    }
+  } catch (reason) {
+    activeTaskIds.value = activeTaskIds.value.filter(id => id !== taskId);
+    // 精修失败/取消都把镜头退回原状态（预览片仍是有效成片），不落 failed——用户没做错任何事。
+    writeClipRun(clip.clipId, { status: previousStatus }, { nodeId: "", status: "failed", error: `${marker} ${reason instanceof Error ? reason.message : String(reason)}` });
+    if (!controller.signal.aborted) ElMessage.error(reason instanceof Error ? reason.message : "精修失败");
+  } finally {
+    dispatching.value = false;
+    if (dispatchController === controller) { dispatchController = undefined; dispatchKind = ""; }
+  }
+}
+
 /** 浮窗大预览换镜 → 工作台选中同一镜（与 selectedClipId → 浮窗的 watch 构成双向联动，同值写入不成环）。 */
 function selectClipFromOverlay(clipId: string) {
   if (clips.value.some(clip => clip.clipId === clipId)) selectedId.value = clipId;
@@ -1637,7 +1866,7 @@ function finishDispatchRun(controller: AbortController) {
  * 把一次生成尝试写回镜头：状态、节点号、产物路径和 attempts 记录一起落盘，
  * 使「生成中」在界面、状态快照和 agent 的 mtrackRead 里都可见。
  */
-function writeClipRun(clipId: string, patch: Partial<MtrackClip>, attempt?: { nodeId: string; status: string; error?: string; jobId?: string; assetPath?: string }) {
+function writeClipRun(clipId: string, patch: Partial<MtrackClip>, attempt?: { nodeId: string; status: string; error?: string; jobId?: string; assetPath?: string; preview?: boolean; qc?: ClipAttempt["qc"] }) {
   const current = project.value;
   const clip = current?.clips.find(item => item.clipId === clipId);
   if (!current || !clip) return;
@@ -1657,12 +1886,31 @@ function writeClipRun(clipId: string, patch: Partial<MtrackClip>, attempt?: { no
       // ACT: jobId 必须随成功尝试一起落盘——下一镜要「承接本镜」时全靠它做 continue_from.from_job。
       ...(attempt.jobId ? { jobId: attempt.jobId } : {}),
       ...(succeededPath ? { assetPath: succeededPath } : {}),
+      // 预览片标记：版本菜单据此标「预览片」并给「精修成成片」入口（refine_from 用本版 jobId）。
+      ...(attempt.preview ? { preview: true } : {}),
+      // 自动质检结论：只标记不判死，镜头状态不变（重拍与否由人决定）。
+      ...(attempt.qc ? { qc: attempt.qc } : {}),
       ...(attempt.status === "succeeded"
         ? { signature: clipStates(current)[clipId]?.signature ?? "", index: clipIndex, parentJobId }
         : {}),
     });
   }
   // 生成期间 dirty 往往已经是 true，watch(dirty) 不会再触发；直接推进版本号让防抖写盘照常排上。
+  dirtyVersion.value += 1;
+}
+
+/**
+ * 把自动质检结论补写到该镜当前默认版本那条成功尝试（QC 在成片回写之后跑，产物已落盘）。
+ * 只动 attempts 里的 qc 字段，不改镜头状态；unknown 也照写（区分「没跑质检」与「跑了但判不了」）。
+ * ACT: 定位走 currentClipAttempt 而不是 findLast(succeeded)——takes 多候选时最后一条是候选版本，
+ * 质检判的是默认版本，写错条会让徽标跟着错的版本。
+ */
+function writeClipQc(clipId: string, qc: ClipAttempt["qc"]) {
+  const clip = project.value?.clips.find(item => item.clipId === clipId);
+  if (!clip || !qc) return;
+  const target = currentClipAttempt(clip);
+  if (!target) return;
+  target.qc = qc;
   dirtyVersion.value += 1;
 }
 
@@ -1753,9 +2001,21 @@ async function launchDispatch(clipIds?: string[], options?: { includeFinished?: 
             // 用户在版本菜单逐条预览挑一条「设为默认」，continuationJobId 只认默认版本那条记录的 jobId，承接链不断。
             const [first, ...rest] = files;
             writeClipRun(clip.clipId, { status: "generated", nodeId: null, assetPath: first!.path },
-              { nodeId: "", status: "succeeded", error: `${marker} task:${taskId}`, ...(first!.jobId ? { jobId: first!.jobId } : {}) });
+              { nodeId: "", status: "succeeded", error: `${marker} task:${taskId}`, ...(first!.jobId ? { jobId: first!.jobId } : {}), ...(request.preview ? { preview: true } : {}) });
             for (const extra of rest) {
-              writeClipRun(clip.clipId, {}, { nodeId: "", status: "succeeded", error: `${marker} task:${taskId} 候选`, ...(extra.jobId ? { jobId: extra.jobId } : {}), assetPath: extra.path });
+              writeClipRun(clip.clipId, {}, { nodeId: "", status: "succeeded", error: `${marker} task:${taskId} 候选`, ...(extra.jobId ? { jobId: extra.jobId } : {}), assetPath: extra.path, ...(request.preview ? { preview: true } : {}) });
+            }
+            // ACT: 自动质检只标记、不改状态、不自动重拍——VLM 是模糊信号，静默重 roll 会因误判白烧 GPU，
+            // 重拍与否交人决定（页签「质检未过」徽标 + 镜头面板原因）。整段吞异常：质检再错也不能污染已成功的成片回写。
+            if (autoQc.value) {
+              try {
+                const qc = await qcClipVideo(directory, videoModel.providerId!, first!.path, request.prompt, controller.signal);
+                writeClipQc(clip.clipId, { verdict: qc.verdict, ...(qc.note ? { note: qc.note } : {}), at: new Date().toISOString() });
+              } catch (reason) {
+                // 中止（用户取消整批）原样上抛，让外层按取消收尾；其余异常吞掉。
+                if (controller.signal.aborted) throw reason;
+                writeClipQc(clip.clipId, { verdict: "unknown", note: reason instanceof Error ? reason.message.slice(0, 200) : "质检失败", at: new Date().toISOString() });
+              }
             }
           } else if (result.state === "cancelled" || result.state === "lost") {
             // ACT: 任务在服务端已不存在（重启/过期）时也退回 pending，不能落 failed——用户没做错任何事（审计 P2-1）。
@@ -2329,6 +2589,8 @@ onBeforeUnmount(() => {
   if (dirty.value) void saveProject();
   // 参考缩略图的 blob URL 随编辑器卸载一起释放。
   releaseThumbnails();
+  // 白模轮询随编辑器卸载停止；引擎侧渲染在用户页面里继续，重开编辑器重新发起即可。
+  for (const clipId of [...whiteboxTimers.keys()]) stopWhiteboxPolling(clipId);
 });
 
 watch(dirty, value => {
@@ -2357,6 +2619,9 @@ defineExpose({
   resumeBatch,
   retryClip,
   rewritePrompt,
+  whitebox: runWhitebox,
+  whiteboxState,
+  whiteboxPrompt,
   setDefaultVersion,
   acquireNodeVideo,
   clips,

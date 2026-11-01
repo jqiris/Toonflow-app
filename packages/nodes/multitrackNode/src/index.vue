@@ -381,6 +381,14 @@ const clipPatchSchema = z.strictObject({
   // takes/partPrompts 同口径：agent 要能为高废片率镜头设候选条数、为长镜逐块写剧情。
   takes: z.union([z.number().int().min(1).max(8), z.null()]).optional(),
   partPrompts: z.union([z.array(z.string().trim().min(1).max(20000)).min(1).max(5), z.null()]).optional(),
+  // whitebox 同口径：null=清除白模参考（回纯提示词/资产卡），省略=不改。
+  whitebox: z.union([z.strictObject({
+    library: z.string().regex(/^\d{4}-\d{2}-\d{2}\/[0-9a-f]{32}$/),
+    seconds: z.number().min(0).max(600),
+    earlyRatio: z.number().gt(0).max(1),
+    summary: z.string().max(2000).optional(),
+    at: z.string().max(64),
+  }), z.null()]).optional(),
   // ACT: prompt 六字段全部可省——与 mergePatch 的字段级浅合并（mtrackEdit.ts:35-36）对齐，
   // agent 补写单段时只带一段即可，其余由原 clip 保留，不必「读-改-写」整组；
   // 显式传空串视为「清空这一段」（区别于省略键=不改），与 UI「留空则该段不下发」同口径。
@@ -607,7 +615,7 @@ async function readActualOrder(call: CanvasCall, nodeId: string, signal?: AbortS
 
 nodeTools.register({
   name: "editProject",
-  description: "批量编辑工程（编辑器等价能力，内核 mtrackEdit.applyClipOperations）：operations 1–100 条，六种 op——add{clipId?,after?,patch?} / patch{clipId,patch} / duplicate{clipId} / move{clipId,to|after} / remove{clipId} / setGlobal{ratio?,style?,systemPrompt?,model?}。整批原子：任一 op 校验失败整批拒收，问题在 issues 返回、不抛错。真源字段可写，但生成前仍必须跑 planOperator validate 且 error 清零，本工具不代跑完整契约校验。save=true（默认）成功后立即落盘，不等防抖。patch.status 只接受 pending/generating/generated/failed；accepted 由用户在界面验收产生，agent 不能代写。patch 也可写本镜的 quality（light/medium/high/max，缺省 light）、secondPass（二次采样，缺省 true）与 preview（先出预览，缺省 false）：承接上一镜（continuity=context）的镜头只能用 light/medium 且必须 secondPass=true、不能开 preview，preview 只支持单个 30 秒以内镜头；越界由 validateClip 整批拒收，issues 会带原因。patch.seed 为随机种子（0 到 9007199254740991 的整数）：同种子+同提示词产物逐字节一致（实测），重 roll 保住满意镜头就带上 readClips 读回的 seed；传 null 清空回到引擎自定，省略不改。patch.takes 为候选条数（1–8，缺省 1）：一次派工连出 N 条候选版本供逐条预览挑选，带 seed 时候选种子逐条 +1 整批可复现；null 清空回单条。patch.partPrompts 为长镜逐块描述（1–5 条非空文本，条数必须等于 mediaGeneration planVideo 预检返回的 chainPlan.blocks 数）：每块演自己那段剧情而不是重播整段，只对 30 秒以上会分块的镜头有意义；null 清空回引擎自动切分",
+  description: "批量编辑工程（编辑器等价能力，内核 mtrackEdit.applyClipOperations）：operations 1–100 条，六种 op——add{clipId?,after?,patch?} / patch{clipId,patch} / duplicate{clipId} / move{clipId,to|after} / remove{clipId} / setGlobal{ratio?,style?,systemPrompt?,model?}。整批原子：任一 op 校验失败整批拒收，问题在 issues 返回、不抛错。真源字段可写，但生成前仍必须跑 planOperator validate 且 error 清零，本工具不代跑完整契约校验。save=true（默认）成功后立即落盘，不等防抖。patch.status 只接受 pending/generating/generated/failed；accepted 由用户在界面验收产生，agent 不能代写。patch 也可写本镜的 quality（light/medium/high/max，缺省 light）、secondPass（二次采样，缺省 true）与 preview（先出预览，缺省 false）：承接上一镜（continuity=context）的镜头只能用 light/medium 且必须 secondPass=true、不能开 preview，preview 只支持单个 30 秒以内镜头；越界由 validateClip 整批拒收，issues 会带原因。patch.seed 为随机种子（0 到 9007199254740991 的整数）：同种子+同提示词产物逐字节一致（实测），重 roll 保住满意镜头就带上 readClips 读回的 seed；传 null 清空回到引擎自定，省略不改。patch.takes 为候选条数（1–8，缺省 1）：一次派工连出 N 条候选版本供逐条预览挑选，带 seed 时候选种子逐条 +1 整批可复现；null 清空回单条。patch.partPrompts 为长镜逐块描述（1–5 条非空文本，条数必须等于 mediaGeneration planVideo 预检返回的 chainPlan.blocks 数）：每块演自己那段剧情而不是重播整段，只对 30 秒以上会分块的镜头有意义；null 清空回引擎自动切分。patch.whitebox 为白模参考（3D blocking）：{library:引擎作品号, seconds, earlyRatio, summary?, at}，由编辑器白模生成流程写入——它只定构图/机位/走位，不保证角色与道具长相（长相仍由资产卡与提示词负责，两者可同用）；传 null 清除该参考",
   parameters: z.strictObject({
     operations: z.array(editOpSchema).min(1).max(100),
     save: z.boolean().default(true),
@@ -734,13 +742,50 @@ nodeTools.register({
 
 nodeTools.register({
   name: "rewritePrompt",
-  description: "整理单镜提示词（UI「整理提示词」等价物）：只调文本模型，不改工程、不写编辑器的待采用区块，返回 { text, requiresReview }。clipId 缺省取当前选中镜；rules 覆盖内置整理规则（≤20000 字）。整理稿按 H3 官方六段（subject_definitions / summary / retention_analysis / detailed_description / overall_soundscape / non_diegetic_music）输出；结果需用户确认后由 agent 自行用 node:editProject 写回本镜 prompt 六段（H3 官方段名与顺序）；生成中整理会返回服务端 409 原文，错误原样抛出、不重试",
+  description: "**本工具不调语言模型**：只返回「整理本镜提示词」所需的规则与本镜当前原文，整理动作由你自己在会话里完成。返回 { rules, hardDiscipline, promptHeadings, current, instruction }：rules 可用参数覆盖（≤20000 字，硬性纪律永远追加且不可覆盖）、promptHeadings 是六段字段名→官方段名的顺序、current 含 clipId/prompt/referenceIds/seconds。按这些整理出六段正文后，用 `node:editProject` 的 patch 写回 current.clipId 的 prompt 六段（不要新增剧情、不要改时长、不要输出解释或 Markdown 代码块；参考标记写 `<Picture N>` / `<Video N>` / `<Audio N>` 各媒质独立编号）。原先这里会内部调服务端文本模型，实测撞供应商 429（额度耗尽），已改为零模型调用",
   parameters: z.strictObject({ clipId: clipIdSchema.optional(), rules: z.string().max(20000).optional() }),
   async execute(args, { signal }) {
     signal?.throwIfAborted();
     const result = await requireEditor().rewritePrompt(args);
     signal?.throwIfAborted();
     return result;
+  },
+});
+
+nodeTools.register({
+  name: "whitebox",
+  description: "白模参考（3D blocking）操作。**场景代码由你自己写，本工具不在内部调语言模型**（避免撞供应商限流，也避免背着用户换模型）。推荐流程：① `action=prompt` 取引擎权威规范（含 {SHOT} 占位，随引擎版本变化，不要写死）；② 按规范把本镜 detailed_description（空则 summary）写成 `export function build(THREE)` 场景代码（引擎硬约束：t 为 0–5 秒纯函数、960×544、只用 MeshStandardMaterial、1 Hemisphere + 1 Directional 灯、≤80 mesh、主体 mesh.name 以 hero 开头、不在 update 里 new 对象）；③ `action=submit` 传 `code` 提交引擎；④ `action=status` 轮询到 `phase=attached`（作品号已写回本镜）。`action=clear` 清本镜白模参考。**没有 `action=generate`**：白模代码一律由你自己写，本工具从不代写、也不调任何语言模型。**渲染需要用户打开的 FreeVideo 页面**，页面没开引擎报 page_required，让用户打开后重试。**白模只定构图/机位/走位，不保证角色与道具长相**——长相仍由资产卡与提示词负责，两者可同用。派工时 composeClipRequest 会按质量档自动折算 early_steps，不用自己算。",
+  parameters: z.strictObject({
+    // ACT: 只保留零模型动作。`generate`（服务端代写代码）已移除——那条路径会打供应商 API，
+    // 实测撞 429 insufficient_quota，且等于用别的模型替用户做决定。场景代码一律由 agent 自己写。
+    action: z.enum(["prompt", "submit", "status", "clear"]),
+    clipId: clipIdSchema.optional(),
+    // submit 专用：调用方自己写的场景代码与一句话摘要。
+    code: z.string().trim().min(1).max(65536).optional(),
+    summary: z.string().trim().min(1).max(500).optional(),
+  }),
+  async execute({ action, clipId, code, summary }, { signal }) {
+    signal?.throwIfAborted();
+    const editor = requireEditor();
+    if (action === "prompt") {
+      return await editor.whiteboxPrompt();
+    }
+    if (action === "submit") {
+      if (!code) throw new Error("action=submit 需要 code（你按 action=prompt 的规范写好的 export function build(THREE) 场景代码）");
+      if (!summary) throw new Error("action=submit 需要 summary（一句话说明白模场景，≤500 字）");
+      const result = await editor.whitebox(clipId, "submit", code, summary);
+      signal?.throwIfAborted();
+      return result;
+    }
+    if (action === "status") {
+      if (!clipId) throw new Error("action=status 需要 clipId（本工具不在当前选中镜上做只读猜测）");
+      signal?.throwIfAborted();
+      return editor.whiteboxState(clipId);
+    }
+    const result = await editor.whitebox(clipId, action);
+    signal?.throwIfAborted();
+    // 清除是同步完成的，直接回查本镜状态；生成返回 jobId，调用方按 action=status 轮询。
+    return action === "clear" ? { ...result, ...editor.whiteboxState(result.clipId) } : result;
   },
 });
 

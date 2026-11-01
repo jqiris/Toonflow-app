@@ -386,6 +386,48 @@ function setPrompt(value: string) {
 }
 
 // ACT: 生成后台化供 nodeTools 调用，Agent 用 getGenerationStatus 轮询；预检失败一律抛错，界面入口保留静默预检。
+/**
+ * 把一份完整方案渲染预览并落盘（生成链路与 agent 直接交付共用同一条路径）。
+ *
+ * ACT: 校验→渲染预览→写盘→切选中，顺序不能乱：先渲染是因为渲染失败就不该污染文档；
+ * 写盘成功才替换当前场景，避免半成品方案进入画布状态。基础模型被别的指令换掉时拒绝落盘
+ * （否则会把基于旧场景的动画贴到新场景上）。
+ */
+async function commitPlan(
+  result: { scene: SceneDocument; plan: DirectorPlan },
+  meta: { id: string; instruction: string },
+  baseScene: SceneDocument,
+  basePlanId: string,
+  sceneChanged: boolean,
+) {
+  const workspaceFiles = files.getWorkspaceFiles();
+  const nextScene = sceneChanged ? result.scene : baseScene;
+  const plan = { ...result.plan, id: meta.id, instruction: meta.instruction };
+  const previewLighting = { ...getSceneLighting(nextScene), ...data.value.lighting };
+  const previewSettings = sceneSettings.value;
+  const image = await renderPreview(nextScene, plan, previewLighting, previewSettings);
+  if (disposed) return;
+  // 动画请求可以并行生成，同一模型文件顺序保存，写入成功后才替换当前场景。
+  const saving = modelSaving.then(async () => {
+    if (disposed) return;
+    if (scene.value !== baseScene) throw new Error("基础模型已被另一条指令更新，请基于当前模型重试。");
+    const objects = new Map(nextScene.objectList.map(object => [object.threeJsonId, object]));
+    const previousPlans = sceneChanged
+      ? plans.value.map(item => ({ ...item, tracks: item.tracks.filter(track => objects.has(track.objectId) && (!track.joint || objects.get(track.objectId)?.objType === "mannequin")) }))
+      : plans.value;
+    const value: ModelDocument = { version: 1, scene: nextScene, plans: [...previousPlans, plan] };
+    const path = await writeModel(workspaceFiles, value);
+    if (disposed) return;
+    planPreviews.set(plan, { scene: nextScene, lighting: previewLighting, settings: previewSettings, image });
+    modelDocument.value = value;
+    data.value.modelPath = path;
+    if ((data.value.selectedPlanId ?? "") === basePlanId) data.value.selectedPlanId = plan.id;
+  });
+  modelSaving = saving.catch(() => {});
+  await saving;
+  return plan;
+}
+
 async function runGeneration(instruction: string) {
   await modelReady;
   if (modelLoading.value) throw new Error("导演台模型正在加载，请稍候");
@@ -440,31 +482,7 @@ async function runGeneration(instruction: string) {
         throw new Error(note ? `Agent 未修改方案，原方案未修改，请重试。${note}` : "Agent 未修改方案，原方案未修改，请重试。");
       }
       const result = draft.read();
-      const nextScene = draft.sceneChanged ? result.scene : baseScene;
-      const plan = { ...result.plan, id: task.id, instruction: requirement };
-      // 工具仅编辑草稿；完成后验证实际渲染，成功落盘才替换当前方案。
-      const previewLighting = { ...getSceneLighting(nextScene), ...data.value.lighting };
-      const previewSettings = sceneSettings.value;
-      const image = await renderPreview(nextScene, plan, previewLighting, previewSettings);
-      if (disposed) return;
-      // 动画请求可以并行生成，同一模型文件顺序保存，写入成功后才替换当前场景。
-      const saving = modelSaving.then(async () => {
-        if (disposed) return;
-        if (scene.value !== baseScene) throw new Error("基础模型已被另一条指令更新，请基于当前模型重试。");
-        const objects = new Map(nextScene.objectList.map(object => [object.threeJsonId, object]));
-        const previousPlans = draft.sceneChanged
-          ? plans.value.map(item => ({ ...item, tracks: item.tracks.filter(track => objects.has(track.objectId) && (!track.joint || objects.get(track.objectId)?.objType === "mannequin")) }))
-          : plans.value;
-        const value: ModelDocument = { version: 1, scene: nextScene, plans: [...previousPlans, plan] };
-        const path = await writeModel(workspaceFiles, value);
-        if (disposed) return;
-        planPreviews.set(plan, { scene: nextScene, lighting: previewLighting, settings: previewSettings, image });
-        modelDocument.value = value;
-        data.value.modelPath = path;
-        if ((data.value.selectedPlanId ?? "") === basePlanId) data.value.selectedPlanId = plan.id;
-      });
-      modelSaving = saving.catch(() => {});
-      await saving;
+      await commitPlan(result, { id: task.id, instruction: requirement }, baseScene, basePlanId, draft.sceneChanged);
       tasks.value = tasks.value.filter(item => item.id !== task.id);
       // ACT: 成功是既成事实（方案已写入文档），无条件覆盖 cancelGeneration 预置的『已取消生成』
       generationResults.set(task.id, { status: "succeeded" });
@@ -568,11 +586,48 @@ nodeTools.register({
 
 nodeTools.register({
   name: "generateScene",
-  description: "启动此导演台的 3D 场景搭建/修改与镜头动画生成：instruction 用自然语言描述场景、角色、动作与运镜；参考图/视频需先连到本节点 in 句柄并确认 getConfig.references 全部就绪，且模型支持视觉；立即返回 { taskId, status: \"generating\" } 不等待完成——用 getGenerationStatus 轮询或监听 toonflow:director3d-generation-done 事件获取结果；首次建场只接收一个请求，之后建议多轮小步修改；完成后用 getState 查看方案，再用 exportVideo/exportKeyframe 导出",
+  description: "**会由节点内部再起一次语言模型**（用节点里选定的模型，不是你当前 agent 会话的模型）：instruction 用自然语言描述场景、角色、动作与运镜；参考图/视频需先连到本节点 in 句柄并确认 getConfig.references 全部就绪，且模型支持视觉；立即返回 { taskId, status: \"generating\" } 不等待完成——用 getGenerationStatus 轮询。**你在 agent 会话里已把方案设计好时不要用它，改用 applyPlan 直接交文档**（零模型调用，不会撞限流也不会换掉用户当前模型）。首次建场只接收一个请求，之后建议多轮小步修改；完成后用 getState 查看方案，再用 exportVideo/exportKeyframe 导出",
   parameters: z.strictObject({ instruction: z.string().trim().min(1) }),
   execute({ instruction }, { signal }) {
     signal?.throwIfAborted();
     return runGeneration(instruction).then(({ taskId }) => ({ taskId, status: "generating" as const }));
+  },
+});
+
+nodeTools.register({
+  name: "applyPlan",
+  description: "**由你自己产出方案、本工具不调语言模型**：把一份完整的 { scene, plan } 文档直接写入导演台（渲染预览 → 校验 → 落盘 → 切为选中方案），返回写入后的方案 id。用它与 generateScene 的区别：generateScene 会让节点内部再起一次语言模型（会撞供应商限流、也等于换掉用户当前模型），你在 agent 会话里已经把方案设计好时应当用 applyPlan。取当前文档与字段结构用 getState / getDocumentSchema；scene 与 plan 必须过引擎级校验（物体 threeJsonId 唯一、轨道引用的物体必须存在、只有人偶支持关节轨道、关键帧时间严格递增且不超过 duration）。plan 的 id/instruction 由节点分配，不用你填。",
+  parameters: z.strictObject({
+    sceneDocument: z.json(),
+    planDocument: z.json(),
+    instruction: z.string().trim().max(2000).optional(),
+  }),
+  async execute({ sceneDocument, planDocument, instruction }, { signal }) {
+    signal?.throwIfAborted();
+    if (modelLoading.value) throw new Error("导演台模型正在加载，请稍候");
+    if (modelError.value) throw new Error(`导演台模型未加载：${modelError.value}`);
+    const parsedScene = sceneSchema.safeParse(sceneDocument);
+    if (!parsedScene.success) throw new Error(`场景校验失败：${parsedScene.error.issues.slice(0, 8).map(issue => `${issue.path.join(".")}：${issue.message}`).join("；")}`);
+    const parsedPlan = directorPlanSchema.safeParse(planDocument);
+    if (!parsedPlan.success) throw new Error(`方案校验失败：${parsedPlan.error.issues.slice(0, 8).map(issue => `${issue.path.join(".")}：${issue.message}`).join("；")}`);
+    // 轨道引用的物体必须存在、且只有人偶支持关节轨道（与 createDirectorDraft 的校验同口径）。
+    const objects = new Map(parsedScene.data.objectList.map(object => [object.threeJsonId, object]));
+    for (const track of parsedPlan.data.tracks ?? []) {
+      const object = objects.get(track.objectId);
+      if (!object) throw new Error(`方案引用了不存在的物体：${track.objectId}，删除物体时需同时删除其轨道`);
+      if (track.joint && object.objType !== "mannequin") throw new Error(`只有人偶支持关节轨道：${track.objectId} / ${track.joint}`);
+    }
+    const baseScene = scene.value;
+    const basePlanId = data.value.selectedPlanId ?? "";
+    const id = crypto.randomUUID();
+    const committed = await commitPlan(
+      { scene: parsedScene.data, plan: parsedPlan.data },
+      { id, instruction: (instruction ?? "").trim() || "agent 直接交付" },
+      baseScene, basePlanId,
+      JSON.stringify(parsedScene.data) !== JSON.stringify(baseScene),
+    );
+    signal?.throwIfAborted();
+    return { planId: committed?.id ?? id, status: "succeeded" as const, selectedPlanId: data.value.selectedPlanId };
   },
 });
 
@@ -599,7 +654,7 @@ nodeTools.register({
 
 nodeTools.register({
   name: "getState",
-  description: "读取导演台状态快照：场景物体（名称/类型/坐标）、取景锚点、镜头方案（id/名称/时长/生成指令）、选中方案、待处理任务与导出状态；修改或导出前先查这里",
+  description: "读取导演台状态快照：场景物体（名称/类型/坐标）、取景锚点、镜头方案（id/名称/时长/生成指令）、选中方案、待处理任务与导出状态。**document 字段给出当前完整 { scene, plans } 文档**——用 applyPlan 前拿它当基准改（只改需要变的，其余原样带回去），比从零拼一份更不容易丢字段。字段结构不明确时用 getDocumentSchema",
   parameters: z.strictObject({}),
   async execute(_args, { signal }) {
     await modelReady;
@@ -613,6 +668,21 @@ nodeTools.register({
       selectedPlanId: selectedPlan.value?.id ?? "",
       tasks: tasks.value.map(task => ({ id: task.id, instruction: task.instruction })),
       exporting: { video: exportingVideo.value, image: exportingImage.value },
+      // ACT: 给 applyPlan 用的完整文档原件。schema 校验过、可直接作为修改基准。
+      document: { version: 1, scene: scene.value, plans: plans.value },
+    };
+  },
+});
+
+nodeTools.register({
+  name: "getDocumentSchema",
+  description: "读取导演台文档的字段结构（JSON Schema）：`scene` 部分（场景物体、相机、灯光、材质、人偶关节与 pose/hiddenParts）与 `plan` 部分（轨道、关键帧、取景锚点 cameraFrames）。用 applyPlan 写文档前先查它，不要凭记忆猜字段名；配合 getState.document 给出的当前文档原件修改最稳",
+  parameters: z.strictObject({}),
+  execute() {
+    return {
+      scene: z.toJSONSchema(sceneSchema),
+      plan: z.toJSONSchema(directorPlanSchema),
+      planItem: z.toJSONSchema(directorPlanSchema.safeExtend({ id: z.string().min(1), instruction: z.string().optional() })),
     };
   },
 });

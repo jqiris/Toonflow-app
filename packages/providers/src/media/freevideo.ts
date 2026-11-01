@@ -18,7 +18,7 @@ const rules = [
   },
 ] as const;
 
-const version = "1.3.0";
+const version = "1.3.1";
 const agentSuffix = "/freevideo/agent/v1";
 /** 图像任务参考图上限：引擎 kind=image 的 images 数组 maxItems=4（超限返回 too_many_images）。视频单块仍是 9，见 models 段。 */
 const maxImageReferences = 4;
@@ -167,7 +167,7 @@ async function upload(context: ProviderContext, token: string, agent: string, in
     body: JSON.stringify({ name: `toonflow_${Date.now().toString(16)}.${extension}`, data_base64: Buffer.from(bytes).toString("base64") }),
     signal,
   });
-  if (!response.ok) throw new Error(context.tool.errorMessage?.(await response.json().catch(() => ({}))) || `素材上传失败：HTTP ${response.status}`);
+  if (!response.ok) throw await engineFailure(response, "素材上传失败");
   const result = object(await response.json());
   if (typeof result.file !== "string" || !result.file) throw new Error("素材上传未返回文件路径");
   return result.file;
@@ -178,6 +178,115 @@ async function download(context: ProviderContext, token: string, origin: string,
   const response = await context.tool.fetch(url.startsWith("http") ? url : origin + url, { headers: { Authorization: `Bearer ${token}` }, signal });
   if (!response.ok) throw new Error(`结果下载失败：HTTP ${response.status}`);
   return new Uint8Array(await response.arrayBuffer());
+}
+
+/**
+ * 引擎错误码 → 中文可操作文案。
+ * ACT: 引擎的 error.message 是英文（"This needs the FreeVideo page open in a browser."），
+ * 真正能指导用户的是 error.next（也是英文）与 error.code。中文产品里不能把英文原样抛给用户，
+ * 所以按 code 映射一句「现在该做什么」；未收录的 code 才回落引擎原文。
+ */
+const engineMessages: Record<string, string> = {
+  page_required: "白模预览要在 FreeVideo 页面里渲染：请打开 FreeVideo 页面并保持前台（切到后台标签页也会停），然后重试",
+  page_session_required: "这个操作只能由用户在 FreeVideo 页面上发起：请在页面里操作",
+  forbidden: "这个操作只有用户本人能做：请让用户在 FreeVideo 页面上完成",
+  not_ready: "FreeVideo 还没装好：打开 设置 → 安装 / 修复，完成后重试",
+  unauthorized: "Token 无效或已过期：从 FreeVideo 安装目录的 agent/token 重新读取后填入设置",
+  no_token: "读不到本机 Token：先启动 FreeVideo，再从 agent/token 读取",
+  vlm_unavailable: "本地视觉模型没装：打开 设置 → 安装 / 修复 装上提示词模型后重试",
+  model_missing: "缺少必需的本地模型：打开 设置 → 安装 / 修复 安装后重试",
+  busy: "引擎正忙：稍等片刻再重试",
+  insufficient_memory: "显存不够跑这个规格：先释放显存，或降低分辨率 / 时长后重试",
+  out_of_memory: "显存爆了：先释放显存或关掉其他占用 GPU 的程序，再续拍或重提",
+  ram_space: "系统内存不够：关掉其他吃内存的程序后重试",
+  chain_too_long: "单个连续镜头最多 8 段：请缩短时长，或另起一镜（不要 continue_from）",
+  chain_short_parts: "有短于 10 秒的续接段时最多 4 段：把每段做到 10 秒以上、减少段数，或打开 first_frame_reference",
+  continuation_unavailable: "当前引擎不支持续接：单段请控制在 15 秒以内",
+  not_resumable: "只有失败 / 中断 / 取消的任务能续拍",
+  cancelled: "任务已取消：需要继续请用续拍",
+  interrupted: "任务中断（已完成的分段保留）：可以续拍接着跑",
+  generation_failed: "生成失败（已完成的分段保留）：可以续拍重试未完成的部分",
+  timeout: "引擎超时：先读一次任务状态，再决定续拍还是重提",
+  lost: "引擎那边找不到这个任务的结果了：请重新提交",
+  no_video: "源任务还没有成片：等它 succeeded 后再引用",
+  not_found: "找不到这个任务 / 影片 / 素材：先列表确认 ID",
+  conflict: "操作与当前状态冲突：先读一次当前状态再重试",
+  dependency_failed: "依赖的任务没成功：先处理依赖任务再重提",
+  invalid_request: "请求字段不合法：按引擎返回的 details 逐项修正后重发",
+  invalid_media: "素材不可读：换一张可读的图片 / 视频 / 音频再传",
+  too_large: "文件超过引擎上限：压缩后再传",
+  storage_unavailable: "引擎存不下文件：检查磁盘空间后重试",
+  disk_full: "磁盘满了：清理磁盘后重试",
+  lan_unavailable: "局域网设置要在 FreeVideo 启动器里完成安装",
+  local_only: "这个接口只允许本机访问",
+  origin_forbidden: "来源不匹配：请从 FreeVideo 自己的页面发起",
+  idempotency_conflict: "同一个幂等键已经用于不同内容：改了内容请换新的 ref",
+  internal_error: "引擎内部错误：把返回里的 request_id 报给开发者",
+  session_full: "这个会话的事件数到上限了：新开一个会话继续",
+  redirect_forbidden: "带凭证的请求不能跨域跳转：检查 baseUrl 是否指向本机 FreeVideo",
+  method_not_allowed: "这个接口不支持该 HTTP 方法：检查调用方式（多半是版本不匹配）",
+  unreachable: "连不上 FreeVideo 服务：确认引擎已启动、端口正确",
+  invalid_json: "请求体不是合法 JSON：检查请求组装",
+  invalid_edit: "图片编辑参数或文档不合法：核对裁剪 / 图层参数后重发",
+  invalid_screenplay: "剧本里有不合法的字段：按引擎返回的 details 逐项修正",
+  unsupported_media_type: "Content-Type 不对：只接受 application/json 或受支持的媒体上传",
+  vlm_failed: "本地视觉模型请求失败：检查模型是否装好，稍后重试",
+  context_length: "问题和图片超出了本地模型的上下文上限：减少图片或缩短提问",
+  invalid_output: "后端产物不可用：检查 ComfyUI 输出后重试",
+  vlm_invalid_json: "本地模型返回的不是合法 JSON：重试一次，或改用 format=text",
+  image_size: "图片超过本地模型 50 兆像素上限：先缩小再传",
+  unsupported_media: "本地视觉模型不支持这种素材：换成图片（或受支持的格式）",
+  source_missing: "引用的已完成分段已经不在了：请重新提交整镜",
+  invalid_range: "下载的 Range 越界：按文件实际大小重新请求",
+  chain_unavailable: "连续生成后端不可用：改用独立镜头，或检查 ComfyUI 的续接支持",
+  chain_missing: "找不到保存的续接记录：请重新提交",
+  join_failed: "分段合成失败（已完成的分段保留）：可以续拍或改用独立镜头",
+  chain_rejected: "连续生成后端拒绝了这次请求：缩短时长或改用独立镜头",
+  invalid_wait: "wait 必须是有限的非负秒数：检查轮询参数",
+  invalid_resume: "续拍只接受空对象或可选的 ref：检查请求体",
+  invalid_library_id: "作品号不合法：day / run 必须指向一个已保存的影片",
+  invalid_capabilities_query: "能力查询参数不合法：检查 size 等查询字段",
+  unsupported_comfyui: "这个 ComfyUI 版本没有受支持的生成端点：升级 ComfyUI 或 FreeVideo",
+};
+
+/**
+ * 把引擎的非 2xx 响应转成一个带中文文案和原 HTTP 状态码的 Error。
+ * ACT: 状态码必须原样带出去——宿主 errorFromCause 用 error.status 决定 HTTP 码，
+ * 丢了就会把引擎的 409（可重试的 page_required / busy）显示成 500 服务器故障。
+ */
+async function engineFailure(response: Response, fallback: string): Promise<Error> {
+  const answer = object(await response.json().catch(() => ({})));
+  const raw = object(answer.error);
+  const code = typeof raw.code === "string" ? raw.code.trim() : "";
+  const known = code ? engineMessages[code] : undefined;
+  const zh = typeof raw.error_zh === "string" ? raw.error_zh.trim() : "";
+  const detail = typeof raw.message === "string" ? raw.message.trim() : "";
+  const requestId = typeof raw.request_id === "string" ? raw.request_id.trim() : "";
+  // 优先级：本文件码表（中文且可操作）→ 引擎给的具体中文原因（"没有完成" 这种无信息量的不算）
+  // → 引擎英文原文附 code → 兜底。未收录的 code 保留原文便于排查。
+  let message = known ?? "";
+  if (!message && zh && zh !== "没有完成") message = zh;
+  if (!message) message = detail ? (code ? `${detail}（${code}）` : detail) : `${fallback}：HTTP ${response.status}`;
+  const suffix = code === "internal_error" && requestId ? `（request_id: ${requestId}）` : "";
+  return Object.assign(new Error(message + suffix), { status: response.status, engineCode: code });
+}
+
+/**
+ * 失败 / 取消的任务行 → 中文文案。
+ * ACT: 任务行不是 HTTP 响应（没有 status），它的错误在 job.error 上，所以单独走一次映射，不能复用 engineFailure。
+ * 优先级：引擎自带的 error_zh（errors.reasons() 按失败行/错误码给出的具体中文原因，比通用码表更准）
+ * → 本文件的 engineMessages 码表 → 引擎英文原文 → 兜底。
+ */
+function engineJobMessage(job: Record<string, unknown>, fallback: string): string {
+  const raw = object(job.error);
+  const zh = typeof raw.error_zh === "string" ? raw.error_zh.trim() : "";
+  // ACT: 引擎在无具体原因时给的是「没有完成」，信息量为零，不如走码表或兜底。
+  if (zh && zh !== "没有完成") return zh;
+  const code = typeof raw.code === "string" ? raw.code.trim() : "";
+  const known = code ? engineMessages[code] : undefined;
+  if (known) return known;
+  const detail = typeof raw.message === "string" ? raw.message.trim() : "";
+  return detail || fallback;
 }
 
 /**
@@ -197,7 +306,7 @@ async function runJobs(context: ProviderContext, token: string, agent: string, s
     body: JSON.stringify(spec),
     signal,
   });
-  if (!submit.ok) throw new Error(context.tool.errorMessage?.(await submit.json().catch(() => ({}))) || `提交失败：HTTP ${submit.status}`);
+  if (!submit.ok) throw await engineFailure(submit, "提交失败");
   const answer = object(await submit.json());
   const rows = Array.isArray(answer.jobs) ? answer.jobs : [object(answer.job ?? answer)];
   const jobIds = rows.map(row => typeof object(row).id === "string" ? String(object(row).id) : "");
@@ -220,13 +329,13 @@ async function runJobs(context: ProviderContext, token: string, agent: string, s
     let resumeTries = 0;
     for (;;) {
       const response = await context.tool.fetch(`${agent}/jobs/${jobId}?wait=25`, { headers: { Authorization: `Bearer ${token}` }, signal });
-      if (!response.ok) throw new Error(context.tool.errorMessage?.(await response.json().catch(() => ({}))) || `轮询失败：HTTP ${response.status}`);
+      if (!response.ok) throw await engineFailure(response, "轮询失败");
       const answer = object(await response.json());
       const current = object(answer.job ?? answer);
       const status = String(current.status);
       if (status === "succeeded") { succeeded.push({ job: current, jobId }); break; }
       if (status === "failed" || status === "cancelled") {
-        const message = context.tool.errorMessage?.(current) || `生成${status === "cancelled" ? "已取消" : "失败"}`;
+        const message = engineJobMessage(current, `生成${status === "cancelled" ? "已取消" : "失败"}`);
         // 单条候选失败只记账；整批全失败才抛错（takes 的意义就是留成功条给用户挑）。
         if (jobIds.length === 1) throw new Error(message);
         failures.push(`第 ${jobIds.indexOf(jobId) + 1} 条：${message}`);
@@ -246,9 +355,7 @@ async function runJobs(context: ProviderContext, token: string, agent: string, s
           body: "{}",
           signal,
         });
-        const resumeAnswer = await resume.json().catch(() => ({}));
-        if (!resume.ok) throw new Error(context.tool.errorMessage?.(resumeAnswer) || `续拍失败：HTTP ${resume.status}`);
-        object(resumeAnswer);
+        if (!resume.ok) throw await engineFailure(resume, "续拍失败");
         continue;
       }
       await wait(signal, Math.max(500, Number(current.poll_after_ms) || 2000));
@@ -332,7 +439,7 @@ export default {
       body: "{}",
       signal: AbortSignal.timeout(15_000),
     });
-    if (!response.ok) throw new Error(this.tool.errorMessage?.(await response.json().catch(() => ({}))) || `释放显存失败：HTTP ${response.status}`);
+    if (!response.ok) throw await engineFailure(response, "释放显存失败");
     const result = object(await response.json());
     return { released: result.released === true, ...(typeof result.reason === "string" ? { reason: result.reason } : {}) };
   },
@@ -405,15 +512,22 @@ export default {
       if (request.firstFrame) media.first = await upload(this, token, agent, request.firstFrame, signal);
       if (request.lastFrame) media.last = await upload(this, token, agent, request.lastFrame, signal);
     }
-    const references: string[] = [];
+    const references: (string | Record<string, unknown>)[] = [];
     for (const image of request.images ?? []) references.push(await upload(this, token, agent, image, signal));
     for (const video of request.videos ?? []) references.push(await upload(this, token, agent, video, signal));
     for (const audio of request.audios ?? []) references.push(await upload(this, token, agent, audio, signal));
+    // ACT: 白模参考放**末位且不写标签**——引擎按类型在数组中的顺序编号 <Video N>，
+    // 白模是 library 视频，放首位会把卡图参考的 Video 编号整体顶歪（实测混用通过的形状就是末位无标签）。
+    // earlySteps 由派工侧按质量档换算（light/medium 首轮 8 步、high/max 单遍 16/20 步，≈ early_ratio × 首轮步数）。
+    if (request.whitebox) {
+      if (!/^\d{4}-\d{2}-\d{2}\/[0-9a-f]{32}$/.test(request.whitebox.library)) throw new Error(`白模作品号格式不对（应为 日期/32位十六进制）：${request.whitebox.library.slice(0, 60)}`);
+      references.push({ library: request.whitebox.library, early_steps: Math.max(1, Math.min(32, Math.round(request.whitebox.earlySteps))) });
+    }
     if (references.length) media.references = references;
     // ACT: 续接时参考图上限是 3 张（引擎 guide："media.references with at most 3 pictures"），
-    // 超限由引擎整任务拒绝，这里提前拦下并给出可执行的处置建议。
+    // 超限由引擎整任务拒绝，这里提前拦下并给出可执行的处置建议。白模占一个槽位，计入总数。
     if (continuing && references.length > 3) {
-      throw new Error(`续接镜头最多 3 张参考图（引擎限制），当前 ${references.length} 张；请减少参考或把该镜改为独立镜头`);
+      throw new Error(`续接镜头最多 3 个参考素材（引擎限制，含白模），当前 ${references.length} 个；请减少参考或把该镜改为独立镜头`);
     }
 
     const seconds = clampSeconds(request.duration);
@@ -488,7 +602,7 @@ export default {
     return assets;
   },
   // 提交前预检：POST /plan 的 body 就是裸 generate spec（与 /jobs 同形状，无 kind 包装差异），
-  // 返回 geometry / chain_plan / warnings。校验失败引擎按 422 逐字段报错，经 errorMessage 透传。
+  // 返回 geometry / chain_plan / warnings。校验失败引擎按 422 逐字段报错，经 engineFailure 转成中文。
   async planVideo(request: VideoRequest) {
     const token = this.config.apiKey?.trim();
     if (!token) throw new Error("请填写 Token");
@@ -510,7 +624,7 @@ export default {
       // ACT: 有宿主信号时也要叠加 30s 上限——预检是同步接口，引擎重启/卡死时不能让 HTTP 路由无限挂。
       signal: this.signal ? AbortSignal.any([this.signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
     });
-    if (!response.ok) throw new Error(this.tool.errorMessage?.(await response.json().catch(() => ({}))) || `预检失败：HTTP ${response.status}`);
+    if (!response.ok) throw await engineFailure(response, "预检失败");
     const answer = object(await response.json());
     const chain = object(answer.chain_plan ?? {});
     const geo = object(answer.geometry ?? {});
@@ -553,5 +667,60 @@ export default {
     }, signal);
     const result = object(job.result ?? {});
     return { answers: Array.isArray(result.answers) ? result.answers : [] };
+  },
+  // 白模（3D blocking）：场景代码在用户打开的 FreeVideo 页面里渲染成参考视频，
+  // ready 后 work 是作品库 id，生成时以 {library, early_steps} 放 references 末位引导构图与运镜。
+  whitebox: {
+    available: true,
+    async getPrompt() {
+      const token = this.config.apiKey?.trim();
+      if (!token) throw new Error("请填写 Token");
+      const agent = agentBase(this.config.baseUrl);
+      const response = await this.tool.fetch(`${agent}/guide`, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!response.ok) throw await engineFailure(response, "读取白模规范失败");
+      const guide = object(await response.json());
+      const prompt = typeof guide.whitebox_scene_prompt === "string" ? guide.whitebox_scene_prompt : "";
+      if (!prompt) throw new Error("当前引擎版本没有提供白模场景规范（whitebox_scene_prompt）");
+      return prompt;
+    },
+    async create(code: string, summary: string) {
+      const token = this.config.apiKey?.trim();
+      if (!token) throw new Error("请填写 Token");
+      if (!code.trim()) throw new Error("白模场景代码为空");
+      if (code.length > 65536) throw new Error(`白模场景代码超过 65536 字符上限（当前 ${code.length}）；请减少物体数`);
+      const agent = agentBase(this.config.baseUrl);
+      const response = await this.tool.fetch(`${agent}/whitebox`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ code, summary: summary.slice(0, 500) }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!response.ok) throw await engineFailure(response, "白模提交失败");
+      const answer = object(await response.json());
+      return { id: String(answer.id ?? ""), status: String(answer.status ?? "waiting") };
+    },
+    async get(id: string) {
+      const token = this.config.apiKey?.trim();
+      if (!token) throw new Error("请填写 Token");
+      const agent = agentBase(this.config.baseUrl);
+      const response = await this.tool.fetch(`${agent}/whitebox/${encodeURIComponent(id)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!response.ok) throw await engineFailure(response, "白模状态读取失败");
+      const answer = object(await response.json());
+      return {
+        id: String(answer.id ?? id),
+        status: String(answer.status ?? "waiting"),
+        ...(typeof answer.work === "string" ? { work: answer.work } : {}),
+        ...(typeof answer.seconds === "number" ? { seconds: answer.seconds } : {}),
+        ...(typeof answer.early_steps === "number" ? { earlySteps: answer.early_steps } : {}),
+        ...(typeof answer.early_ratio === "number" ? { earlyRatio: answer.early_ratio } : {}),
+        ...(answer.error ? { error: typeof answer.error === "string" ? answer.error : JSON.stringify(answer.error) } : {}),
+      };
+    },
   },
 } satisfies ProviderDefinition<typeof rules>;
