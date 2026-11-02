@@ -38,6 +38,10 @@ export default defineConfig({
   build: {
     outDir: "../../build/web",
     emptyOutDir: true,
+    // ACT: 桌面端页面从本地磁盘加载，Vite 默认的 500 kB 是「网络传输」启发式阈值，在这里只会持续刷警告。
+    // 当前最大分块约 6.3 MB（shiki 语言包一类），阈值抬到 8 MB 覆盖；再超出说明真有意外膨胀，警告依然会报。
+    // 要真正减小首屏体积应做路由级懒加载 / vendor 手动切分，那是独立优化，不在本次日志清理范围内。
+    chunkSizeWarningLimit: 8192,
   },
   plugins: [
     i18nPlugin(),

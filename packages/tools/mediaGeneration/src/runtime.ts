@@ -23,10 +23,22 @@ const sharedFields = {
 const referenceMode = z.templateLiteral([z.enum(["image", "video", "audio"]), "Reference:", z.number()])
   .refine(value => /Reference:(?:[1-9]\d?|1\d{2}|2[0-4]\d|25[0-6])$/.test(value), "参考数量必须在 1 到 256 之间");
 
+/**
+ * 逐镜 LoRA 选择项：name 按引擎已装 LoRA 精确匹配（不裁剪、不改写，避免匹配失败），strength 缺省由引擎按 1 处理。
+ * 条数与 strength 区间随模态不同（FreeVideo：视频 32 条 / [-4,4]，图片 8 条 / [-2,2]）。
+ */
+const loraItem = (minStrength: number, maxStrength: number) => z.strictObject({
+  name: z.string().min(1).max(512),
+  strength: z.number().min(minStrength).max(maxStrength).optional(),
+});
+const videoLoras = z.array(loraItem(-4, 4)).max(32).optional();
+const imageLoras = z.array(loraItem(-2, 2)).max(8).optional();
+
 export const listMediaModelsSchema = z.strictObject({});
 export const imageGenerationSchema = z.strictObject({
   ...sharedFields,
   size: z.string().trim().min(1).max(64).optional(),
+  loras: imageLoras,
 });
 export const videoGenerationSchema = z.strictObject({
   ...sharedFields,
@@ -71,6 +83,8 @@ export const videoGenerationSchema = z.strictObject({
     library: z.string().regex(/^\d{4}-\d{2}-\d{2}\/[0-9a-f]{32}$/),
     earlySteps: z.number().int().min(1).max(32),
   }).optional(),
+  /** 逐镜 LoRA 选择（引擎按 name 精确匹配已装 LoRA，strength 缺省 1）：省略表示不启用。 */
+  loras: videoLoras,
   mode: z.union([
     z.enum(["singleImage", "startEndRequired", "endFrameOptional", "startFrameOptional", "text"]),
     z.array(referenceMode).min(1).max(3),
@@ -95,6 +109,28 @@ export const audioGenerationSchema = z.strictObject({
 
 /** 提交前预检（引擎 /plan）：入参与 generateVideo 同形（复用 videoGenerationSchema），返回分块计划与实际几何。 */
 export const planVideoSchema = videoGenerationSchema;
+
+/**
+ * 引擎配乐（kind=music）：对已保存的编辑工程作曲并铺到音轨 a2 第 0 帧。
+ * editorProjectId/revision/caption 必填（revision 须先读最新，否则 409 project_changed）；
+ * seed/quiet 可选；caption 英文 ≤512。sourceVideo 可选（成片导入 v1 轨第 0 帧，配乐长度=成片长度）。
+ * 返回音频字节与产物元信息。
+ */
+export const musicSchema = z.strictObject({
+  providerId: sharedFields.providerId,
+  modelId: sharedFields.modelId,
+  outputDirectory: sharedFields.outputDirectory,
+  editorProjectId: z.string().trim().regex(/^e-[0-9a-f]{32}$/),
+  revision: z.number().int().min(1).max(2 ** 53 - 1),
+  caption: z.string().trim().min(1).max(512).regex(/^[\x20-\x7E]*$/),
+  seed: z.number().int().min(0).max(2 ** 32 - 1).optional(),
+  quiet: z.array(z.strictObject({
+    start: z.number().int().min(0),
+    frames: z.number().int().positive(),
+  })).max(500).optional(),
+  /** 成片视频（可选）：把成片导入编辑工程 v1 轨第 0 帧，让配乐长度=成片长度（引擎要求时间线 10–600s）。 */
+  sourceVideo: videoReference.optional(),
+});
 
 /** 本机视觉模型问答（引擎 kind=vlm）：questions 1–8 条，每条可带工作区图片（≤16）或视频（自动采样帧）；全任务素材合计 ≤24。 */
 export const askVlmSchema = z.strictObject({

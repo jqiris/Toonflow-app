@@ -34,6 +34,22 @@
         <el-input-number :modelValue="clip.takes ?? 1" size="small" :min="1" :max="8" :step="1" :stepStrictly="true" controls-position="right" @change="onTakesChange" />
       </label>
     </div>
+    <div class="loraRow">
+      <span class="fieldLabel">LoRA</span>
+      <span v-if="loraHint" class="loraState loraStateWarn">{{ loraHint }}</span>
+      <template v-else>
+        <el-select :modelValue="selectedLoraNames" class="loraSelect" multiple size="small" collapse-tags collapse-tags-tooltip placeholder="选择引擎已装 LoRA（可多选）" @change="onLorasChange">
+          <el-option v-for="name in loraOptions" :key="name" :label="name" :value="name" :disabled="loraLimitReached && !selectedLoraNames.includes(name)" />
+        </el-select>
+        <span v-if="loraLimit" class="loraState">单镜最多 {{ loraLimit }} 条（引擎限制）</span>
+        <span v-if="loraOverflow" class="loraState loraStateWarn" role="alert">本镜已设 {{ selectedLoraNames.length }} 条，超出上限 {{ loraLimit }} 条（引擎限制），派工前请先减到 {{ loraLimit }} 条以内</span>
+        <span v-for="lora in clip.loras ?? []" :key="lora.name" class="loraItem">
+          <span class="loraName" :title="lora.name">{{ lora.name }}</span>
+          <el-input-number :modelValue="lora.strength ?? 1" class="loraStrength" size="small" :min="loraStrengthMin" :max="loraStrengthMax" :step="0.1" controls-position="right" @change="onLoraStrengthChange(lora.name, $event)" />
+          <el-button size="small" text @click="removeLora(lora.name)">移除</el-button>
+        </span>
+      </template>
+    </div>
     <div class="whiteboxRow">
       <span class="fieldLabel">白模参考</span>
       <template v-if="whiteboxJob && whiteboxJob.status !== 'failed'">
@@ -81,7 +97,7 @@ import { firstFrameInstruction } from "../mediaDispatch";
 type RewriteBasis = { text: string; seconds: number; rules: string };
 type RewritePending = { clipId: string; text: string; basis: RewriteBasis };
 
-const props = defineProps<{ clip?: MtrackClip; index: number; clipCount: number; previousClipId?: string; previousClipJobId?: string; rewriteBusy?: boolean; rewritePending?: RewritePending; canUndo?: boolean; batchRunning?: boolean; batchPaused?: boolean; whiteboxJob?: WhiteboxJob; whiteboxBusy?: boolean; }>();
+const props = defineProps<{ clip?: MtrackClip; index: number; clipCount: number; previousClipId?: string; previousClipJobId?: string; rewriteBusy?: boolean; rewritePending?: RewritePending; canUndo?: boolean; batchRunning?: boolean; batchPaused?: boolean; whiteboxJob?: WhiteboxJob; whiteboxBusy?: boolean; loraOptions?: string[]; loraLimit?: number; loraStrengthLimit?: { min: number; max: number }; loraHint?: string; }>();
 
 const emit = defineEmits<{ (e: "patch", patch: Partial<MtrackClip>): void; (e: "duplicate"): void; (e: "move", offset: number): void; (e: "remove"): void; (e: "accept", accepted: boolean): void; (e: "rewrite", rules: string): void; (e: "regenerate"): void; (e: "adoptRewrite", text: string): void; (e: "discardRewrite"): void; (e: "updateRewriteDraft", text: string): void; (e: "undoRemove"): void; (e: "whitebox", action: WhiteboxAction): void; }>();
 
@@ -134,6 +150,47 @@ const qualityOptions = computed(() => {
   const list = current && !base.includes(current) ? [...base, current] : base;
   return list.map(value => ({ value, label: videoQualityLabels[value] }));
 });
+
+/** LoRA 候选来自父级从引擎能力档案读到的「已装 LoRA 名」，本组件不写死任何名单。
+ *  ACT: 已选但不在候选里的名字（换引擎/卸载 LoRA 后的旧值）补进候选，避免 el-select 显示成空白标签。 */
+const loraOptions = computed(() => {
+  const installed = props.loraOptions ?? [];
+  const picked = (props.clip?.loras ?? []).map(lora => lora.name);
+  return [...installed, ...picked.filter(name => !installed.includes(name))];
+});
+
+const selectedLoraNames = computed(() => (props.clip?.loras ?? []).map(lora => lora.name));
+
+/** 上限与强度区间只认父级下发的引擎 limits；没读到就不约束（不退回写死的 32 / [-4,4]）。 */
+const loraLimit = computed(() => props.loraLimit);
+const loraLimitReached = computed(() => typeof props.loraLimit === "number" && selectedLoraNames.value.length >= props.loraLimit);
+const loraOverflow = computed(() => typeof props.loraLimit === "number" && selectedLoraNames.value.length > props.loraLimit);
+const loraStrengthMin = computed(() => props.loraStrengthLimit?.min ?? undefined);
+const loraStrengthMax = computed(() => props.loraStrengthLimit?.max ?? undefined);
+
+/** 逐条强度缺省 1（引擎缺省值）：写成显式数字，保证「选了 LoRA 就一定带强度」的请求形状。
+ *  ACT: 这里不按上限裁剪——超限是用户看得见的错（行内提示 + 派工前 validateClip 整批拒收），
+ *  静默砍掉他刚勾的 LoRA 比拒绝更坏。上限约束放在候选置灰（loraLimitReached）。 */
+function loraPatch(loras: { name: string; strength?: number }[]): Partial<MtrackClip> {
+  return { loras: loras.length ? loras.map(lora => ({ name: lora.name, strength: lora.strength ?? 1 })) : undefined };
+}
+
+/** 多选变化：按候选顺序保留已选名，强度沿用原值，新选中的缺省 1；全清则发 undefined 删键（与 seed/takes 同口径）。 */
+function onLorasChange(value: unknown) {
+  const picked = Array.isArray(value) ? value.map(item => String(item)) : [];
+  const current = props.clip?.loras ?? [];
+  emit("patch", loraPatch(picked.map(name => ({ name, strength: current.find(lora => lora.name === name)?.strength }))));
+}
+
+function onLoraStrengthChange(name: string, value: number | null | undefined) {
+  const current = props.clip?.loras ?? [];
+  const strength = typeof value === "number" && Number.isFinite(value) ? value : 1;
+  emit("patch", loraPatch(current.map(lora => (lora.name === name ? { name, strength } : lora))));
+}
+
+function removeLora(name: string) {
+  emit("patch", loraPatch((props.clip?.loras ?? []).filter(lora => lora.name !== name)));
+}
 
 /** 先出预览只支持单个 30 秒以内、不承接上一镜的镜头（引擎限制），其余情况置灰。 */
 const previewDisabled = computed(() => isContext.value || (props.clip?.seconds ?? 0) >= 30);
@@ -203,6 +260,13 @@ function onSectionInput(key: keyof ClipPrompt, value: string) {
 .sectionLabel { color: var(--el-text-color-secondary); font-size: 12px; font-weight: 600; font-family: "Cascadia Mono", Consolas, monospace; letter-spacing: 0.02em; }
 .continuityField { display: flex; align-items: center; gap: 8px; width: 240px; }
 .whiteboxRow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.loraRow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.loraSelect { flex: 0 1 280px; min-width: 200px; }
+.loraState { color: var(--el-text-color-secondary); font-size: 12px; overflow-wrap: anywhere; }
+.loraStateWarn { color: var(--el-color-warning-dark-2); }
+.loraItem { display: flex; align-items: center; gap: 6px; padding: 2px 6px; border: 1px solid var(--el-border-color-lighter); border-radius: 7px; background: var(--el-bg-color); }
+.loraName { max-width: 180px; overflow: hidden; color: var(--el-text-color-regular); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.loraStrength { width: 96px; }
 .whiteboxState { color: var(--el-text-color-secondary); font-size: 12px; overflow-wrap: anywhere; }
 .whiteboxStateWarn { color: var(--el-color-warning-dark-2); }
 .continuityHint { margin: -2px 0 2px; color: var(--el-text-color-secondary); font-size: 12px; line-height: 1.6; }

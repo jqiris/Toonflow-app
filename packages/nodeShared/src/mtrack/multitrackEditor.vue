@@ -98,6 +98,10 @@
               :batchPaused="batchPaused"
               :whiteboxJob="selectedWhiteboxJob"
               :whiteboxBusy="Boolean(selectedClip && whiteboxBusy[selectedClip.clipId])"
+              :loraOptions="loraOptions"
+              :loraLimit="loraLimit"
+              :loraStrengthLimit="loraStrengthLimit"
+              :loraHint="loraHint"
               @patch="onPatch"
               @duplicate="duplicateClip"
               @move="moveClip"
@@ -724,6 +728,83 @@ async function loadVideoModels(force = false) {
     // 画布正在重挂/节点工具暂不可用：保留已有清单，本轮不覆盖。
   }
 }
+
+/** 引擎能力档案：根状态的 limits / quality / loras 由服务端 engineProfile 接口读出，编辑器只消费、不写死。
+ *  supported=false（供应商没有该能力）是正常状态，不是错误，与请求失败分开存。 */
+type EngineProfile = { loras: string[]; loraTriggerWords: Record<string, string>; limits: Record<string, unknown>; quality: Record<string, unknown> };
+type EngineProfileState = { supported: boolean; profile?: EngineProfile } | { error: string };
+
+const engineProfiles = ref<Record<string, EngineProfileState>>({});
+const engineProfileLoading = ref<Record<string, boolean>>({});
+const engineProfileProviderId = computed(() => project.value?.global.model?.providerId ?? "");
+const engineProfileState = computed(() => {
+  const providerId = engineProfileProviderId.value;
+  return providerId ? engineProfiles.value[providerId] : undefined;
+});
+const engineProfile = computed(() => {
+  const state = engineProfileState.value;
+  return state && "profile" in state ? state.profile : undefined;
+});
+
+/** 引擎上报的数值型 limit：只认正数，读不到就不约束（不退回写死的默认值）。 */
+function engineLimitNumber(key: string): number | undefined {
+  const value = engineProfile.value?.limits?.[key];
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+const loraOptions = computed(() => engineProfile.value?.loras ?? []);
+const loraLimit = computed(() => engineLimitNumber("loras"));
+/** 强度区间取引擎 limits.lora_strength（[min, max]）；缺了就不限制，交由供应商侧校验兜底。 */
+const loraStrengthLimit = computed(() => {
+  const value = engineProfile.value?.limits?.lora_strength;
+  if (!Array.isArray(value) || value.length !== 2) return undefined;
+  const [min, max] = value;
+  if (typeof min !== "number" || typeof max !== "number") return undefined;
+  return { min, max };
+});
+
+/** LoRA 行的可读降级说明：读不到就明说原因，面板保持可见但不给选（不阻塞生成，也不弹错误框）。 */
+const loraHint = computed(() => {
+  const providerId = engineProfileProviderId.value;
+  if (!providerId) return "工程还没有视频模型，选好模型后这里列出引擎已装 LoRA";
+  const state = engineProfileState.value;
+  if (!state) return engineProfileLoading.value[providerId] ? "正在读取引擎能力档案…" : "";
+  if ("error" in state) return `引擎能力档案读取失败（${state.error}），LoRA 暂不可选，不影响生成`;
+  if (!state.supported) return "当前视频模型没有 LoRA 能力，暂不可选";
+  if (!state.profile?.loras.length) return "引擎未上报已装 LoRA，暂不可选";
+  return "";
+});
+
+/**
+ * ACT: 按 providerId 内存缓存，逐镜面板共用一份，切镜不重复请求；同一供应商并发只发一次。
+ * 失败只记在本地状态里，不抛给用户、不阻塞派工——LoRA 是可选增强，读不到就当没有。
+ */
+async function loadEngineProfile(providerId: string, force = false) {
+  if (!providerId) return;
+  if (!force && (engineProfiles.value[providerId] || engineProfileLoading.value[providerId])) return;
+  engineProfileLoading.value = { ...engineProfileLoading.value, [providerId]: true };
+  try {
+    const response = await fetch("/api/ai/media/engineProfile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-toonflow-workspace": "1" },
+      body: JSON.stringify({ providerId }),
+    });
+    const payload = await response.json().catch(() => undefined) as { data?: { supported: boolean; profile?: EngineProfile }; message?: string } | undefined;
+    if (!response.ok || !payload?.data) throw new Error(payload?.message || `读取引擎能力档案失败（HTTP ${response.status}）`);
+    engineProfiles.value = { ...engineProfiles.value, [providerId]: payload.data };
+  } catch (error) {
+    engineProfiles.value = { ...engineProfiles.value, [providerId]: { error: error instanceof Error ? error.message : String(error) } };
+  } finally {
+    const next = { ...engineProfileLoading.value };
+    delete next[providerId];
+    engineProfileLoading.value = next;
+  }
+}
+
+// 换视频模型就换成对应引擎的档案；同一供应商命中缓存不再请求。
+watch(engineProfileProviderId, providerId => {
+  if (providerId) void loadEngineProfile(providerId);
+});
 
 async function readProject() {
   loadError.value = "";
@@ -2567,6 +2648,8 @@ onMounted(async () => {
   await probeDefaultProject();
   await readProject();
   await loadReport();
+  // 引擎能力档案要在工程读出来之后拉（providerId 来自 global.model），失败只降级不阻塞。
+  void loadEngineProfile(engineProfileProviderId.value);
   // 文本模型清单与画布无关，进界面即可拉；失败时按钮点击会再拉一次并提示。
   void loadTextModels();
   // 模型清单要等画布桥就绪：挂载瞬间可能还没建好，1.5 秒后补一次；仍取不到就保持空清单（选择器降级）。

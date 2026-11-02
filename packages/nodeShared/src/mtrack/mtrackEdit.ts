@@ -1,7 +1,7 @@
 /** 多轨工程编辑内核：对工程做批量纯函数编辑，禁止 import vue / 磁盘 API。 */
 
 import type { MtrackClip, MtrackProject } from "./mtrackProject";
-import { ratioOptions, resolutionOptions, videoQualityValues, nextClipId, createClip, cloneClips, normalizeContinuityOrder } from "./mtrackProject";
+import { ratioOptions, resolutionOptions, videoQualityValues, nextClipId, createClip, cloneClips, normalizeContinuityOrder, maxClipLoras, loraStrengthRange } from "./mtrackProject";
 
 /**
  * 编辑操作。定位一律用 clipId（after 为锚点片段编号），不用可能漂移的裸索引；
@@ -34,10 +34,10 @@ function indexOfClip(clips: MtrackClip[], clipId: string): number {
 /** prompt 三字段浅合并，其余字段整值覆盖——对齐编辑器 onPatch。 */
 function mergePatch(clip: MtrackClip, patch: Partial<MtrackClip>): MtrackClip {
   const merged = { ...clip, ...patch, prompt: { ...clip.prompt, ...(patch.prompt ?? {}) } };
-  // ACT: seed/takes/partPrompts/whitebox 的 null 是「清空回引擎默认」哨兵（node:editProject 的 patch 原样带进来，
+  // ACT: seed/takes/partPrompts/whitebox/loras 的 null 是「清空回引擎默认」哨兵（node:editProject 的 patch 原样带进来，
   // zod 的 nullish+transform 会把 null 转成省略键、擦不掉原值，故不走 transform）。
   // 归一为删键再进 validateClip——null 留在字段上会被各字段校验误拒。
-  for (const key of ["seed", "takes", "partPrompts", "whitebox"] as const) {
+  for (const key of ["seed", "takes", "partPrompts", "whitebox", "loras"] as const) {
     if (merged[key] === null) delete merged[key];
   }
   return merged;
@@ -102,6 +102,27 @@ export function validateClip(clip: MtrackClip): string[] {
     // 但编辑器直连 patch 不经 mergePatch，若只判 undefined 会把清除动作误报成格式错误。
     if (!/^\d{4}-\d{2}-\d{2}\/[0-9a-f]{32}$/.test(clip.whitebox.library)) {
       issues.push("白模作品号格式不对（应为 日期/32位十六进制），请重新生成白模或清除该参考");
+    }
+  }
+  if (clip.loras != null) {
+    // 用 != null 同时放过 null 与 undefined——编辑器清除走 undefined，agent 走 null 由 mergePatch 删键（同 whitebox）。
+    if (!Array.isArray(clip.loras)) {
+      issues.push("LoRA 选择需为数组（每项 { name, strength? }），或清空改回不挂 LoRA");
+    } else if (clip.loras.length > maxClipLoras) {
+      issues.push(`单镜 LoRA 最多 ${maxClipLoras} 条（引擎限制），当前 ${clip.loras.length} 条`);
+    } else {
+      for (const lora of clip.loras) {
+        const name = typeof lora?.name === "string" ? lora.name.trim() : "";
+        if (!name) {
+          issues.push("LoRA 名称不能为空（需为引擎已装 LoRA 的名称）");
+          break;
+        }
+        const strength = lora.strength;
+        if (strength !== undefined && (!Number.isFinite(strength) || strength < loraStrengthRange.min || strength > loraStrengthRange.max)) {
+          issues.push(`LoRA ${name} 的强度需在 ${loraStrengthRange.min}–${loraStrengthRange.max} 之间（引擎限制），当前 ${strength}`);
+          break;
+        }
+      }
     }
   }
   if (clip.continuity === "context" && clip.quality !== "light" && clip.quality !== "medium") {

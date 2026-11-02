@@ -156,6 +156,7 @@ async function prepareRequest<T>(directory: string | undefined, mediaType: "imag
   if (mediaType === "image") return {
     type: "image" as const, model: request.modelId, prompt: request.prompt, images, ratio: request.ratio, size: request.size,
     ...(label ? { label } : {}),
+    ...(request.loras?.length ? { loras: request.loras } : {}),
   };
   return {
     type: "video" as const, model: request.modelId, prompt: request.prompt, images,
@@ -173,6 +174,7 @@ async function prepareRequest<T>(directory: string | undefined, mediaType: "imag
     ...(request.refineFrom !== undefined ? { refineFrom: request.refineFrom } : {}),
     ...(request.partPrompts !== undefined ? { partPrompts: request.partPrompts } : {}),
     ...(request.whitebox !== undefined ? { whitebox: request.whitebox } : {}),
+    ...(request.loras?.length ? { loras: request.loras } : {}),
   };
 }
 
@@ -216,6 +218,19 @@ export async function releaseProviderGpu(providerId: string): Promise<{ supporte
   if (typeof provider.releaseGpu !== "function") return { supported: false, released: false };
   const result = await provider.releaseGpu.call(provider);
   return { supported: true, ...result };
+}
+
+/**
+ * 读取供应商的引擎能力档案（已装 LoRA 列表、真实上限与质量档位，如 FreeVideo）。
+ * 返回 { supported, profile? }：供应商没有该能力时 supported=false，属正常状态，调用方不重试；
+ * 上限以 profile.limits 为准，服务端与前端都不硬编码。
+ */
+export async function engineProfile(providerId: string): Promise<{ supported: boolean; profile?: EngineProfile }> {
+  const info = await getMediaProvider(providerId);
+  const configurations = record(conf.get("settings", {}).mediaProviderConfigs);
+  const provider = await loadMediaProviderSource(info.source, record(configurations[info.id]));
+  if (typeof provider.engineProfile !== "function") return { supported: false };
+  return { supported: true, profile: await provider.engineProfile.call(provider) };
 }
 
 /** 预检结果：分块计划与实际几何（与 provider planVideo 返回同型）。 */
@@ -279,6 +294,66 @@ async function referencesToInputs(directory: string, items: MediaReference[], me
   const result = [];
   for (const item of items) result.push(await readReference(directory, item, mediaType, signal));
   return result;
+}
+
+/**
+ * 引擎配乐（供应商 music 能力）：对已保存的编辑工程作曲并铺到音轨 a2 第 0 帧，
+ * 把供应商返回的音频字节落盘到输出目录，回传保存路径与产物元信息。
+ * 供应商没有 music 能力时明确报错。
+ */
+export async function musicMedia(cwd: string, input: {
+  providerId: string;
+  modelId: string;
+  editorProjectId: string;
+  revision: number;
+  caption: string;
+  seed?: number;
+  quiet?: { start: number; frames: number }[];
+  /** 成片视频（工作区相对路径）：导入编辑工程 v1 轨第 0 帧，配乐长度=成片长度（引擎要求时间线 10–600s）。 */
+  sourceVideo?: MediaReference;
+  outputDirectory?: string;
+}, signal?: AbortSignal): Promise<{
+  path: string;
+  mimeType: string;
+  mediaType: "audio";
+  jobId: string;
+  frames: number;
+  seed: number;
+  source: string;
+}> {
+  signal?.throwIfAborted();
+  const directory = await realpath(cwd);
+  const info = await getMediaProvider(input.providerId);
+  // ACT: 引擎配乐是供应商级能力（ProviderDefinition.music），不是通用音频生成（generateAudio），
+  // 不对应某个 type="audio" 模型；music() 内部也不使用 modelId。因此只校验 modelId 存在于
+  // 该供应商的模型列表（任意类型），配乐能力由下方 provider.music 存在性检查兜底。
+  if (!info.models.some(model => model.id === input.modelId)) invalid("所选媒体模型不存在或类型不匹配，请重新选择");
+  const configurations = record(conf.get("settings", {}).mediaProviderConfigs);
+  // 配乐能力绑定在供应商上，与模型无关，modelId 仅用于确认所选供应商已配置。
+  const provider = await loadMediaProviderSource(info.source, record(configurations[info.id]), signal, undefined, directory);
+  if (typeof provider.music !== "function") throw Object.assign(new Error("当前视频供应商不支持引擎配乐"), { status: 400 });
+  // 成片时长对齐：把工作区成片转 base64 交给 provider（provider 在 VM 内 /imports + insert v1）。
+  const sourceVideo = input.sourceVideo ? await readReference(directory, input.sourceVideo, "video", signal) : undefined;
+  const result = await provider.music.call(provider, {
+    editorProjectId: input.editorProjectId,
+    revision: input.revision,
+    caption: input.caption,
+    ...(input.seed !== undefined ? { seed: input.seed } : {}),
+    ...(input.quiet?.length ? { quiet: input.quiet } : {}),
+    ...(sourceVideo ? { sourceVideo } : {}),
+  });
+  if (!result || result.mediaType !== "audio" || result.type !== "binary") invalid("供应商未返回配乐结果");
+  const outputDirectory = input.outputDirectory ?? "assets/generated";
+  const output = await resolveWorkspacePath(directory, outputDirectory, true);
+  const release = lockWorkspaceFiles([output.path]);
+  try {
+    await mkdir(output.path, { recursive: true });
+    const file = join(outputDirectory, `audio${crypto.randomUUID()}.m4a`);
+    const { path } = await resolveWorkspacePath(directory, file);
+    signal?.throwIfAborted();
+    await writeWorkspaceFile(path, result.data, true);
+    return { path: relative(directory, path).replace(/\\/g, "/"), mimeType: result.mimeType, mediaType: "audio", jobId: result.jobId, frames: result.frames, seed: result.seed, source: result.source };
+  } finally { release(); }
 }
 
 export async function generateMedia(

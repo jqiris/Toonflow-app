@@ -74,6 +74,8 @@ export async function submitClipTask(directory: string, clip: ClipGenerationRequ
       ...(clip.releaseGpuAfter ? { releaseGpuAfter: true } : {}),
       ...(clip.takes !== undefined ? { takes: clip.takes } : {}),
       ...(clip.partPrompts?.length ? { partPrompts: clip.partPrompts } : {}),
+      // 逐镜 LoRA：有值才带，空/未设置一律不下发（本镜不额外挂 LoRA）。
+      ...(clip.loras?.length ? { loras: clip.loras } : {}),
       ...(clip.refineFrom ? { refineFrom: clip.refineFrom } : {}),
       ...(clip.whitebox ? { whitebox: clip.whitebox } : {}),
       mode: clip.mode,

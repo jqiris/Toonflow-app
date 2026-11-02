@@ -1,3 +1,5 @@
+// MediaLora 等媒体契约类型由 @toonflow/providers 的环境声明提供，这里只引入声明、不重复定义结构。
+import type {} from "@toonflow/providers";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { Rule } from "@form-create/element-ui";
 import type { FfmpegFactory } from "@toonflow/ffmpeg/types";
@@ -130,6 +132,11 @@ export interface MediaGenerationRequest {
   seed?: number;
   /** 本任务完成后立即释放显存/内存中的视频模型；只对批次最后一个任务置 true。 */
   releaseGpuAfter?: boolean;
+  /**
+   * 本镜头选用的 LoRA（引擎按 name 精确匹配已装 LoRA，strength 缺省 1）。
+   * 条数与 strength 区间由各供应商按引擎能力校验（FreeVideo：视频 32 条 / [-4,4]，图片 8 条 / [-2,2]）；省略表示不启用。
+   */
+  loras?: MediaLora[];
   /** 一次提交连出 N 条候选（引擎 takes 1–8）；结果按条返回，各带自己的 jobId。 */
   takes?: number;
   /** 预览转正片：传预览任务 jobId，引擎从预览直接精修；设置后其余生成参数忽略（引擎互斥约束）。 */
@@ -186,6 +193,30 @@ export interface MediaContext {
     format?: "text" | "json";
     label?: string;
   }, signal?: AbortSignal): Promise<{ answers: unknown[] }>;
+  /**
+   * 引擎配乐（可选能力，本机引擎供应商实现）：对已保存的编辑工程作曲并铺到音轨 a2 第 0 帧，
+   * 产物长度=时间线长度。caption 英文 ≤512（流派/乐器/速度/情绪/随影片变化，无演唱）。
+   * 返回下载好的音频字节（aac/48k/2ch）与产物元信息；供应商不支持时抛错。
+   */
+  music?(input: {
+    providerId: string;
+    modelId: string;
+    editorProjectId: string;
+    revision: number;
+    caption: string;
+    seed?: number;
+    quiet?: { start: number; frames: number }[];
+    /** 成片视频（可选，工作区相对路径）：服务端读取后导入编辑工程 v1 轨第 0 帧，配乐长度=成片长度（引擎要求时间线 10–600s）。 */
+    sourceVideo?: MediaReference;
+  }, signal?: AbortSignal): Promise<{
+    path: string;
+    mimeType: string;
+    mediaType: "audio";
+    jobId: string;
+    frames: number;
+    seed: number;
+    source: string;
+  }>;
 }
 
 export interface QuestionField {

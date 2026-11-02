@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { ToolDefinition, ToolPlugin } from "@toonflow/tools-scaffold/runtime";
-import { askVlmSchema, audioGenerationSchema, imageGenerationSchema, listMediaModelsSchema, planVideoSchema, videoGenerationSchema } from "./runtime";
+import { askVlmSchema, audioGenerationSchema, imageGenerationSchema, listMediaModelsSchema, musicSchema, planVideoSchema, videoGenerationSchema } from "./runtime";
 
 const configSchema = z.strictObject({
   allowImage: z.boolean().default(true),
@@ -58,6 +58,23 @@ const plugin: ToolPlugin = {
         signal?.throwIfAborted();
         const result = await media.askVlm!(parsed, signal);
         return { content: [{ type: "text", text: JSON.stringify(result.answers) }], details: result };
+      },
+    });
+    // 引擎配乐是宿主可选能力（本机引擎供应商实现）；没有就不注册，agent 面保持干净。
+    if (media.music) extraTools.push({
+      name: "music",
+      label: "引擎配乐",
+      description: "对已保存的编辑工程作曲并铺到音轨 a2 第 0 帧（产物长度=时间线长度）。caption 为英文 ≤512 的作曲描述（流派/乐器/速度/情绪/随影片变化，无演唱）；revision 必须是最新（先查工程，否则 409）；seed 可复现同曲；quiet 为人声帧区间（这些帧配乐更低沉，让位给对白），最多 500 段。首次使用引擎需下载约 20GB 音乐模型，任务可能耗时数十分钟。返回已保存的音频文件路径与产物元信息（jobId/frames/seed/source）。",
+      promptSnippet: "整片配乐用 music 一次生成（长度=时间线），比逐段生成再拼接省一半任务。",
+      parameters: z.toJSONSchema(musicSchema, { io: "input", target: "draft-07" }),
+      executionMode: "sequential",
+      async execute(_id, params, signal) {
+        const parsed = musicSchema.parse(params);
+        signal?.throwIfAborted();
+        const result = await media.music!(parsed, signal);
+        const url = result.path.replaceAll("\\", "/").split("/").map(encodeURIComponent).join("/");
+        const text = `[播放生成配乐](<${url}>)\n工作区文件：${result.path}\n任务号（jobId）：${result.jobId}\n帧数：${result.frames}\n种子：${result.seed}\n来源：${result.source}`;
+        return { content: [{ type: "text", text }], details: result };
       },
     });
     return [listTool, ...extraTools, ...generationTools.map<ToolDefinition>(operation => ({

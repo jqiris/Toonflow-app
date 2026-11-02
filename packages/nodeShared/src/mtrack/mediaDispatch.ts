@@ -12,7 +12,7 @@
  */
 
 import { resolveReferenceSources, type CanvasCall } from "./directDispatch";
-import { resolveClipMode, videoQualityValues, type AssetIndexCard, type MtrackClip } from "./mtrackProject";
+import { resolveClipMode, videoQualityValues, type AssetIndexCard, type MediaLora, type MtrackClip } from "./mtrackProject";
 
 /** 质量档位对应的首轮采样步数（引擎口径）：light/medium 8 步、high 16 步、max 20 步。 */
 const firstPassSteps: Record<string, number> = { light: 8, medium: 8, high: 16, max: 20 };
@@ -58,6 +58,8 @@ export type ClipGenerationRequest = {
   takes?: number;
   /** 长镜分块的逐块描述（条数=引擎 chain_plan.blocks 数，1–5）；省略由引擎自动切分提示词。 */
   partPrompts?: string[];
+  /** 逐镜 LoRA（最多 32 条，strength ∈ [-4,4]）；省略即不下发，本镜不额外挂 LoRA。 */
+  loras?: MediaLora[];
   /**
    * 白模参考（3D blocking）：library 为引擎作品号，earlySteps 是它只引导采样的前 K 步。
    * 白模只定构图/机位/走位；角色与道具长相仍由资产卡和提示词负责，两者互补可同传。
@@ -346,6 +348,7 @@ export async function composeClipRequest(options: {
     ...(clip.seed !== undefined ? { seed: clip.seed } : {}),
     ...(clip.takes !== undefined ? { takes: clip.takes } : {}),
     ...(clip.partPrompts?.length ? { partPrompts: clip.partPrompts } : {}),
+    ...(clip.loras?.length ? { loras: clip.loras } : {}),
     ...(clip.whitebox ? { whitebox: { library: clip.whitebox.library, earlySteps: whiteboxEarlySteps(clip) } } : {}),
     /*
      * 生成模式按 LSC 的 task_mode 判定（`ref` / `image` / `text`），不再只看参考数量：

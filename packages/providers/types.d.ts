@@ -1,5 +1,14 @@
 /// <reference types="bun" />
 
+interface MediaLora { name: string; strength?: number }
+
+interface EngineProfile {
+  loras: string[];
+  loraTriggerWords: Record<string, string>;
+  limits: Record<string, unknown>;
+  quality: Record<string, unknown>;
+}
+
 type ModelType = "text" | "image" | "video" | "audio";
 
 type ImageMode = "text" | "singleImage" | "multiReference";
@@ -141,6 +150,8 @@ interface ImageRequest extends MediaRequest {
   quality?: string;
   /** 输出编码格式，如 png、jpeg、webp。 */
   outputFormat?: string;
+  /** LoRA：引擎上限 8 条，strength ∈ [-2, 2]，缺省 1。 */
+  loras?: MediaLora[];
 }
 
 interface VideoRequest extends MediaRequest {
@@ -201,6 +212,8 @@ interface VideoRequest extends MediaRequest {
    * 组装进 media.references **末位**、不占 `<Video N>` 编号；占续接 ≤3 的一个槽位。
    */
   whitebox?: { library: string; earlySteps: number };
+  /** LoRA：引擎上限 32 条，strength ∈ [-4, 4]，缺省 1。 */
+  loras?: MediaLora[];
 }
 
 /** 基础音频生成参数；text、prompt 至少提供一项，非空校验与模型能力检查由供应商负责。 */
@@ -327,6 +340,42 @@ interface ProviderDefinition<TRules extends readonly ProviderFormRule[] = readon
     create(this: ProviderContext<ProviderConfig<TRules>>, code: string, summary: string): Promise<{ id: string; status: string }>;
     get(this: ProviderContext<ProviderConfig<TRules>>, id: string): Promise<{ id: string; status: string; work?: string; seconds?: number; earlySteps?: number; earlyRatio?: number; error?: string }>;
   };
+  /** 读取引擎能力档案（已装 LoRA / triggerWords / limits / quality）。 */
+  engineProfile?: (this: ProviderContext<ProviderConfig<TRules>>) => Promise<EngineProfile>;
+  /**
+   * 引擎配乐（kind=music，走 /projects/{id}/music 作曲并铺到音轨 a2 第 0 帧，产物长度=时间线长度）：
+   * 取最新 revision 提交；a2 已有音乐时先 remove 旧轨（audio_full 引擎会拒）。
+   * 成功返回下载好的音频（aac/48k/2ch）与产物元信息（jobId、frames、seed、source）。
+   */
+  music?: (this: ProviderContext<ProviderConfig<TRules>>, request: MusicRequest) => Promise<{
+    mediaType: "audio";
+    type: "binary";
+    data: Uint8Array;
+    mimeType: string;
+    jobId: string;
+    frames: number;
+    seed: number;
+    source: string;
+  }>;
+}
+
+/** 引擎配乐请求：caption 英文 ≤512（流派/乐器/速度/情绪/随影片变化，无演唱），其余可选。 */
+interface MusicRequest {
+  /** 引擎编辑工程 id（`e-` + 32 位十六进制，GET /projects/{id} 可查）。 */
+  editorProjectId: string;
+  /** 工程 revision（必须先读最新，否则 409 project_changed）。 */
+  revision: number;
+  /** 作曲描述：英文、≤512，必填。 */
+  caption: string;
+  /** 随机种子（0..2^32-1）；同 seed + 同 caption = 同曲。 */
+  seed?: number;
+  /** 人声帧区间（这些帧配乐更低沉，让位给对白），最多 500 段。 */
+  quiet?: { start: number; frames: number }[];
+  /**
+   * 成片视频（可选）：把成片按 /imports 导入并插入 v1 轨第 0 帧，让配乐工程时间线长度等于成片长度。
+   * 仅在配乐工程时间线还没有与成片等长时使用；引擎要求时间线 10–600s（240–14400 帧 @24fps）。
+   */
+  sourceVideo?: MediaInput;
 }
 
 /** 仅用于展示，不参与余额计算；没有额外提示时 tips 返回空字符串。 */

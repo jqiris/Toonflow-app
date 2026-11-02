@@ -70,7 +70,7 @@ import referenceItem from "@toonflow/node-shared/referenceItem";
 import { showNodeError } from "@toonflow/node-shared/showNodeError";
 import { resolveCanvasBridge, resolveReferenceSources, type CanvasCall } from "@toonflow/node-shared/mtrack/directDispatch";
 import videoPlayer from "@toonflow/node-video/videoPlayer";
-import { assetIndexPath, normalizeResultsUi } from "@toonflow/node-shared/mtrack/mtrackProject";
+import { assetIndexPath, loraStrengthRange, maxClipLoras, normalizeResultsUi } from "@toonflow/node-shared/mtrack/mtrackProject";
 import type { AssetIndex, AssetIndexCard, EditorFiles, ResultsUiGeometry } from "@toonflow/node-shared/mtrack/mtrackProject";
 import type { EditOp } from "@toonflow/node-shared/mtrack/mtrackEdit";
 
@@ -389,6 +389,16 @@ const clipPatchSchema = z.strictObject({
     summary: z.string().max(2000).optional(),
     at: z.string().max(64),
   }), z.null()]).optional(),
+  // LoRA 同口径：null=清除本镜的 LoRA 选择（回引擎默认），省略=不改。
+  // ACT: 必须与 mtrackEdit.ts 的 mergePatch null 哨兵键（"loras"）对齐——这里漏了键，zod 会先把 loras:null 剥掉，
+  // 清除就静默失效。条数/强度上限复用 mtrackProject 的导出，不在这里写死引擎限制。
+  loras: z.union([
+    z.array(z.strictObject({
+      name: z.string().trim().min(1).max(512),
+      strength: z.number().min(loraStrengthRange.min).max(loraStrengthRange.max).optional(),
+    })).min(1).max(maxClipLoras),
+    z.null(),
+  ]).optional(),
   // ACT: prompt 六字段全部可省——与 mergePatch 的字段级浅合并（mtrackEdit.ts:35-36）对齐，
   // agent 补写单段时只带一段即可，其余由原 clip 保留，不必「读-改-写」整组；
   // 显式传空串视为「清空这一段」（区别于省略键=不改），与 UI「留空则该段不下发」同口径。
@@ -615,7 +625,7 @@ async function readActualOrder(call: CanvasCall, nodeId: string, signal?: AbortS
 
 nodeTools.register({
   name: "editProject",
-  description: "批量编辑工程（编辑器等价能力，内核 mtrackEdit.applyClipOperations）：operations 1–100 条，六种 op——add{clipId?,after?,patch?} / patch{clipId,patch} / duplicate{clipId} / move{clipId,to|after} / remove{clipId} / setGlobal{ratio?,style?,systemPrompt?,model?}。整批原子：任一 op 校验失败整批拒收，问题在 issues 返回、不抛错。真源字段可写，但生成前仍必须跑 planOperator validate 且 error 清零，本工具不代跑完整契约校验。save=true（默认）成功后立即落盘，不等防抖。patch.status 只接受 pending/generating/generated/failed；accepted 由用户在界面验收产生，agent 不能代写。patch 也可写本镜的 quality（light/medium/high/max，缺省 light）、secondPass（二次采样，缺省 true）与 preview（先出预览，缺省 false）：承接上一镜（continuity=context）的镜头只能用 light/medium 且必须 secondPass=true、不能开 preview，preview 只支持单个 30 秒以内镜头；越界由 validateClip 整批拒收，issues 会带原因。patch.seed 为随机种子（0 到 9007199254740991 的整数）：同种子+同提示词产物逐字节一致（实测），重 roll 保住满意镜头就带上 readClips 读回的 seed；传 null 清空回到引擎自定，省略不改。patch.takes 为候选条数（1–8，缺省 1）：一次派工连出 N 条候选版本供逐条预览挑选，带 seed 时候选种子逐条 +1 整批可复现；null 清空回单条。patch.partPrompts 为长镜逐块描述（1–5 条非空文本，条数必须等于 mediaGeneration planVideo 预检返回的 chainPlan.blocks 数）：每块演自己那段剧情而不是重播整段，只对 30 秒以上会分块的镜头有意义；null 清空回引擎自动切分。patch.whitebox 为白模参考（3D blocking）：{library:引擎作品号, seconds, earlyRatio, summary?, at}，由编辑器白模生成流程写入——它只定构图/机位/走位，不保证角色与道具长相（长相仍由资产卡与提示词负责，两者可同用）；传 null 清除该参考",
+  description: "批量编辑工程（编辑器等价能力，内核 mtrackEdit.applyClipOperations）：operations 1–100 条，六种 op——add{clipId?,after?,patch?} / patch{clipId,patch} / duplicate{clipId} / move{clipId,to|after} / remove{clipId} / setGlobal{ratio?,style?,systemPrompt?,model?}。整批原子：任一 op 校验失败整批拒收，问题在 issues 返回、不抛错。真源字段可写，但生成前仍必须跑 planOperator validate 且 error 清零，本工具不代跑完整契约校验。save=true（默认）成功后立即落盘，不等防抖。patch.status 只接受 pending/generating/generated/failed；accepted 由用户在界面验收产生，agent 不能代写。patch 也可写本镜的 quality（light/medium/high/max，缺省 light）、secondPass（二次采样，缺省 true）与 preview（先出预览，缺省 false）：承接上一镜（continuity=context）的镜头只能用 light/medium 且必须 secondPass=true、不能开 preview，preview 只支持单个 30 秒以内镜头；越界由 validateClip 整批拒收，issues 会带原因。patch.seed 为随机种子（0 到 9007199254740991 的整数）：同种子+同提示词产物逐字节一致（实测），重 roll 保住满意镜头就带上 readClips 读回的 seed；传 null 清空回到引擎自定，省略不改。patch.takes 为候选条数（1–8，缺省 1）：一次派工连出 N 条候选版本供逐条预览挑选，带 seed 时候选种子逐条 +1 整批可复现；null 清空回单条。patch.partPrompts 为长镜逐块描述（1–5 条非空文本，条数必须等于 mediaGeneration planVideo 预检返回的 chainPlan.blocks 数）：每块演自己那段剧情而不是重播整段，只对 30 秒以上会分块的镜头有意义；null 清空回引擎自动切分。patch.whitebox 为白模参考（3D blocking）：{library:引擎作品号, seconds, earlyRatio, summary?, at}，由编辑器白模生成流程写入——它只定构图/机位/走位，不保证角色与道具长相（长相仍由资产卡与提示词负责，两者可同用）；传 null 清除该参考。patch.loras 为本镜 LoRA（逐镜可选的风格/角色增强）：[{name, strength?}]，name 必须是引擎已装 LoRA 的名称（引擎根状态 loras 上报，可经 /api/ai/media/engineProfile 查），strength 缺省 1、区间取引擎 limits.lora_strength（freevideo 视频为 -4 到 4）；条数上限取引擎 limits.loras（freevideo 视频为 32 条）。传 null 清除本镜 LoRA，省略不改。",
   parameters: z.strictObject({
     operations: z.array(editOpSchema).min(1).max(100),
     save: z.boolean().default(true),
@@ -666,7 +676,7 @@ nodeTools.register({
 
 nodeTools.register({
   name: "dispatchGenerate",
-  description: "把选段交给编辑器经画布 nodeTools 逐镜生成（UI「生成选中段」等价物，不经过对话模型）：clipIds（1–200 个分镜号）或 from+to 二选一（from 必填，to 缺省到最后一个分镜）；includeFinished=false 默认只派 pending/failed 的镜头；逐镜按镜头当前设置下发，含 quality/secondPass/preview——要改先用 node:editProject 设好再派。立即返回 { batchId, skipped } 不等待生成。与逐镜 SOP 二选一：本会话正在按 SOP 逐镜生成时绝不要再调它，否则同一批镜头双重执行、双份算力。进度看 node:getStatus.batchClipIds / planOperator mtrackRead，停手用 node:cancelBatch",
+  description: "把选段交给编辑器经画布 nodeTools 逐镜生成（UI「生成选中段」等价物，不经过对话模型）：clipIds（1–200 个分镜号）或 from+to 二选一（from 必填，to 缺省到最后一个分镜）；includeFinished=false 默认只派 pending/failed 的镜头；逐镜按镜头当前设置下发，含 quality/secondPass/preview/loras——要改先用 node:editProject 设好再派。立即返回 { batchId, skipped } 不等待生成。与逐镜 SOP 二选一：本会话正在按 SOP 逐镜生成时绝不要再调它，否则同一批镜头双重执行、双份算力。进度看 node:getStatus.batchClipIds / planOperator mtrackRead，停手用 node:cancelBatch",
   parameters: z.strictObject({
     clipIds: z.array(clipIdSchema).min(1).max(200).optional(),
     from: clipIdSchema.optional(),

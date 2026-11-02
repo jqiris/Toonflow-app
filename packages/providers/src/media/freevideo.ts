@@ -18,7 +18,7 @@ const rules = [
   },
 ] as const;
 
-const version = "1.3.1";
+const version = "1.4.0";
 const agentSuffix = "/freevideo/agent/v1";
 /** 图像任务参考图上限：引擎 kind=image 的 images 数组 maxItems=4（超限返回 too_many_images）。视频单块仍是 9，见 models 段。 */
 const maxImageReferences = 4;
@@ -26,6 +26,14 @@ const maxImageReferences = 4;
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("FreeVideo 响应格式错误");
   return value as Record<string, unknown>;
+}
+
+/** GET /projects/{id} 返回 {project:{...}, sources}，工程本体在 project 字段（顶层 revision/tracks 为 undefined）。
+ * 这里统一取工程本体，原始响应仍可访问 sources 等并列字段。 */
+function projectOf(body: Record<string, unknown>): Record<string, unknown> {
+  const nested = body.project;
+  if (nested && typeof nested === "object" && !Array.isArray(nested)) return nested as Record<string, unknown>;
+  return body;
 }
 
 /** 用户可只填 origin，这里统一补全为 Agent API 基址。 */
@@ -181,6 +189,36 @@ async function download(context: ProviderContext, token: string, origin: string,
 }
 
 /**
+ * 等待 /imports 上传的素材转码完成（state==="ready"）。
+ * ACT: 刚 POST /imports 时素材还在 preparing/转码中，`comfy_editor.sources()` 对未 ready 的
+ * import 源抛 FileNotFoundError → 引擎返回 source_missing。因此必须在 insert 前等 ready；
+ * 直接 insert 得到的 409 source_missing 就是没等就插。
+ */
+async function waitImportReady(context: ProviderContext, token: string, agent: string, importId: string, signal: AbortSignal, timeoutMs = 60_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const response = await context.tool.fetch(`${agent}/imports`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.any([signal, AbortSignal.timeout(15_000)]),
+    });
+    if (!response.ok) throw await engineFailure(response, "读取导入素材失败");
+    const answer = object(await response.json());
+    const items = Array.isArray(answer.items) ? answer.items : [];
+    const found = items.find(item => String(object(item).id) === importId);
+    if (found) {
+      const state = String(object(found).state);
+      if (state === "ready") return;
+      if (state === "failed") {
+        const reason = object(found).reason;
+        throw new Error(`成片导入失败：${typeof reason === "string" && reason ? reason : "素材转码失败，请换一个文件重试"}`);
+      }
+    }
+    if (Date.now() > deadline) throw new Error(`成片导入超时（${Math.round(timeoutMs / 1000)} 秒未转码完成）：请重试`);
+    await wait(signal, 1000);
+  }
+}
+
+/**
  * 引擎错误码 → 中文可操作文案。
  * ACT: 引擎的 error.message 是英文（"This needs the FreeVideo page open in a browser."），
  * 真正能指导用户的是 error.next（也是英文）与 error.code。中文产品里不能把英文原样抛给用户，
@@ -247,6 +285,9 @@ const engineMessages: Record<string, string> = {
   invalid_library_id: "作品号不合法：day / run 必须指向一个已保存的影片",
   invalid_capabilities_query: "能力查询参数不合法：检查 size 等查询字段",
   unsupported_comfyui: "这个 ComfyUI 版本没有受支持的生成端点：升级 ComfyUI 或 FreeVideo",
+  music_failed: "配乐生成失败：换个描述词，或检查音轨 a2 是否被占用",
+  audio_full: "音轨 a2 已有配乐：先移除旧配乐（引擎要求 a2 必须为空），再重新生成",
+  project_changed: "工程在别处被改动了：重新读取工程拿最新 revision 后重试",
 };
 
 /**
@@ -287,6 +328,40 @@ function engineJobMessage(job: Record<string, unknown>, fallback: string): strin
   if (known) return known;
   const detail = typeof raw.message === "string" ? raw.message.trim() : "";
   return detail || fallback;
+}
+
+/**
+ * 提交前比对「LoRA 名字是否已装」。
+ * ACT: 引擎只在 POST /jobs 才校验名字（实测 /plan 对清单外名字返回 200，提交才 422 且是英文），
+ * 派工链路里写错一个名字要等真正占上 GPU 才被拒——所以这里本地先查一次，报中文可操作错误。
+ * 根状态带 60 秒缓存（批次派工逐镜共用，不每镜重复拉）；拉失败（引擎离线/超时）就跳过比对
+ * 交给引擎兜底——不能因为查不到清单把正常派工堵死。
+ */
+let installedLorasEntry: { at: number; names: string[] } | undefined;
+const installedLorasTtl = 60_000;
+
+async function assertInstalledLoras(context: ProviderContext, token: string, agent: string, names: string[]) {
+  if (!names.length) return;
+  let installed: string[];
+  if (installedLorasEntry && Date.now() - installedLorasEntry.at < installedLorasTtl) {
+    installed = installedLorasEntry.names;
+  } else {
+    try {
+      const response = await (context.queryFetch ?? context.tool.fetch)(agent, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!response.ok) return;
+      const answer = object(await response.json());
+      if (!Array.isArray(answer.loras)) return;
+      installed = answer.loras.map(String);
+      installedLorasEntry = { at: Date.now(), names: installed };
+    } catch {
+      return;
+    }
+  }
+  const missing = [...new Set(names)].filter(name => !installed.includes(name));
+  if (missing.length) throw new Error(`LoRA「${missing.join("、")}」不在引擎已装清单内（清单可查 /api/ai/media/engineProfile 的 profile.loras），请改用已安装的名称或删除该项后重试`);
 }
 
 /**
@@ -443,6 +518,28 @@ export default {
     const result = object(await response.json());
     return { released: result.released === true, ...(typeof result.reason === "string" ? { reason: result.reason } : {}) };
   },
+  // 读取引擎能力档案：根状态端点是 ${agent} 本身（/freevideo/agent/v1）；带尾斜杠或 /status 都返回 404。
+  // loras / lora_trigger_words / limits / quality 四个字段原样透传，不做字段映射（消费方按需读取）。
+  async engineProfile(): Promise<EngineProfile> {
+    const token = this.config.apiKey?.trim();
+    if (!token) throw new Error("请填写 Token");
+    const agent = agentBase(this.config.baseUrl);
+    const fetchImpl = this.queryFetch ?? this.tool.fetch;
+    const response = await fetchImpl(agent, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!response.ok) throw await engineFailure(response, "读取引擎能力档案失败");
+    const answer = object(await response.json());
+    // lora_trigger_words 的值按引擎契约是字符串；非字符串值以字符串化兜底，不做字段级映射。
+    const triggerWords = Object.fromEntries(Object.entries(object(answer.lora_trigger_words ?? {})).map(([name, words]) => [name, typeof words === "string" ? words : String(words)]));
+    return {
+      loras: Array.isArray(answer.loras) ? answer.loras.map(String) : [],
+      loraTriggerWords: triggerWords,
+      limits: object(answer.limits ?? {}),
+      quality: object(answer.quality ?? {}),
+    };
+  },
   async generateImage(request: ImageRequest): Promise<MediaAsset[]> {
     const token = this.config.apiKey?.trim();
     if (!token) throw new Error("请填写 Token");
@@ -450,6 +547,16 @@ export default {
     const origin = originOf(agent);
     // ACT: 单次图像生成最多等待 10 分钟。
     const signal = AbortSignal.any([AbortSignal.timeout(10 * 60_000), ...(this.signal ? [this.signal] : [])]);
+
+    // LoRA 参数校验与引擎映射
+    const loras = request.loras ?? [];
+    if (loras.length > 8) throw new Error(`本镜头 LoRA 最多 8 个（引擎限制），当前 ${loras.length} 个`);
+    if (loras.length) await assertInstalledLoras(this, token, agent, loras.map(lora => lora.name));
+    for (const lora of loras) {
+      if (!lora.name || typeof lora.name !== "string" || lora.name.length < 1 || lora.name.length > 512) throw new Error(`LoRA 名称不合法：须为 1–512 个字符`);
+      const strength = lora.strength ?? 1;
+      if (typeof strength !== "number" || !isFinite(strength) || strength < -2 || strength > 2) throw new Error(`LoRA「${lora.name}」强度越界：仅支持 -2 到 2（引擎限制），当前 ${strength}`);
+    }
 
     // ACT: 拦截放在上传前，避免报错后已上传文件成为引擎侧孤儿；上限改动只动 maxImageReferences 一处。
     const submittedImages = request.images ?? [];
@@ -466,6 +573,7 @@ export default {
       width,
       height,
       ...(images.length ? { images } : {}),
+      ...(loras.length ? { loras: loras.map(l => ({ name: l.name, strength: l.strength ?? 1, enabled: true })) } : {}),
     }, signal);
     const result = object(job.result ?? {});
     const url = result.url ?? result.file;
@@ -482,6 +590,19 @@ export default {
     const takes = request.takes === undefined ? 1 : Math.round(request.takes);
     if (takes < 1 || takes > 8) throw new Error(`候选条数仅支持 1–8（引擎限制），当前 ${request.takes}`);
     const signal = AbortSignal.any([AbortSignal.timeout(Math.min(150, 30 * takes) * 60_000), ...(this.signal ? [this.signal] : [])]);
+
+    // LoRA 参数校验与引擎映射（generate 任务：上限 32 条，strength ∈ [-4, 4]）。
+    const loras = request.loras ?? [];
+    if (loras.length > 32) throw new Error(`本镜头 LoRA 最多 32 个（引擎限制），当前 ${loras.length} 个`);
+    for (const lora of loras) {
+      if (!lora.name || typeof lora.name !== "string" || lora.name.length < 1 || lora.name.length > 512) throw new Error(`LoRA 名称不合法：须为 1–512 个字符`);
+      const strength = lora.strength ?? 1;
+      if (typeof strength !== "number" || !isFinite(strength) || strength < -4 || strength > 4) throw new Error(`LoRA「${lora.name}」强度越界：仅支持 -4 到 4（引擎限制），当前 ${strength}`);
+    }
+    // ACT: 引擎只在 POST /jobs 才校验「名字是否已装」（实测 /plan 返回 200，提交才 422 且是英文），
+    // 所以清单比对必须在提交前本地做一次，否则 agent 写错一个名字要等真正开跑才看到英文报错。
+    // 读不到名单（引擎离线/超时）就跳过这项——不能因为查不到档案把正常派工堵死，交给引擎兜底。
+    if (loras.length) await assertInstalledLoras(this, token, agent, loras.map(lora => lora.name));
 
     // ACT: refine_from 与 prompt/seconds/media/quality 等全部生成参数互斥（引擎 schema 硬约束：
     // if refine_from then 其余字段一律 False），请求里带了 refineFrom 就走精修早退分支——
@@ -588,6 +709,8 @@ export default {
       // takes 条候选：引擎逐条展开，带 seed 时候选种子 seed、seed+1…（整批可复现）。
       ...(takes > 1 ? { takes } : {}),
       ...(partPrompts.length ? { part_prompts: partPrompts } : {}),
+      // LoRA：空数组不发该键（引擎默认 []），非空时逐条写 {name, strength} 对象形式。
+      ...(loras.length ? { loras: loras.map(l => ({ name: l.name, strength: l.strength ?? 1 })) } : {}),
     }, signal);
     const assets: MediaAsset[] = [];
     for (const { job, jobId } of jobs) {
@@ -722,5 +845,184 @@ export default {
         ...(answer.error ? { error: typeof answer.error === "string" ? answer.error : JSON.stringify(answer.error) } : {}),
       };
     },
+  },
+  // 引擎配乐（kind=music）：按时间线长度作曲并铺到音轨 a2 第 0 帧，产物长度=时间线长度。
+  // 客户端只发 {revision, caption, seed?, quiet?}（kind/editor_project 由路由注入）；首次使用会下载 20GB 音乐模型。
+  // 成功返回下载好的音频（aac/48k/2ch）与产物元信息；取音经 GET /projects/{id} 的 a2 clip.source
+  // {kind:'generated', id:'freevideo-music/<file>.mp4'} → sources['generated:...'].audio url → Bearer 下载。
+  async music(request: MusicRequest) {
+    const token = this.config.apiKey?.trim();
+    if (!token) throw new Error("请填写 Token");
+    const agent = agentBase(this.config.baseUrl);
+    if (!/^e-[0-9a-f]{32}$/.test(request.editorProjectId)) throw new Error(`编辑工程号格式不对（应为 e- 加 32 位十六进制）：${request.editorProjectId.slice(0, 40)}`);
+    const caption = request.caption.trim();
+    if (!caption) throw new Error("配乐描述（caption）不能为空");
+    if (caption.length > 512) throw new Error(`配乐描述最长 512 字符（引擎限制），当前 ${caption.length} 个`);
+    // 引擎只接受英文描述（music.py 直接传给作曲服务），明显非英文提前拦下给出可执行报错。
+    if (!/^[\x20-\x7E]*$/.test(caption)) throw new Error("配乐描述请用英文（引擎作曲服务只接受 ASCII）：例如 'Epic orchestral, dramatic, with piano and strings'");
+    if (request.seed !== undefined && (!Number.isInteger(request.seed) || request.seed < 0 || request.seed > 2 ** 32 - 1)) {
+      throw new Error(`配乐种子需为 0..4294967295 的整数（引擎限制），当前「${request.seed}」`);
+    }
+    // 先读工程：拿最新 revision、看 a2 轨是否已有音乐（有则先 remove，否则引擎 audio_full 拒）。
+    const projectResponse = await this.tool.fetch(`${agent}/projects/${encodeURIComponent(request.editorProjectId)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: this.signal ? AbortSignal.any([this.signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
+    });
+    if (!projectResponse.ok) throw await engineFailure(projectResponse, "读取编辑工程失败");
+    const projectResponseBody = object(await projectResponse.json());
+    const project = projectOf(projectResponseBody);
+    let revision = typeof project.revision === "number" ? project.revision : request.revision;
+    const tracks = Array.isArray(project.tracks) ? project.tracks : [];
+    const a2 = object(tracks.find(track => object(track).id === "a2") ?? {});
+    const a2Clips = Array.isArray(a2.clips) ? a2.clips : [];
+    const a2Ids = a2Clips.map(clip => object(clip).id).filter((id): id is string => typeof id === "string");
+    // 成片时长对齐（可选）：把成片导入 v1 轨第 0 帧，让时间线长度=成片长度。
+    // 只有 provider 在 VM 内能调 /imports + /operations，故放在这里；sourceVideo 由 server 层转 base64。
+    if (request.sourceVideo) {
+      // /imports 接受 JSON {name, data_base64} 或 multipart file；这里走 JSON（直接 base64，无需先 POST /media）。
+      if (request.sourceVideo.type !== "base64") throw new Error("成片需以 base64 传入（由服务端读取工作区文件后提供）");
+      const bytes = Buffer.from(request.sourceVideo.data.replace(/^data:[^;]+;base64,/, ""), "base64");
+      const importResponse = await this.tool.fetch(`${agent}/imports`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: `toonflow_score_${Date.now().toString(16)}.${extensionFor(request.sourceVideo)}`,
+          data_base64: Buffer.from(bytes).toString("base64"),
+        }),
+        signal: this.signal ? AbortSignal.any([this.signal, AbortSignal.timeout(60_000)]) : AbortSignal.timeout(60_000),
+      });
+      if (!importResponse.ok) throw await engineFailure(importResponse, "成片导入失败");
+      const importResult = object(await importResponse.json());
+      const imported = object(importResult.import ?? importResult);
+      const importId = typeof imported.id === "string" ? imported.id : "";
+      if (!importId) throw new Error("成片导入未返回素材 id：请重试");
+      // 等导入转码 ready 再 insert（否则引擎 409 source_missing：未 ready 的 import 源被当成缺失分段）。
+      await waitImportReady(this, token, agent, importId, this.signal ? AbortSignal.any([this.signal, AbortSignal.timeout(60_000)]) : AbortSignal.timeout(60_000));
+      // 重读工程（revision 可能已变），v1 轨已有视频 clip 先 remove，再把成片插到第 0 帧。
+      const freshResponse = await this.tool.fetch(`${agent}/projects/${encodeURIComponent(request.editorProjectId)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: this.signal ? AbortSignal.any([this.signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
+      });
+      if (!freshResponse.ok) throw await engineFailure(freshResponse, "读取编辑工程失败");
+      const fresh = projectOf(object(await freshResponse.json()));
+      let freshRevision = typeof fresh.revision === "number" ? fresh.revision : revision;
+      const freshTracks = Array.isArray(fresh.tracks) ? fresh.tracks : [];
+      const v1 = object(freshTracks.find(track => object(track).id === "v1") ?? {});
+      const v1Ids = (Array.isArray(v1.clips) ? v1.clips : [])
+        .map(clip => object(clip).id).filter((id): id is string => typeof id === "string");
+      const alignOps: Record<string, unknown>[] = [];
+      if (v1Ids.length) alignOps.push({ op: "remove", clip_ids: v1Ids });
+      alignOps.push({ op: "insert", source: `import:${importId}`, at: 0 });
+      const alignResponse = await this.tool.fetch(`${agent}/projects/${encodeURIComponent(request.editorProjectId)}/operations`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ revision: freshRevision, operations: alignOps }),
+        signal: this.signal ? AbortSignal.any([this.signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
+      });
+      if (!alignResponse.ok) throw await engineFailure(alignResponse, "成片时长对齐失败");
+      const aligned = object(await alignResponse.json());
+      const alignedProject = object(aligned.project ?? {});
+      if (typeof alignedProject.revision === "number") revision = alignedProject.revision;
+      else {
+        // 防御分支：/operations 正常响应总带 project.revision（上面的真分支直接采用），
+        // 但若引擎返回结构异常（project 缺失/无 revision），这里再读一次工程兜底拿最新 revision，
+        // 避免后续作曲任务用过期 revision 撞 409 project_changed。
+        // ACT: Response.json() 会消费 body 流，**只能调用一次**——同一 Response 上第二次 json()
+        // 抛 `TypeError: body is unusable`（bodyUsed=true）。早期版本条件里和这里各调一次 again.json()，
+        // 该防御分支一触发就抛这个假错误；现改为单次 json() + typeof 类型守卫，避免重复消费。
+        const again = await this.tool.fetch(`${agent}/projects/${encodeURIComponent(request.editorProjectId)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: this.signal ? AbortSignal.any([this.signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
+        });
+        if (!again.ok) throw await engineFailure(again, "读取编辑工程失败");
+        const againProject = projectOf(object(await again.json()));
+        if (typeof againProject.revision === "number") revision = againProject.revision;
+      }
+    }
+    // a2 轨已有音乐时先 remove（引擎 lay_music 在 a2 已有 clip 时返回 audio_full），
+    // 契约要求 {revision, operations:[...]}（schema.py project_schema('operations') 强制 ('revision','operations')）。
+    if (a2Ids.length) {
+      const removeResponse = await this.tool.fetch(`${agent}/projects/${encodeURIComponent(request.editorProjectId)}/operations`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ revision, operations: [{ op: "remove", clip_ids: a2Ids }] }),
+        signal: this.signal ? AbortSignal.any([this.signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
+      });
+      if (!removeResponse.ok) throw await engineFailure(removeResponse, "移除旧配乐失败");
+      // 移除后 revision 已变，重新读一次（operations 返回新 revision，但保守起见再读工程）。
+      const again = await this.tool.fetch(`${agent}/projects/${encodeURIComponent(request.editorProjectId)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: this.signal ? AbortSignal.any([this.signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
+      });
+      if (!again.ok) throw await engineFailure(again, "读取编辑工程失败");
+      const projectAgain = projectOf(object(await again.json()));
+      revision = typeof projectAgain.revision === "number" ? projectAgain.revision : revision;
+    }
+    // 提交作曲任务（与 /jobs 同构：返回 {job, jobs:[...]}，取第一个）。
+    const musicSpec: Record<string, unknown> = { revision, caption };
+    if (request.seed !== undefined) musicSpec.seed = request.seed;
+    if (request.quiet?.length) musicSpec.quiet = request.quiet.map(span => ({ start: span.start, frames: span.frames }));
+    const { job, jobId } = await runJob(this, token, agent, {
+      kind: "music",
+      editor_project: request.editorProjectId,
+      ...musicSpec,
+    }, this.signal ? AbortSignal.any([this.signal, AbortSignal.timeout(30 * 60_000)]) : AbortSignal.timeout(30 * 60_000));
+    // 音乐首次使用要下 20GB 模型，跑完可能长达几十分钟；状态机同 generate（waiting→queued→running→succeeded/failed）。
+    if (String(job.status) !== "succeeded") throw new Error(engineJobMessage(job, "配乐生成未完成"));
+    // 成功后重新读工程，从 a2 轨找生成的音乐 clip，经 sources 拿下载地址。
+    const musicProject = await this.tool.fetch(`${agent}/projects/${encodeURIComponent(request.editorProjectId)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: this.signal ? AbortSignal.any([this.signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
+    });
+    if (!musicProject.ok) throw await engineFailure(musicProject, "读取编辑工程失败");
+    const finalProjectBody = object(await musicProject.json());
+    const finalProject = projectOf(finalProjectBody);
+    const finalTracks = Array.isArray(finalProject.tracks) ? finalProject.tracks : [];
+    const finalA2 = object(finalTracks.find(track => object(track).id === "a2") ?? {});
+    const finalClips = Array.isArray(finalA2.clips) ? finalA2.clips : [];
+    // 取音路径：music job 的 result.source 是权威 source key（GET /projects 的 sources 映射可能为 null，
+    // 但下载端点 /editor/sources/content 直接按 key 取文件，无需 sources 映射）。先取 result.source，
+    // 再兜底到 a2 轨扫描（原实现先扫 a2，sourceKey 空即抛错，导致 result.source 分支不可达）。
+    const result = object(job.result ?? {});
+    const resultSource = typeof result.source === "string" ? result.source : "";
+    let sourceKey = "";
+    let jobSource = "";
+    if (resultSource.startsWith("generated:")) {
+      jobSource = resultSource.slice("generated:".length);
+      sourceKey = resultSource;
+    } else {
+      for (const clip of finalClips) {
+        const clipObj = object(clip);
+        const source = object(clipObj.source ?? {});
+        if (source.kind === "generated" && typeof source.id === "string" && source.id.startsWith("freevideo-music/")) {
+          jobSource = source.id;
+          sourceKey = `generated:${source.id}`;
+          break;
+        }
+      }
+    }
+    if (!sourceKey) throw new Error("配乐完成但音轨 a2 没找到生成的音乐片段：请重新读取工程确认");
+    let url = "";
+    if (resultSource) {
+      url = `${originOf(this.config.baseUrl)}/freevideo/agent/v1/editor/sources/content?key=${encodeURIComponent(resultSource)}&file=preview`;
+    }
+    if (!url) {
+      const sources = object(finalProjectBody.sources ?? {});
+      const entry = object(sources[sourceKey] ?? {});
+      const audio = object(entry.audio ?? {});
+      url = typeof audio.url === "string" ? audio.url : "";
+    }
+    if (!url) throw new Error("配乐完成但没有返回音频下载地址：请重新读取工程确认");
+    const data = await download(this, token, originOf(this.config.baseUrl), url, this.signal ?? AbortSignal.timeout(60_000));
+    return {
+      mediaType: "audio",
+      type: "binary",
+      data,
+      mimeType: "audio/mp4",
+      jobId,
+      frames: Number(result.frames) || 0,
+      seed: Number(result.seed) || 0,
+      source: jobSource,
+    };
   },
 } satisfies ProviderDefinition<typeof rules>;

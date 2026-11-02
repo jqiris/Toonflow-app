@@ -17,6 +17,12 @@ export interface MtrackClipPrompt {
   nonDiegeticMusic: string;
 }
 
+/** 逐镜 LoRA 选择项，与 nodeShared 的 MediaLora 同形（引擎按 name 精确匹配已装 LoRA，strength 缺省 1）。 */
+export interface MediaLora {
+  name: string;
+  strength?: number;
+}
+
 export interface MtrackClipAttempt {
   at: string;
   nodeId: string | null;
@@ -62,6 +68,12 @@ export interface MtrackClip {
   partPrompts?: string[];
   /** 白模参考（3D blocking）：library 为引擎作品号，earlyRatio 在派工时按质量档换算 early_steps。 */
   whitebox?: { library: string; seconds: number; earlyRatio: number; summary?: string; at: string };
+  /**
+   * 逐镜 LoRA（最多 32 条，strength ∈ [-4,4]）：镜像归一必须透传——漏透传会让 mtrackRead 读不回来，
+   * agent 回写时把用户选的 LoRA 静默擦掉（同类坑见 quality/secondPass/preview/mode 的审计 F3）。
+   * 缺键 = 本镜不额外挂 LoRA，与「显式选 0 条」语义不同，故不设默认空数组。
+   */
+  loras?: MediaLora[];
   prompt: MtrackClipPrompt;
   referenceIds: string[];
   continuity: string;
@@ -122,6 +134,29 @@ function readWhitebox(value: unknown): MtrackClip["whitebox"] {
 
 function isQuality(value: unknown): value is (typeof videoQualityValues)[number] {
   return typeof value === "string" && (videoQualityValues as readonly string[]).includes(value);
+}
+
+/**
+ * 逐镜 LoRA 的读容错：只留合法项（name 为非空字符串且 ≤512，strength 缺省或为 [-4,4] 内的有限数），
+ * 条数截到引擎上限 32；非法项**整条丢弃**而不是整块丢弃。非数组或一条合法都没有时返回 undefined，
+ * 归一里就不带键——缺键表示本镜不额外挂 LoRA，落成空数组会把「未设置」写成「选了 0 条」。
+ */
+function readLoras(value: unknown): MediaLora[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const loras: MediaLora[] = [];
+  for (const item of value) {
+    if (!isRecord(item)) continue;
+    const name = item.name;
+    if (typeof name !== "string" || !name.trim() || name.length > 512) continue;
+    const strength = item.strength;
+    if (strength === undefined || strength === null) {
+      loras.push({ name });
+      continue;
+    }
+    if (typeof strength !== "number" || !Number.isFinite(strength) || strength < -4 || strength > 4) continue;
+    loras.push({ name, strength });
+  }
+  return loras.length ? loras.slice(0, 32) : undefined;
 }
 
 function readPrompt(value: unknown): MtrackClipPrompt {
@@ -209,46 +244,51 @@ export function normalizeProject(value: unknown): MtrackProject {
         },
       } : {}),
     },
-    clips: clips.filter(isRecord).map((item, index) => ({
-      clipId: readString(item.clipId, `S${String(index + 1).padStart(3, "0")}`),
-      title: readString(item.title),
-      ...(isRecord(item.sourceRange) ? {
-        sourceRange: {
-          fromSegment: readNumber(item.sourceRange.fromSegment, 1),
-          toSegment: readNumber(item.sourceRange.toSegment, 1),
-        },
-      } : {}),
-      seconds: readNumber(item.seconds, 5),
-      ratio: readString(item.ratio, "9:16"),
-      resolution: readString(item.resolution, "768P"),
-      generateAudio: typeof item.generateAudio === "boolean" ? item.generateAudio : false,
-      // ACT: quality / secondPass / preview 是编辑器逐镜可设的真实请求参数，镜像归一必须透传——
-      // 漏透传会让 mtrackRead 读回来没有这三项，agent 误以为当前是默认档，回写时把用户设置覆盖掉
-      //（同类坑见上方 mode 的审计 F3）。非法值不猜，直接不带键。
-      ...(isQuality(item.quality) ? { quality: item.quality } : {}),
-      ...(typeof item.secondPass === "boolean" ? { secondPass: item.secondPass } : {}),
-      ...(typeof item.preview === "boolean" ? { preview: item.preview } : {}),
-      // ACT: seed 与上面三项同理——编辑器逐镜真实请求参数，镜像归一必须透传，
-      // 漏透传会让 mtrackRead 读不回种子、agent 回写时把用户锁定的种子清掉（同类坑见审计 F3）。非法值不带键。
-      ...(typeof item.seed === "number" && Number.isInteger(item.seed) && item.seed >= 0 && item.seed <= Number.MAX_SAFE_INTEGER ? { seed: item.seed } : {}),
-      // takes（2–8 才带键）与 partPrompts（1–5 条非空）同口径透传，非法值不带键。
-      ...(typeof item.takes === "number" && Number.isInteger(item.takes) && item.takes >= 2 && item.takes <= 8 ? { takes: item.takes } : {}),
-      ...(Array.isArray(item.partPrompts) && item.partPrompts.length >= 1 && item.partPrompts.length <= 5 && item.partPrompts.every(part => typeof part === "string" && part.trim()) ? { partPrompts: item.partPrompts.map(part => (part as string).trim()) } : {}),
-      // whitebox 同口径透传：作品号格式校验通过才带键（见 readWhitebox），漏透传会让 mtrackRead 读不回白模。
-      ...(readWhitebox(item.whitebox) ? { whitebox: readWhitebox(item.whitebox) } : {}),
-      prompt: readPrompt(item.prompt),
-      referenceIds: Array.isArray(item.referenceIds) ? item.referenceIds.filter(ref => typeof ref === "string") : [],
-      continuity: index === 0 ? "shot" : (item.continuity === "context" || item.continuity === "continue" ? "context" : "shot"),
-      // ACT: mode 是编辑器写出的真实字段，镜像归一曾经漏透传，导致 mtrackRead 读回来没有 mode（审计 F3）；
-      // 非法值不猜，直接不带键，由参考数量推断。
-      ...(item.mode === "ref" || item.mode === "image" || item.mode === "text" ? { mode: item.mode } : {}),
-      status: readString(item.status, "pending"),
-      nodeId: typeof item.nodeId === "string" ? item.nodeId : null,
-      assetPath: typeof item.assetPath === "string" ? item.assetPath : null,
-      attempts: readAttempts(item.attempts),
-      ...(typeof item.notes === "string" ? { notes: item.notes } : {}),
-      ...(typeof item.systemPromptOverride === "string" ? { systemPromptOverride: item.systemPromptOverride } : {}),
-    })),
+    clips: clips.filter(isRecord).map((item, index) => {
+      const loras = readLoras(item.loras);
+      return {
+        clipId: readString(item.clipId, `S${String(index + 1).padStart(3, "0")}`),
+        title: readString(item.title),
+        ...(isRecord(item.sourceRange) ? {
+          sourceRange: {
+            fromSegment: readNumber(item.sourceRange.fromSegment, 1),
+            toSegment: readNumber(item.sourceRange.toSegment, 1),
+          },
+        } : {}),
+        seconds: readNumber(item.seconds, 5),
+        ratio: readString(item.ratio, "9:16"),
+        resolution: readString(item.resolution, "768P"),
+        generateAudio: typeof item.generateAudio === "boolean" ? item.generateAudio : false,
+        // ACT: quality / secondPass / preview 是编辑器逐镜可设的真实请求参数，镜像归一必须透传——
+        // 漏透传会让 mtrackRead 读回来没有这三项，agent 误以为当前是默认档，回写时把用户设置覆盖掉
+        //（同类坑见上方 mode 的审计 F3）。非法值不猜，直接不带键。
+        ...(isQuality(item.quality) ? { quality: item.quality } : {}),
+        ...(typeof item.secondPass === "boolean" ? { secondPass: item.secondPass } : {}),
+        ...(typeof item.preview === "boolean" ? { preview: item.preview } : {}),
+        // ACT: seed 与上面三项同理——编辑器逐镜真实请求参数，镜像归一必须透传，
+        // 漏透传会让 mtrackRead 读不回种子、agent 回写时把用户锁定的种子清掉（同类坑见审计 F3）。非法值不带键。
+        ...(typeof item.seed === "number" && Number.isInteger(item.seed) && item.seed >= 0 && item.seed <= Number.MAX_SAFE_INTEGER ? { seed: item.seed } : {}),
+        // takes（2–8 才带键）与 partPrompts（1–5 条非空）同口径透传，非法值不带键。
+        ...(typeof item.takes === "number" && Number.isInteger(item.takes) && item.takes >= 2 && item.takes <= 8 ? { takes: item.takes } : {}),
+        ...(Array.isArray(item.partPrompts) && item.partPrompts.length >= 1 && item.partPrompts.length <= 5 && item.partPrompts.every(part => typeof part === "string" && part.trim()) ? { partPrompts: item.partPrompts.map(part => (part as string).trim()) } : {}),
+        // whitebox 同口径透传：作品号格式校验通过才带键（见 readWhitebox），漏透传会让 mtrackRead 读不回白模。
+        ...(readWhitebox(item.whitebox) ? { whitebox: readWhitebox(item.whitebox) } : {}),
+        // loras 同口径透传（见 readLoras）：非法项逐条丢弃，一条合法都没有就不带键。
+        ...(loras ? { loras } : {}),
+        prompt: readPrompt(item.prompt),
+        referenceIds: Array.isArray(item.referenceIds) ? item.referenceIds.filter(ref => typeof ref === "string") : [],
+        continuity: index === 0 ? "shot" : (item.continuity === "context" || item.continuity === "continue" ? "context" : "shot"),
+        // ACT: mode 是编辑器写出的真实字段，镜像归一曾经漏透传，导致 mtrackRead 读回来没有 mode（审计 F3）；
+        // 非法值不猜，直接不带键，由参考数量推断。
+        ...(item.mode === "ref" || item.mode === "image" || item.mode === "text" ? { mode: item.mode } : {}),
+        status: readString(item.status, "pending"),
+        nodeId: typeof item.nodeId === "string" ? item.nodeId : null,
+        assetPath: typeof item.assetPath === "string" ? item.assetPath : null,
+        attempts: readAttempts(item.attempts),
+        ...(typeof item.notes === "string" ? { notes: item.notes } : {}),
+        ...(typeof item.systemPromptOverride === "string" ? { systemPromptOverride: item.systemPromptOverride } : {}),
+      };
+    }),
   };
 }
 

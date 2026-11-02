@@ -133,6 +133,18 @@ export type WhiteboxJob = { id: string; status: "waiting" | "rendering" | "faile
 /** 白模操作：submit 由调用方直接交代码（agent 路径，零模型调用），clear 只清本镜参考。 */
 export type WhiteboxAction = { type: "clear" | "submit" };
 
+/** 逐镜 LoRA 选择项；与 packages/providers/types.d.ts 的 MediaLora 同形（引擎按 name 精确匹配已装 LoRA）。 */
+export interface MediaLora {
+  name: string;
+  strength?: number;
+}
+/** 单镜 LoRA 上限（引擎契约：VideoRequest.loras 最多 32 条）。 */
+export const maxClipLoras = 32;
+/** LoRA 强度范围（引擎契约：strength ∈ [-4, 4]，缺省 1）。 */
+export const loraStrengthRange = { min: -4, max: 4 } as const;
+/** LoRA 名称上限：引擎已装名称远短于此，超长一律当坏值丢弃。 */
+const maxLoraNameLength = 512;
+
 export interface MtrackClip {
   clipId: string;
   title: string;
@@ -185,6 +197,12 @@ export interface MtrackClip {
   };
   prompt: ClipPrompt;
   referenceIds: string[];
+  /**
+   * 逐镜 LoRA 选择（引擎已装 LoRA 名单来自引擎能力档案的 loras）：最多 32 条，strength ∈ [-4,4]，缺省 1。
+   * 缺省（无该键）= 本镜不额外挂 LoRA，与「显式选了 0 条」语义不同，故不设默认空数组。
+   * 不进 clipSignature（同 seed/takes 口径，渲染参数不是镜头身份，纳入会让旧工程升级后全片误判 stale）。
+   */
+  loras?: MediaLora[];
   /** `shot` | `context`；旧工程的 start/continue/cut 由 normalizeContinuity 归一。 */
   continuity: Continuity;
   /** 任务模式，缺省按参考数量推断（见 resolveClipMode）。 */
@@ -319,6 +337,30 @@ function readStatus(value: unknown): ClipStatus {
   return value === "generating" || value === "generated" || value === "accepted" || value === "failed" ? value : "pending";
 }
 
+/**
+ * 逐镜 LoRA 的读边界归一：只留合法项（name 为非空字符串且 ≤512，strength 缺省或为 [-4,4] 内的有限数），
+ * 条数截到引擎上限 32。非法项**整条丢弃**而不是整块丢弃——坏一条不该让用户选的其他 LoRA 全失效。
+ * 缺失/空数组一律不带键：缺键 = 本镜不额外挂 LoRA，落成 [] 会把「未设置」写成「选了 0 条」（对引擎等价，
+ * 但会让 agent 回写把用户的未设置状态改成显式空，同 takes 的「1 是默认、落键只是噪音」口径）。
+ */
+function lorasField(value: unknown): Pick<MtrackClip, "loras"> {
+  if (!Array.isArray(value)) return {};
+  const loras: MediaLora[] = [];
+  for (const item of value) {
+    if (!isRecord(item)) continue;
+    const name = item.name;
+    if (typeof name !== "string" || !name.trim() || name.length > maxLoraNameLength) continue;
+    const strength = item.strength;
+    if (strength === undefined || strength === null) {
+      loras.push({ name });
+      continue;
+    }
+    if (typeof strength !== "number" || !Number.isFinite(strength) || strength < loraStrengthRange.min || strength > loraStrengthRange.max) continue;
+    loras.push({ name, strength });
+  }
+  return loras.length ? { loras: loras.slice(0, maxClipLoras) } : {};
+}
+
 function readPrompt(value: unknown): ClipPrompt {
   const source = isRecord(value) ? value : {};
   return {
@@ -387,6 +429,8 @@ export function normalizeProject(value: unknown): MtrackProject {
       ...(Array.isArray(item.partPrompts) && item.partPrompts.length >= 1 && item.partPrompts.length <= 5 && item.partPrompts.every(part => typeof part === "string" && part.trim()) ? { partPrompts: item.partPrompts.map(part => part.trim()) } : {}),
       // whitebox：作品号格式校验通过才带（见 readWhitebox），坏值整块丢弃。
       ...(readWhitebox(item.whitebox) ? { whitebox: readWhitebox(item.whitebox) } : {}),
+      // loras：逐镜 LoRA（见 lorasField），非法项逐条丢弃、一条合法都没有就不带键（不落空数组）。
+      ...lorasField(item.loras),
       prompt: readPrompt(item.prompt),
       referenceIds: Array.isArray(item.referenceIds) ? item.referenceIds.filter(ref => typeof ref === "string") : [],
       // ACT: 首镜永远 shot（没有上一镜可接），其余缺省 shot；旧工程的 continue 归一为 context。
@@ -526,7 +570,7 @@ export function cloneClips(clips: MtrackClip[]): MtrackClip[] {
 }
 
 /** 真源字段：写作者/用户在编辑器里定的镜头内容，合并时以「相对基线谁改过」为准，两边都改则信磁盘。 */
-const clipSourceKeys = ["title", "seconds", "ratio", "resolution", "generateAudio", "quality", "secondPass", "preview", "prompt", "referenceIds", "continuity", "mode", "notes", "systemPromptOverride", "sourceRange"] as const;
+const clipSourceKeys = ["title", "seconds", "ratio", "resolution", "generateAudio", "quality", "secondPass", "preview", "loras", "prompt", "referenceIds", "continuity", "mode", "notes", "systemPromptOverride", "sourceRange"] as const;
 /** 生成侧字段：派工与对账写出来的运行结果，合并时优先内存（用户正看着的那份）。 */
 const clipRunKeys = ["status", "nodeId", "assetPath"] as const;
 
