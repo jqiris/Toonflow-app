@@ -17,11 +17,26 @@
       <small class="tabStatus">{{ clipStatusLabels[tab.clip.status] }}</small>
     </button>
     <p v-if="!clips.length" class="tabsEmpty">还没有镜头，点上方「＋ 添加镜头」开始。</p>
+    <button
+      type="button"
+      class="tabReviewEntry"
+      :disabled="!clips.length"
+      title="用本机视觉模型对成片提问"
+      @click="reviewVisible = true"
+    >审片</button>
   </div>
+  <askVlmReview
+    v-model="reviewVisible"
+    :directory="directory"
+    :providerId="providerId"
+    :clips="clips"
+    :clipId="selectedId"
+  />
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
+import askVlmReview from "./askVlmReview.vue";
 import type { ClipStatus, MtrackClip } from "../mtrackProject";
 import { clipStatusLabels, currentClipAttempt } from "../mtrackProject";
 
@@ -29,7 +44,13 @@ const props = defineProps<{
   clips: MtrackClip[];
   selectedId: string;
   multiSelectedIds: string[];
+  /** 工作区目录：审片面板按工作区相对路径取成片。 */
+  directory?: string;
+  /** 媒体供应商 id：审片面板用它调本机视觉模型。 */
+  providerId?: string;
 }>();
+
+const reviewVisible = ref(false);
 
 /** 选段语义与编辑器 onSelect 对齐：单击=单选，Ctrl/⌘=追加或取消，Shift=连选区间。 */
 const emit = defineEmits<{
@@ -202,5 +223,32 @@ function statusClass(status: ClipStatus) {
   padding: 8px 2px;
   color: var(--el-text-color-secondary);
   font-size: 12px;
+}
+
+/* 审片入口：页签条右侧的常驻小按钮，滚动时 sticky 吸在右边，底色不透明避免透出页签。 */
+.tabReviewEntry {
+  position: sticky;
+  right: 0;
+  align-self: center;
+  flex: none;
+  margin-left: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 8px;
+  color: var(--el-text-color-regular);
+  background: var(--el-bg-color);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tabReviewEntry:hover:not(:disabled) {
+  border-color: var(--el-color-primary-light-5);
+  color: var(--el-color-primary);
+}
+
+.tabReviewEntry:disabled {
+  color: var(--el-text-color-placeholder);
+  cursor: not-allowed;
 }
 </style>

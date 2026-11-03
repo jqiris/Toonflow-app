@@ -205,6 +205,11 @@ export interface MtrackClip {
   loras?: MediaLora[];
   /** `shot` | `context`；旧工程的 start/continue/cut 由 normalizeContinuity 归一。 */
   continuity: Continuity;
+  /**
+   * 显式续接任务号（引擎 jobId）：仅 continuity === "context" 时消费，优先于上一镜当前默认版本的隐式来源；
+   * 缺省走隐式链路。不进 clipSignature（同 seed/takes 口径，下发参数不是镜头身份）。
+   */
+  continueFrom?: string;
   /** 任务模式，缺省按参考数量推断（见 resolveClipMode）。 */
   mode?: ClipMode;
   status: ClipStatus;
@@ -435,6 +440,9 @@ export function normalizeProject(value: unknown): MtrackProject {
       referenceIds: Array.isArray(item.referenceIds) ? item.referenceIds.filter(ref => typeof ref === "string") : [],
       // ACT: 首镜永远 shot（没有上一镜可接），其余缺省 shot；旧工程的 continue 归一为 context。
       continuity: index === 0 ? "shot" : normalizeContinuity(item.continuity),
+      // continueFrom：显式续接任务号，trim 后非空才留键（坏值/空白省略回隐式链路）；
+      // 任务号是否存在不在读盘校验——派工时引擎自会报错（与 whitebox 作品号只校格式同理，这里连格式都不锁死，供应商 id 形态可能变）。
+      ...(typeof item.continueFrom === "string" && item.continueFrom.trim() ? { continueFrom: item.continueFrom.trim() } : {}),
       ...(item.mode === "ref" || item.mode === "image" || item.mode === "text" ? { mode: item.mode } : {}),
       status: readStatus(item.status),
       nodeId: typeof item.nodeId === "string" ? item.nodeId : null,
@@ -570,7 +578,7 @@ export function cloneClips(clips: MtrackClip[]): MtrackClip[] {
 }
 
 /** 真源字段：写作者/用户在编辑器里定的镜头内容，合并时以「相对基线谁改过」为准，两边都改则信磁盘。 */
-const clipSourceKeys = ["title", "seconds", "ratio", "resolution", "generateAudio", "quality", "secondPass", "preview", "loras", "prompt", "referenceIds", "continuity", "mode", "notes", "systemPromptOverride", "sourceRange"] as const;
+const clipSourceKeys = ["title", "seconds", "ratio", "resolution", "generateAudio", "quality", "secondPass", "preview", "loras", "prompt", "referenceIds", "continuity", "continueFrom", "mode", "notes", "systemPromptOverride", "sourceRange"] as const;
 /** 生成侧字段：派工与对账写出来的运行结果，合并时优先内存（用户正看着的那份）。 */
 const clipRunKeys = ["status", "nodeId", "assetPath"] as const;
 
@@ -866,7 +874,9 @@ export function clipStates(project: MtrackProject): Record<string, ClipState> {
     const clip = project.clips[index];
     const signature = clipSignature(globalSig, clip, previous);
     const attempt = clip.attempts.findLast(item => item.status === "succeeded");
-    const parentJobId = index > 0 ? continuationJobId(project.clips[index - 1]) : "";
+    // ACT: 续接来源与派工同口径——显式 continueFrom 优先，留空才回上一镜默认版本的任务号；
+    // 两边都算隐式值的话，设了显式任务号的镜会被恒判「待更新」。
+    const parentJobId = clip.continueFrom?.trim() || (index > 0 ? continuationJobId(project.clips[index - 1]) : "");
     let stale = false;
     if (clip.assetPath && attempt?.signature) {
       stale = attempt.signature !== signature ||

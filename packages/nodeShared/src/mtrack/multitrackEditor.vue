@@ -79,6 +79,8 @@
             :clips="clips"
             :selectedId="selectedId"
             :multiSelectedIds="multiSelectedIds"
+            :directory="directory"
+            :providerId="project?.global.model?.providerId"
             @select="onSelect"
           />
           <!-- ④ 02 镜头内容：LSC :1334-1338 的 nh-workspace（左镜头编辑主区 + 右参考素材 aside）。 -->
@@ -183,6 +185,7 @@
                   <el-button size="small" text @click="reconcileFromPanel">刷新状态</el-button>
                   <el-button size="small" text :loading="releasingGpu" :disabled="dispatching || Boolean(batchHandle)" title="让本机视频引擎归还驻留的显存/内存；引擎正在生成时不会释放" @click="handleReleaseGpu">释放显存</el-button>
                   <el-button size="small" text :disabled="!hasAccepted || compositeBusy" :loading="compositeBusy" @click="handleComposite">合成成片</el-button>
+                  <el-button size="small" text title="让引擎对本机配乐工程作曲并铺到 a2 轨第 0 帧（长度=时间线；失败不影响合成成片）" @click="scorePanelVisible = true">生成配乐…</el-button>
                   <!-- 查看成片 = 把画布视口移到「项目与成片」浮窗（LSC 的独立预览窗口位；我们是画布世界层浮窗，跳转即打开）。 -->
                   <el-button v-if="nodeId" size="small" text @click="focusResults">查看成片</el-button>
                 </div>
@@ -191,6 +194,10 @@
                 <div class="advancedActions">
                   <el-button size="small" text @click="collapseAdvanced">收起</el-button>
                 </div>
+              </div>
+              <!-- 引擎能力档案：只读展示引擎上报的硬上限 / 质量档位 / 已装 LoRA（面板组件自行请求 /api/ai/media/engineProfile）。 -->
+              <div class="advancedSection">
+                <engineProfilePanel :providerId="engineProfileProviderId" />
               </div>
             </div>
           </details>
@@ -257,6 +264,12 @@
       @refineVersion="refineVersionInClip"
       @locateFinding="locateFinding"
     />
+    <scorePanel
+      v-model="scorePanelVisible"
+      :directory="directory"
+      :providerId="project?.global.model?.providerId"
+      :modelId="project?.global.model?.modelId"
+    />
   </div>
 </template>
 
@@ -300,6 +313,8 @@ import type { ReferencePickerItem } from "./components/referencePicker.vue";
 import runFooter from "./components/runFooter.vue";
 import batchPanel from "./components/batchPanel.vue";
 import resultsOverlay from "./components/resultsOverlay.vue";
+import scorePanel from "./components/scorePanel.vue";
+import engineProfilePanel from "./components/engineProfilePanel.vue";
 
 const props = defineProps<{
   /** 每次操作时重新取文件能力：文档面板扩展传 context.files，画布节点传工作区文件包装。 */
@@ -1209,6 +1224,9 @@ type CompositeResult = { manifestPath: string; source: string; output: string; e
 const compositeBusy = ref(false);
 const hasAccepted = computed(() => clips.value.some(clip => clip.status === "accepted"));
 
+/** 引擎配乐面板：弹窗开关（进行中/成功/失败状态在面板内部展示，失败不阻断合成成片）。 */
+const scorePanelVisible = ref(false);
+
 const releasingGpu = ref(false);
 /**
  * 空闲释放显存：让本机视频引擎（FreeVideo）归还驻留的显存/内存模型。
@@ -1958,7 +1976,8 @@ function writeClipRun(clipId: string, patch: Partial<MtrackClip>, attempt?: { no
     const succeededPath = attempt.status === "succeeded" ? attempt.assetPath ?? patch.assetPath : undefined;
     // 成功尝试同时记下设置签名与时间线位置：clipStates 靠这两个值判定这条成片是否已落后于当前设置。
     const clipIndex = current.clips.findIndex(item => item.clipId === clipId);
-    const parentJobId = continuationJobId(clipIndex > 0 ? current.clips[clipIndex - 1] : undefined);
+    // ACT: 续接来源与派工、clipStates 同口径——本镜有显式 continueFrom 就记它，留空才回上一镜默认版本的任务号。
+    const parentJobId = clip.continueFrom?.trim() || continuationJobId(clipIndex > 0 ? current.clips[clipIndex - 1] : undefined);
     clip.attempts.push({
       at: new Date().toISOString(),
       nodeId: attempt.nodeId || null,

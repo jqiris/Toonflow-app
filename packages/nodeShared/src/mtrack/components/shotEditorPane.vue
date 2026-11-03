@@ -70,10 +70,30 @@
     <div class="promptSections">
       <template v-for="section in sections" :key="section.key"><label class="sectionField"><span class="sectionLabel">{{ section.label }}</span><el-input :modelValue="draft[section.key]" type="textarea" :rows="section.rows" resize="vertical" :placeholder="section.placeholder" @input="onSectionInput(section.key, String($event))" /></label></template>
     </div>
+    <details class="partsDetails">
+      <summary class="partsSummary">长镜分块 · {{ partCount }} 块</summary>
+      <div class="partsBody">
+        <p class="partsHint">逐块描述随本镜下发，条数须等于引擎 POST /plan 的 chain_plan.blocks 数（1–5）；一条都不填则由引擎自动切分提示词。空块不计入条数。</p>
+        <div v-for="(row, rowIndex) in partRows" :key="rowIndex" class="partRow">
+          <div class="partRowHead">
+            <span class="partLabel">第 {{ rowIndex + 1 }} 块</span>
+            <el-button size="small" text :disabled="partRows.length <= 1" @click="removePart(rowIndex)">删除</el-button>
+          </div>
+          <el-input :modelValue="row" type="textarea" :rows="2" resize="vertical" :placeholder="`第 ${rowIndex + 1} 块的画面描述`" @input="onPartInput(rowIndex, String($event))" />
+        </div>
+        <div class="partsActions">
+          <el-button size="small" :disabled="partRows.length >= partLimit" @click="addPart">添加分块</el-button>
+          <span class="partsState">引擎上限 {{ partLimit }} 块</span>
+        </div>
+        <p v-if="partEmptyHint" class="partsState partsStateWarn" role="alert">{{ partEmptyHint }}</p>
+      </div>
+    </details>
     <label v-if="index > 0" class="continuityField"><span class="fieldLabel">镜头衔接</span><el-select :modelValue="clip.continuity" size="small" @change="onContinuityChange(String($event))"><el-option v-for="value in continuityOptions" :key="value" :label="continuityLabels[value]" :value="value" /></el-select></label>
+    <label v-if="index > 0" class="continuityField"><span class="fieldLabel">续接自 jobId</span><el-input :modelValue="explicitJobId" size="small" clearable placeholder="留空按上一镜任务号" @input="onContinueFromInput(String($event))" @clear="onContinueFromInput('')" /></label>
     <p v-if="index === 0" class="continuityHint">首镜必须独立起拍：没有上一镜可承接。</p>
     <p v-else-if="isContext" class="continuityHint continuityHintActive">本镜承接 <strong>{{ previousClipId }}</strong>：由引擎加载该镜的原生音视频上下文继续生成，成片时长不变。<strong>时长至少 10 秒</strong>、参考素材<strong>最多 3 个</strong>（图片/视频/音频合计，引擎限制）；{{ previousClipJobId ? `上一镜任务号 ${previousClipJobId}` : `${previousClipId} 还没有可用的生成任务号，需要先生成它` }}。</p>
     <p v-else class="continuityHint">独立起拍 / 有意切镜：不读取上一镜的上下文，参考素材最多 4 个。</p>
+    <p v-if="index > 0" class="continuityHint">显式填了任务号就按它续接（优先于上一镜任务号），留空按上一镜任务号；只有「承接上一镜」时才会用到。</p>
     <p v-if="isContext && clip.referenceIds.length > 3" class="continuityHint continuityHintWarn" role="alert">本镜已选 {{ clip.referenceIds.length }} 个参考素材，超出续接上限 3 个（图片/视频/音频合计）；请减少参考，或把衔接方式改为独立起拍。</p>
     <p v-if="isContext && clip.seconds < 10" class="continuityHint continuityHintWarn" role="alert">本镜时长 {{ clip.seconds }} 秒，短于续接下限 10 秒；请加长本镜，或把衔接方式改为独立起拍。</p>
     <p class="continuityHint">质量档位：轻量/标准为两遍生成（开二次采样），精细/极致为 20 步单遍；先出预览出片更快但是低清预览片，满意后在「项目与成片」的版本菜单点「精修」直接细化成成片（不重烧参数）。</p>
@@ -99,7 +119,10 @@ type RewritePending = { clipId: string; text: string; basis: RewriteBasis };
 
 const props = defineProps<{ clip?: MtrackClip; index: number; clipCount: number; previousClipId?: string; previousClipJobId?: string; rewriteBusy?: boolean; rewritePending?: RewritePending; canUndo?: boolean; batchRunning?: boolean; batchPaused?: boolean; whiteboxJob?: WhiteboxJob; whiteboxBusy?: boolean; loraOptions?: string[]; loraLimit?: number; loraStrengthLimit?: { min: number; max: number }; loraHint?: string; }>();
 
-const emit = defineEmits<{ (e: "patch", patch: Partial<MtrackClip>): void; (e: "duplicate"): void; (e: "move", offset: number): void; (e: "remove"): void; (e: "accept", accepted: boolean): void; (e: "rewrite", rules: string): void; (e: "regenerate"): void; (e: "adoptRewrite", text: string): void; (e: "discardRewrite"): void; (e: "updateRewriteDraft", text: string): void; (e: "undoRemove"): void; (e: "whitebox", action: WhiteboxAction): void; }>();
+/** UI 侧的镜头 patch：continueFrom 已进工程模型（mtrackProject.MtrackClip），直接按 Partial<MtrackClip> 收发。 */
+type ClipPatch = Partial<MtrackClip>;
+
+const emit = defineEmits<{ (e: "patch", patch: ClipPatch): void; (e: "duplicate"): void; (e: "move", offset: number): void; (e: "remove"): void; (e: "accept", accepted: boolean): void; (e: "rewrite", rules: string): void; (e: "regenerate"): void; (e: "adoptRewrite", text: string): void; (e: "discardRewrite"): void; (e: "updateRewriteDraft", text: string): void; (e: "undoRemove"): void; (e: "whitebox", action: WhiteboxAction): void; }>();
 
 const rewriteRules = ref("");
 const isContext = computed(() => Boolean(props.clip && props.clip.continuity === "context"));
@@ -139,6 +162,81 @@ function onContinuityChange(value: string) {
     return;
   }
   emit("patch", { continuity });
+}
+
+/* ---- 长镜分块（partPrompts）：逐块描述，条数须等于引擎 /plan 的 chain_plan.blocks 数（1–5） ---- */
+/** 引擎分块上限（mtrackEdit 校验 1–5 条），UI 不允许加到第 6 块。 */
+const partLimit = 5;
+const partRows = ref<string[]>([""]);
+let editingPartsClipId = "";
+/** 计入条数的块数：空块不计入（下发只发非空文本，否则整份描述会被 validateClip 判非法）。 */
+const partCount = computed(() => partRows.value.map(row => row.trim()).filter(Boolean).length);
+const partEmptyIndex = computed(() => partRows.value.findIndex(row => !row.trim()));
+const partEmptyHint = computed(() => partEmptyIndex.value < 0 ? "" : `第 ${partEmptyIndex.value + 1} 块还没填：空块不计入条数（当前 ${partCount.value} 条）`);
+
+watch(() => props.clip && { clipId: props.clip.clipId, partPrompts: props.clip.partPrompts }, state => {
+  const incoming = state?.partPrompts ?? [];
+  if (!state) { editingPartsClipId = ""; partRows.value = [""]; return; }
+  if (state.clipId !== editingPartsClipId) {
+    editingPartsClipId = state.clipId;
+    partRows.value = incoming.length ? incoming.map(text => String(text)) : [""];
+    return;
+  }
+  // 同一镜的外部回写（agent 改工程）同步回本地草稿；本地正在填的空块不算冲突。
+  if (JSON.stringify(incoming) !== JSON.stringify(partRows.value.map(row => row.trim()).filter(Boolean))) {
+    partRows.value = incoming.length ? incoming.map(text => String(text)) : [""];
+  }
+}, { immediate: true, deep: true });
+
+function partPatch(rows: string[]): ClipPatch {
+  const parts = rows.map(row => row.trim()).filter(Boolean);
+  return { partPrompts: parts.length ? parts : undefined };
+}
+
+function onPartInput(index: number, value: string) {
+  const rows = [...partRows.value];
+  rows[index] = value;
+  partRows.value = rows;
+  emit("patch", partPatch(rows));
+}
+
+/** 加块不发 patch：空块不计入条数，下发的值没变，等这一块填了再发。 */
+function addPart() {
+  if (partRows.value.length >= partLimit) return;
+  partRows.value = [...partRows.value, ""];
+}
+
+function removePart(index: number) {
+  const rows = partRows.value.filter((_, rowIndex) => rowIndex !== index);
+  partRows.value = rows.length ? rows : [""];
+  emit("patch", partPatch(rows));
+}
+
+/* ---- 显式续接（continueFrom）：显式任务号优先于上一镜的隐式任务号 ---- */
+const explicitJobId = ref("");
+let editingContinueClipId = "";
+
+watch(() => props.clip && { clipId: props.clip.clipId, continueFrom: props.clip.continueFrom }, state => {
+  if (!state) { editingContinueClipId = ""; explicitJobId.value = ""; return; }
+  if (state.clipId !== editingContinueClipId) {
+    editingContinueClipId = state.clipId;
+    explicitJobId.value = state.continueFrom ?? "";
+    return;
+  }
+  // 本地正在输入的原文（可能带空格）不被回写覆盖，只有外部真的改了值才同步；外部删键（null 清空）也同步清空。
+  if (state.continueFrom === undefined) {
+    if (explicitJobId.value.trim()) explicitJobId.value = "";
+    return;
+  }
+  if (state.continueFrom !== explicitJobId.value.trim()) {
+    explicitJobId.value = state.continueFrom;
+  }
+}, { immediate: true, deep: true });
+
+function onContinueFromInput(value: string) {
+  explicitJobId.value = value;
+  const trimmed = value.trim();
+  emit("patch", { continueFrom: trimmed ? trimmed : undefined });
 }
 
 /** 承接上一镜的镜头只能选轻量/标准质量（引擎限制：续接任务是 two-pass）。
@@ -276,6 +374,18 @@ function onSectionInput(key: keyof ClipPrompt, value: string) {
 .rulesSummary { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--el-border-color); border-radius: 7px; background: var(--el-bg-color); font-size: 12px; font-weight: 500; list-style: none; cursor: pointer; user-select: none; }
 .rulesSummary::-webkit-details-marker { display: none; }
 .rulesDetails[open] .rulesSummary { margin-bottom: 8px; }
+.partsDetails { margin: 0; }
+.partsSummary { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--el-border-color); border-radius: 7px; background: var(--el-bg-color); font-size: 12px; font-weight: 500; list-style: none; cursor: pointer; user-select: none; }
+.partsSummary::-webkit-details-marker { display: none; }
+.partsDetails[open] .partsSummary { margin-bottom: 8px; }
+.partsBody { display: flex; flex-direction: column; gap: 8px; }
+.partsHint { margin: 0; color: var(--el-text-color-secondary); font-size: 12px; line-height: 1.6; }
+.partRow { display: flex; flex-direction: column; gap: 4px; }
+.partRowHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.partLabel { color: var(--el-text-color-secondary); font-size: 12px; font-weight: 600; }
+.partsActions { display: flex; align-items: center; gap: 8px; }
+.partsState { color: var(--el-text-color-secondary); font-size: 12px; }
+.partsStateWarn { color: var(--el-color-warning-dark-2); }
 .pendingPanel { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--el-color-primary-light-7); border-radius: 10px; background: var(--el-color-primary-light-9); }
 .pendingHeader { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
 .pendingTitle { font-size: 13px; font-weight: 600; }

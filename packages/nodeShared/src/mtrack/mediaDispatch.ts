@@ -279,12 +279,20 @@ export async function composeClipRequest(options: {
   let continuedFrom: string | undefined;
   if (clip.continuity === "context") {
     if (!previousClip) throw new Error(`${clip.clipId} 是首镜，衔接方式不能是「承接上一镜」，请改为独立起拍`);
-    const resolved = resolveContinueFrom?.(previousClip);
-    if (!resolved?.jobId) {
-      throw new Error(`${clip.clipId} 要承接 ${previousClip.clipId}，但上一镜没有可用的生成任务号（可能还没生成成功，或那次尝试未记录任务号）。请先生成 ${previousClip.clipId}，或把本镜改为独立起拍`);
+    // ACT: 显式任务号（逐镜面板「续接自 jobId」）优先——用户点名要接哪个任务就接哪个；
+    // 留空回落到隐式链路：上一镜当前默认版本的成功任务号。
+    const explicit = clip.continueFrom?.trim();
+    if (explicit) {
+      continueFrom = explicit;
+      continuedFrom = previousClip.clipId;
+    } else {
+      const resolved = resolveContinueFrom?.(previousClip);
+      if (!resolved?.jobId) {
+        throw new Error(`${clip.clipId} 要承接 ${previousClip.clipId}，但上一镜没有可用的生成任务号（可能还没生成成功，或那次尝试未记录任务号）。请先生成 ${previousClip.clipId}，或把本镜改为独立起拍`);
+      }
+      continueFrom = resolved.jobId;
+      continuedFrom = previousClip.clipId;
     }
-    continueFrom = resolved.jobId;
-    continuedFrom = previousClip.clipId;
     // ACT: provider 的续接上限按 references 总数算（图片+视频+音频都在同一个数组里），
     // 这里必须同口径，否则「2 图 + 2 视频」能过本地校验却在 provider 侧被拒。
     if (entries.length > 3) {

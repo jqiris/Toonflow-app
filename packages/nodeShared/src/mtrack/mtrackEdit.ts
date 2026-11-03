@@ -34,10 +34,10 @@ function indexOfClip(clips: MtrackClip[], clipId: string): number {
 /** prompt 三字段浅合并，其余字段整值覆盖——对齐编辑器 onPatch。 */
 function mergePatch(clip: MtrackClip, patch: Partial<MtrackClip>): MtrackClip {
   const merged = { ...clip, ...patch, prompt: { ...clip.prompt, ...(patch.prompt ?? {}) } };
-  // ACT: seed/takes/partPrompts/whitebox/loras 的 null 是「清空回引擎默认」哨兵（node:editProject 的 patch 原样带进来，
+  // ACT: seed/takes/partPrompts/whitebox/loras/continueFrom 的 null 是「清空回引擎默认」哨兵（node:editProject 的 patch 原样带进来，
   // zod 的 nullish+transform 会把 null 转成省略键、擦不掉原值，故不走 transform）。
   // 归一为删键再进 validateClip——null 留在字段上会被各字段校验误拒。
-  for (const key of ["seed", "takes", "partPrompts", "whitebox", "loras"] as const) {
+  for (const key of ["seed", "takes", "partPrompts", "whitebox", "loras", "continueFrom"] as const) {
     if (merged[key] === null) delete merged[key];
   }
   return merged;

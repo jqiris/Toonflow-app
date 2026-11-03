@@ -74,6 +74,8 @@ export interface MtrackClip {
    * 缺键 = 本镜不额外挂 LoRA，与「显式选 0 条」语义不同，故不设默认空数组。
    */
   loras?: MediaLora[];
+  /** 显式续接任务号（上一镜成功尝试的供应商 jobId）：仅 continuity=context 时消费，优先于隐式链路；与 nodeShared MtrackClip.continueFrom 同口径，镜像归一必须透传，漏透传会让 mtrackRead 读不回、agent 回写把用户显式值清掉。 */
+  continueFrom?: string;
   prompt: MtrackClipPrompt;
   referenceIds: string[];
   continuity: string;
@@ -278,6 +280,8 @@ export function normalizeProject(value: unknown): MtrackProject {
         prompt: readPrompt(item.prompt),
         referenceIds: Array.isArray(item.referenceIds) ? item.referenceIds.filter(ref => typeof ref === "string") : [],
         continuity: index === 0 ? "shot" : (item.continuity === "context" || item.continuity === "continue" ? "context" : "shot"),
+        // continueFrom 同 seed/takes 口径透传（见 MtrackClip.continueFrom）：trim 后非空才留键，坏值/空白不带键回隐式链路。
+        ...(typeof item.continueFrom === "string" && item.continueFrom.trim() ? { continueFrom: item.continueFrom.trim() } : {}),
         // ACT: mode 是编辑器写出的真实字段，镜像归一曾经漏透传，导致 mtrackRead 读回来没有 mode（审计 F3）；
         // 非法值不猜，直接不带键，由参考数量推断。
         ...(item.mode === "ref" || item.mode === "image" || item.mode === "text" ? { mode: item.mode } : {}),
