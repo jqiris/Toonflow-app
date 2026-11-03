@@ -78,7 +78,12 @@ export async function executeRemoteFfmpeg(
         signal.throwIfAborted();
         if (queryNames.has(operation.method)) {
           // ACT: fluent 未公开查询子进程；取消后等查询回调释放文件，不等待查询不会触发的 start。
-          invoke(command, operation, [(error: unknown, data: unknown) => error ? fail(error) : finish("result", [data])]);
+          // ACT: 除 ffprobe 外查询方法只接收回调，不接收业务参数；LLM 可能把方法名误填入 args 占位回调
+          // 槽位，导致 "callback is not a function"。这里忽略畸形 args，只保留 ffprobe 的业务参数。
+          const queryCall = operation.method === "ffprobe"
+            ? operation
+            : { ...operation, args: [] };
+          invoke(command, queryCall, [(error: unknown, data: unknown) => error ? fail(error) : finish("result", [data])]);
         } else {
           invoke(command, operation);
         }
