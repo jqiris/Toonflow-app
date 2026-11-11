@@ -43,7 +43,7 @@ python scripts/configure_knowledge_base.py "<知识库根目录>" --output <项�
 
 ## 什么时候问、什么时候查
 
-新项目确认入口模式后、**生成第一份创作成果前**，若 `filmProject/referenceMemory.md` 不存在或写着"菜单未询问"，显示一次：
+新项目确认入口模式后、**生成第一份创作成果前**，若 `filmProject/referenceMemory.md` 不存在或写着"菜单未询问"，在聊天中**逐字作为文本**显示一次（禁止转写成 askUser 卡片或空输入框；回复 A/B/C 或"不要参考/直接继续"均可解析）：
 
 ```text
 【本地知识库，可选】
