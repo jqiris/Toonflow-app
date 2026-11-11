@@ -45,6 +45,7 @@
 | 「写《00-本地知识库参考记忆.md》/命名参考方法001」 | = `filmProject/referenceMemory.md` 与 13 册条目格式 |
 | 「yoko-assets」「外部下载的 skill 包」 | 无外部依赖：正式产物按 07 册（assetCards.md）、10 册（h3-vNNN.md）落盘 |
 | 「交 film-lira-assets / film-cinedance 编译」 | 交 07assetsImages.md / 10videoPrompts.md（本工程唯一 H3 口径；旧 Skill 名在本包内不作寻址目标） |
+| 「30 秒=两个独立 15 秒提示词、第二段从 0 秒重新开始」 | 旧载体限制，本工程不照搬：30 秒=**一个 clip（seconds 30）或分块长镜（partPrompts 逐块各演自己那段）**；双段方法论照用——第一段试探变招、第二段起手式/架势/重心/脚步变化后的杀招终结，作为两段 `partPrompts` 或两个相邻单元的内容要求，不拆成两份独立外部提示词 |
 
 ## 已按本项目改造的分支（引用时注意）
 
