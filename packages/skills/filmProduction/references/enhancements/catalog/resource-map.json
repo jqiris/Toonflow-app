@@ -1,0 +1,1127 @@
+{
+  "schema_version": 2,
+  "load_policy": "目录展示全部分支，功能分类与适用环节只用于查找。仅加载作者勾选的资源；所有阶段可挂载，保留稳定编号和个人分类。",
+  "entries": [
+    {
+      "id": "00-A",
+      "owner": "film-cinedance",
+      "resources": [
+        "modules/shot_grammar.md",
+        "library/general/景别速查库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "摄影与镜头",
+      "applicableStages": [
+        "04",
+        "07",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "00-B",
+      "owner": "film-cinedance",
+      "resources": [
+        "modules/shot_grammar.md",
+        "library/general/基础运镜库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "摄影与镜头",
+      "applicableStages": [
+        "04",
+        "07",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "00-C",
+      "owner": "film-cinedance",
+      "resources": [
+        "modules/shot_grammar.md",
+        "library/general/构图速查库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "摄影与镜头",
+      "applicableStages": [
+        "04",
+        "07",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "00-D",
+      "owner": "film-cinedance",
+      "resources": [
+        "modules/shot_grammar.md",
+        "library/general/布光速查库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "光色与导演风格",
+      "applicableStages": [
+        "01",
+        "07",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "00-E",
+      "owner": "film-cinedance",
+      "resources": [
+        "modules/shot_grammar.md",
+        "library/general/转场库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "摄影与镜头",
+      "applicableStages": [
+        "04",
+        "07",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "00-F",
+      "owner": "film-cinedance",
+      "resources": [
+        "modules/shot_grammar.md",
+        "library/general/运镜组合与特殊实例库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "摄影与镜头",
+      "applicableStages": [
+        "04",
+        "07",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "00-G",
+      "owner": "film-cinedance",
+      "resources": [
+        "modules/shot_grammar.md",
+        "library/general/运镜组合与特殊实例库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "摄影与镜头",
+      "applicableStages": [
+        "04",
+        "07",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "01-A",
+      "owner": "film-synopsis",
+      "resources": [
+        "library/general/作者审美锚点-念气无双.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。《念气无双》等仅是审美记录案例，不继承其人名、剧情、双系统或角色外貌。",
+      "category": "光色与导演风格",
+      "applicableStages": [
+        "01",
+        "07",
+        "09"
+      ],
+      "aliases": [
+        "保住作者自己的味道"
+      ]
+    },
+    {
+      "id": "01-B",
+      "owner": "film-synopsis",
+      "resources": [
+        "library/general/导演风格匹配库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "光色与导演风格",
+      "applicableStages": [
+        "01",
+        "07",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "01-C",
+      "owner": "film-synopsis",
+      "resources": [
+        "library/general/跨题材场景模板库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "场景与空间",
+      "applicableStages": [
+        "03",
+        "04",
+        "07",
+        "09"
+      ],
+      "aliases": [
+        "两种题材怎么结合"
+      ]
+    },
+    {
+      "id": "01-D",
+      "owner": "film-synopsis",
+      "resources": [
+        "library/general/导演视觉倾向速查.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "光色与导演风格",
+      "applicableStages": [
+        "01",
+        "07",
+        "09"
+      ],
+      "aliases": [
+        "国漫仙侠方向"
+      ]
+    },
+    {
+      "id": "01-E",
+      "owner": "film-synopsis",
+      "resources": [
+        "library/general/都市真人短剧场景库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "场景与空间",
+      "applicableStages": [
+        "03",
+        "04",
+        "07",
+        "09"
+      ],
+      "aliases": [
+        "真人短剧方向"
+      ]
+    },
+    {
+      "id": "02-A",
+      "owner": "film-characters",
+      "resources": [
+        "library/general/古风宫廷九角色设定库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "人物身份与造型",
+      "applicableStages": [
+        "02",
+        "07"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "02-B",
+      "owner": "film-characters",
+      "resources": [
+        "library/general/古风市井职业设定库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "人物身份与造型",
+      "applicableStages": [
+        "02",
+        "07"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "02-C",
+      "owner": "film-characters",
+      "resources": [
+        "library/general/古风男性角色设定库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "人物身份与造型",
+      "applicableStages": [
+        "02",
+        "07"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "02-D",
+      "owner": "film-characters",
+      "resources": [
+        "library/general/现代男性角色设定库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "人物身份与造型",
+      "applicableStages": [
+        "02",
+        "07"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "02-E",
+      "owner": "film-characters",
+      "resources": [
+        "library/general/现代都市人物造型设定库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "人物身份与造型",
+      "applicableStages": [
+        "02",
+        "07"
+      ],
+      "aliases": [
+        "都市群像区分"
+      ]
+    },
+    {
+      "id": "02-F",
+      "owner": "film-characters",
+      "resources": [
+        "library/general/女性造型提示词库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "人物身份与造型",
+      "applicableStages": [
+        "02",
+        "07"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "02-G",
+      "owner": "film-characters",
+      "resources": [
+        "modules/character-combat-identity.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "人物身份与造型",
+      "applicableStages": [
+        "02",
+        "07"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "03-A",
+      "owner": "film-worldbuilding",
+      "resources": [
+        "library/general/古风场景提示词库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "场景与空间",
+      "applicableStages": [
+        "03",
+        "04",
+        "07",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "03-B",
+      "owner": "film-worldbuilding",
+      "resources": [
+        "library/general/都市真人短剧场景库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "场景与空间",
+      "applicableStages": [
+        "03",
+        "04",
+        "07",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "03-C",
+      "owner": "film-worldbuilding",
+      "resources": [
+        "library/general/跨题材场景模板库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "场景与空间",
+      "applicableStages": [
+        "03",
+        "04",
+        "07",
+        "09"
+      ],
+      "aliases": [
+        "混合题材地点"
+      ]
+    },
+    {
+      "id": "03-D",
+      "owner": "film-worldbuilding",
+      "resources": [
+        "modules/world-power-rules.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "世界与能力规则",
+      "applicableStages": [
+        "03",
+        "04",
+        "05",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "03-E",
+      "owner": "film-worldbuilding",
+      "resources": [
+        "modules/world-power-rules.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "世界与能力规则",
+      "applicableStages": [
+        "03",
+        "04",
+        "05",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "03-F",
+      "owner": "film-worldbuilding",
+      "resources": [
+        "library/general/场景俯视图规范库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "场景与空间",
+      "applicableStages": [
+        "03",
+        "04",
+        "07",
+        "09"
+      ],
+      "aliases": [
+        "战斗空间规则"
+      ]
+    },
+    {
+      "id": "04-A",
+      "owner": "film-treatment",
+      "resources": [
+        "modules/beat_rhythm.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "创作节奏与分析",
+      "applicableStages": [
+        "04",
+        "05",
+        "06",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "04-B",
+      "owner": "film-treatment",
+      "resources": [
+        "modules/beat_rhythm.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "创作节奏与分析",
+      "applicableStages": [
+        "04",
+        "05",
+        "06",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "04-C",
+      "owner": "film-treatment",
+      "resources": [
+        "library/general/场景俯视图规范库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "场景与空间",
+      "applicableStages": [
+        "03",
+        "04",
+        "07",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "04-D",
+      "owner": "film-treatment",
+      "resources": [
+        "library/general/转场库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "创作节奏与分析",
+      "applicableStages": [
+        "04",
+        "05",
+        "06",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "04-E",
+      "owner": "film-treatment",
+      "resources": [
+        "modules/beat_rhythm.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "创作节奏与分析",
+      "applicableStages": [
+        "04",
+        "05",
+        "06",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "04-F",
+      "owner": "film-treatment",
+      "resources": [
+        "library/general/拉片参考片拆解路由.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "创作节奏与分析",
+      "applicableStages": [
+        "04",
+        "05",
+        "06",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "05-A",
+      "owner": "film-screenplay",
+      "resources": [
+        "library/general/台词口播去AI味库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "对白与声音",
+      "applicableStages": [
+        "05",
+        "08",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "05-B",
+      "owner": "film-screenplay",
+      "resources": [
+        "library/general/配音语气提示词库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "对白与声音",
+      "applicableStages": [
+        "05",
+        "08",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "05-C",
+      "owner": "film-screenplay",
+      "resources": [
+        "library/general/一致性硬控三锁库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。一致性按作者实际资产和镜头状态核对；不强制每镜垫图或尾帧接首帧，不删除完整人物描述符，也不冻结剧情本来需要的变化。",
+      "category": "连续性与一致性",
+      "applicableStages": [
+        "04",
+        "07",
+        "08",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "05-D",
+      "owner": "film-screenplay",
+      "resources": [
+        "library/general/动作专题库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "表演与动作",
+      "applicableStages": [
+        "05",
+        "08",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "05-E",
+      "owner": "film-screenplay",
+      "resources": [
+        "library/general/各系技能特效库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "打斗与特效",
+      "applicableStages": [
+        "03",
+        "05",
+        "08",
+        "09"
+      ],
+      "aliases": [
+        "大招必须推动剧情"
+      ]
+    },
+    {
+      "id": "05-F",
+      "owner": "film-screenplay",
+      "resources": [
+        "library/general/真人感去AI味提示词库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。真人/UGC素材按本项目需要取用，不把手机实拍、带货、混合光或杂乱背景强加给所有作品，保留白底设定图。",
+      "category": "真人与画面质感",
+      "applicableStages": [
+        "07",
+        "08",
+        "09"
+      ],
+      "aliases": [
+        "真人表演质感"
+      ]
+    },
+    {
+      "id": "07-A",
+      "owner": "film-lira-assets",
+      "resources": [
+        "modules/reference-art.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。参考图数量、视图与画幅以作者选择为准，不强制2×2、3:2或其他旧版固定版式。",
+      "category": "人物身份与造型",
+      "applicableStages": [
+        "02",
+        "07"
+      ],
+      "aliases": [
+        "角色 2×2 身份卡"
+      ]
+    },
+    {
+      "id": "07-B",
+      "owner": "film-lira-assets",
+      "resources": [
+        "../../07assetsImages.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "场景与空间",
+      "applicableStages": [
+        "03",
+        "04",
+        "07",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "07-C",
+      "owner": "film-lira-assets",
+      "resources": [
+        "library/general/image2故事板与一致性库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。一致性按作者实际资产和镜头状态核对；不强制每镜垫图或尾帧接首帧，不删除完整人物描述符，也不冻结剧情本来需要的变化。",
+      "category": "连续性与一致性",
+      "applicableStages": [
+        "04",
+        "07",
+        "08",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "07-D",
+      "owner": "film-lira-assets",
+      "resources": [
+        "library/general/image2白模草图画线玩法库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "白模与分镜预演",
+      "applicableStages": [
+        "04",
+        "07",
+        "08",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "07-E",
+      "owner": "film-lira-assets",
+      "resources": [
+        "library/general/构图速查库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "摄影与镜头",
+      "applicableStages": [
+        "04",
+        "07",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "07-F",
+      "owner": "film-lira-assets",
+      "resources": [
+        "library/general/布光速查库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "光色与导演风格",
+      "applicableStages": [
+        "01",
+        "07",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "07-G",
+      "owner": "film-lira-assets",
+      "resources": [
+        "library/general/真实质感提示词库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "真人与画面质感",
+      "applicableStages": [
+        "07",
+        "08",
+        "09"
+      ],
+      "aliases": [
+        "真人感"
+      ]
+    },
+    {
+      "id": "07-H",
+      "owner": "film-lira-assets",
+      "resources": [
+        "library/general/古风场景提示词库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "场景与空间",
+      "applicableStages": [
+        "03",
+        "04",
+        "07",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "07-I",
+      "owner": "film-lira-assets",
+      "resources": [
+        "library/general/静图微动决策库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "视频生成与返修",
+      "applicableStages": [
+        "07",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "07-J",
+      "owner": "film-lira-assets",
+      "resources": [
+        "visual/directorStyle.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "光色与导演风格",
+      "applicableStages": [
+        "01",
+        "07",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "08-A",
+      "owner": "film-acting",
+      "resources": [
+        "library/general/表演微表情库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "表演与动作",
+      "applicableStages": [
+        "05",
+        "08",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "08-B",
+      "owner": "film-acting",
+      "resources": [
+        "library/general/情绪表达提示词库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "表演与动作",
+      "applicableStages": [
+        "05",
+        "08",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "08-C",
+      "owner": "film-acting",
+      "resources": [
+        "library/general/台词口播去AI味库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "对白与声音",
+      "applicableStages": [
+        "05",
+        "08",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "08-D",
+      "owner": "film-acting",
+      "resources": [
+        "library/general/配音语气提示词库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "对白与声音",
+      "applicableStages": [
+        "05",
+        "08",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "08-E",
+      "owner": "film-acting",
+      "resources": [
+        "library/general/声音配乐库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "对白与声音",
+      "applicableStages": [
+        "05",
+        "08",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "08-F",
+      "owner": "film-acting",
+      "resources": [
+        "library/general/动作专题库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "表演与动作",
+      "applicableStages": [
+        "05",
+        "08",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "08-G",
+      "owner": "film-acting",
+      "resources": [
+        "library/general/真人感去AI味提示词库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。真人/UGC素材按本项目需要取用，不把手机实拍、带货、混合光或杂乱背景强加给所有作品，保留白底设定图。",
+      "category": "真人与画面质感",
+      "applicableStages": [
+        "07",
+        "08",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "09-A",
+      "owner": "film-cinedance",
+      "resources": [
+        "modules/director.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "摄影与镜头",
+      "applicableStages": [
+        "04",
+        "07",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "09-B",
+      "owner": "film-cinedance",
+      "resources": [
+        "modules/narrative-storyboard-handoff.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。一致性按作者实际资产和镜头状态核对；不强制每镜垫图或尾帧接首帧，不删除完整人物描述符，也不冻结剧情本来需要的变化。",
+      "category": "连续性与一致性",
+      "applicableStages": [
+        "04",
+        "07",
+        "08",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "09-C",
+      "owner": "film-cinedance",
+      "resources": [
+        "library/general/调度分镜图规范库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。一致性按作者实际资产和镜头状态核对；不强制每镜垫图或尾帧接首帧，不删除完整人物描述符，也不冻结剧情本来需要的变化。",
+      "category": "连续性与一致性",
+      "applicableStages": [
+        "04",
+        "07",
+        "08",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "09-D",
+      "owner": "film-cinedance",
+      "resources": [
+        "library/general/故事分镜图规范库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "白模与分镜预演",
+      "applicableStages": [
+        "04",
+        "07",
+        "08",
+        "09"
+      ],
+      "aliases": [
+        "动作镜头设计"
+      ]
+    },
+    {
+      "id": "09-E",
+      "owner": "film-cinedance",
+      "resources": [
+        "modules/shot_grammar.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "摄影与镜头",
+      "applicableStages": [
+        "04",
+        "07",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "09-F",
+      "owner": "film-cinedance",
+      "resources": [
+        "library/general/静图微动决策库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "视频生成与返修",
+      "applicableStages": [
+        "07",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "09-G",
+      "owner": "film-cinedance",
+      "resources": [
+        "library/general/导演审片返修库.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "视频生成与返修",
+      "applicableStages": [
+        "07",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "09-H",
+      "owner": "film-cinedance",
+      "resources": [
+        "modules/combat.md",
+        "modules/combat-execution.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "打斗与特效",
+      "applicableStages": [
+        "03",
+        "05",
+        "08",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "09-I",
+      "owner": "film-cinedance",
+      "resources": [
+        "modules/combat.md",
+        "modules/combat-execution.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "打斗与特效",
+      "applicableStages": [
+        "03",
+        "05",
+        "08",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "09-J",
+      "owner": "film-cinedance",
+      "resources": [
+        "modules/combat.md",
+        "modules/combat-execution.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "打斗与特效",
+      "applicableStages": [
+        "03",
+        "05",
+        "08",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "09-K",
+      "owner": "film-cinedance",
+      "resources": [
+        "modules/combat.md",
+        "modules/combat-execution.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "打斗与特效",
+      "applicableStages": [
+        "03",
+        "05",
+        "08",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "09-L",
+      "owner": "film-cinedance",
+      "resources": [
+        "modules/combat.md",
+        "modules/combat-execution.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "打斗与特效",
+      "applicableStages": [
+        "03",
+        "05",
+        "08",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "09-M",
+      "owner": "film-cinedance",
+      "resources": [
+        "library/combat/打戏生成自检清单.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "打斗与特效",
+      "applicableStages": [
+        "03",
+        "05",
+        "08",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "09-N",
+      "owner": "film-cinedance",
+      "resources": [
+        "modules/ultimate.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "打斗与特效",
+      "applicableStages": [
+        "03",
+        "05",
+        "08",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "09-O",
+      "owner": "film-cinedance",
+      "resources": [
+        "modules/ultimate.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "打斗与特效",
+      "applicableStages": [
+        "03",
+        "05",
+        "08",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "09-P",
+      "owner": "film-cinedance",
+      "resources": [
+        "modules/ultimate.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。正式视频提示词由09按已选模型编译。",
+      "category": "打斗与特效",
+      "applicableStages": [
+        "03",
+        "05",
+        "08",
+        "09"
+      ],
+      "aliases": []
+    },
+    {
+      "id": "09-Q",
+      "owner": "film-cinedance",
+      "resources": [
+        "../../10videoPrompts.md"
+      ],
+      "boundary": "分支编号和适用环节仅作目录定位，作者可在任意阶段手动挂载。只给当前任务提供方法，不自动切换阶段、改写已采用事实或提交生成；当前专业Skill和作者本轮指令优先。本工程多轨链路只接 MiniMax-H3：本分支仅作他模型格式的比较参考，不产出正式视频提示词；正式提示词唯一按 10 册 H3 六段编译。",
+      "category": "视频生成与返修",
+      "applicableStages": [
+        "07",
+        "09"
+      ],
+      "aliases": []
+    }
+  ]
+}
