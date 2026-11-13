@@ -150,6 +150,8 @@ interface ImageRequest extends MediaRequest {
   quality?: string;
   /** 输出编码格式，如 png、jpeg、webp。 */
   outputFormat?: string;
+  /** 随机种子；未传时由供应商/引擎决定。同种子 + 同提示词 ≈ 同结果，重 roll 保住满意的图。 */
+  seed?: number;
   /** LoRA：引擎上限 8 条，strength ∈ [-2, 2]，缺省 1。 */
   loras?: MediaLora[];
 }

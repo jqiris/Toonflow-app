@@ -12,7 +12,7 @@
       :codeOptions="codeOptions"
       :linkOptions="{ safetyCheck: false }"
       :cdnOptions="cdnOptions"
-      :components="markdownOverlays"
+      :components="markdownComponents"
       :nodeRenderers="nodeRenderers"
       :postnormalize="resolveImageReferences"
       :parseMarkdownIntoBlocks="definitions ? keepChunk : undefined"
@@ -29,11 +29,14 @@ import "vue-stream-markdown/index.css";
 import "vue-stream-markdown/theme.css";
 import markdownOverlays from "./markdownOverlays";
 import markdownImage from "./markdownImage.vue";
+import eagerImage from "./eagerImage.vue";
 import { markdownLocale } from "@/lib/i18n";
 
 const { content, streaming = false, codeOptions, directory } = defineProps<{ content: string; streaming?: boolean; codeOptions?: CodeOptions; directory?: string }>();
 const renderImage = (image: ImageNodeRendererProps) => h(markdownImage, { image, directory: directory! });
 const nodeRenderers = computed(() => directory ? { image: renderImage, link: renderLink } : {});
+// ACT: 覆盖库默认 Image（其 <img> 写死 loading="lazy" 导致虚拟化列表里 load 事件被推迟、转圈不消失），改用 eagerImage。
+const markdownComponents = { ...markdownOverlays, Image: eagerImage };
 const shikiOptions: ShikiOptions = { theme: ["github-light", "github-dark"] };
 const cdnOptions = { shiki: false } as const;
 const keepChunk = (value: string) => [value];

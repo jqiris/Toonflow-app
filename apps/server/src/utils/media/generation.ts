@@ -155,6 +155,9 @@ async function prepareRequest<T>(directory: string | undefined, mediaType: "imag
   };
   if (mediaType === "image") return {
     type: "image" as const, model: request.modelId, prompt: request.prompt, images, ratio: request.ratio, size: request.size,
+    // ACT: quality/seed 原本只给视频透传，图片侧被丢掉，供应商就只能自己猜档位（FreeVideo 因此一度把 high 写死）。
+    ...(request.quality ? { quality: request.quality } : {}),
+    ...(request.seed !== undefined ? { seed: request.seed } : {}),
     ...(label ? { label } : {}),
     ...(request.loras?.length ? { loras: request.loras } : {}),
   };

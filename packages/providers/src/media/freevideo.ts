@@ -91,6 +91,38 @@ function imageDimensions(ratio?: string, size?: string) {
   };
 }
 
+/** 引擎 kind=image 认的图片模型名（0.5.3 schema 枚举）：本供应商的模型 id 与引擎同名，直接透传；
+ *  历史 id freevideo-image 不在表内，照旧不发 model，由引擎用它自己选定的已装模型。 */
+const imageModels: Record<string, string> = { "qwen-image-2.1-turbo": "qwen-image-2.1-turbo", "minimax-h3-image": "minimax-h3-image" };
+// ACT: 引擎 aspect 只有这五档（2:3 不在内，只能走 width/height），且 aspect 与 width/height 互斥（schema if-then 硬约束）。
+const imageAspects = ["1:1", "16:9", "9:16", "4:3", "3:4"];
+/** H3 Image 的画质档位→像素预算（引擎文档：standard 约 4 MP、high 约 16 MP，仅 Qwen 之外的 H3 生效）。 */
+const imageTierPixels: Record<string, number> = { standard: 4, high: 16 };
+/** 省略 quality 时的档位：MiniMax-H3 图像是成片资产模型，默认取最高档；要草稿由调用方显式传 standard。 */
+const imageDefaultTier = "high";
+/** 省略 size 时按模型声明的第一档走——否则 imageDimensions 会掉到 1024 底档，
+ *  而 Qwen 是唯一按 size 取像素的默认模型（画布节点同样取声明档，见 07assetsImages.md 的映射表）。 */
+const imageDefaultSize: Record<string, string> = { "qwen-image-2.1-turbo": "2K" };
+const imageMaxSide = 4096; // 引擎 limits.width / limits.height = [256, 4096, 32]
+
+/** 画质档位由调用方决定（画布节点 quality、MCP generateImage 的 quality）；只有非法值才报错，不在这里写死策略。 */
+function imageTier(value: string | undefined) {
+  const tier = (value ?? "").trim().toLowerCase() || imageDefaultTier;
+  if (!imageTierPixels[tier]) throw new Error(`MiniMax-H3 图像的画质档位只支持 ${Object.keys(imageTierPixels).join("、")}（省略按 ${imageDefaultTier}）`);
+  return tier;
+}
+
+/** 比例不在引擎 aspect 档内（角色四视图 2:3 等）：按档位像素预算推边长，受每边 4096 上限回缩，32 下对齐。 */
+function tierImageDimensions(ratio: string, tier: string) {
+  const [rw, rh] = ratio.split(":").map(Number);
+  if (!rw || !rh) return { width: imageMaxSide, height: imageMaxSide };
+  const budget = imageTierPixels[tier] * 1000 * 1000;
+  // ACT: 两个约束取小的那个——像素预算与最长边 4096；只夹一条边会把比例拉歪。
+  const scale = Math.min(Math.sqrt(budget / (rw * rh)), imageMaxSide / Math.max(rw, rh));
+  const align = (value: number) => Math.max(256, Math.floor(value / 32) * 32);
+  return { width: align(rw * scale), height: align(rh * scale) };
+}
+
 /** 代号前缀→资产/镜头类型：任务名以它开头，如「角色-C01-20261024-2355」。 */
 // ACT: 已知冲突——assetCard 契约里 S = 声音卡，这里 S 映射为分镜（镜头编号 S011）。
 // 声音卡是 textOnly 资产，不出图不进本供应商，现状不会触发歧义；若以后让声音卡走图像生成，必须先重命名其中一个口径。
@@ -473,7 +505,7 @@ export default {
 - 支持随机种子（seed）：同种子 + 同提示词 ≈ 同结果，重 roll 时保住不漂移的镜头；留空由引擎自定。
 - 显存管理：批次最后一个任务出片后自动释放显存；空闲时也可主动释放（引擎正在生成时不释放）。
 - 取消生成会同时取消本机任务（引擎侧真停，不再白跑 GPU）；页面断开不会取消，本机任务照常跑完保留产物。
-- 图像：文生图 / 单参考 / 多参考（最多 4 张），1K / 2K。
+- 图像：文生图 / 单参考 / 多参考（最多 4 张），支持 seed 复现同图。默认模型 Qwen Image 2.1（按 size 出像素，2K 为成片档）；要大画幅定稿选 MiniMax-H3 图像并用 quality 选档（high≈16 MP 成片、standard≈4 MP 草稿，省略按 high，此时 size 不参与换算）；FreeVideo 图像是老口径（不发模型名，由引擎选已装模型，1K / 2K）。
 - 生成耗时为分钟级（本机 GPU），请耐心等待。`,
   rules,
   models: [
@@ -488,13 +520,43 @@ export default {
       durationResolutionMap: [{ duration: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60], resolution: ["768P", "2K"] }],
     },
     {
+      // ACT: qwen-image-2.1-turbo 与引擎 kind=image 的 model 枚举同名（见 generateImage 的 imageModels 透传），
+      // 排在图片区第一位作为默认图片模型；引擎侧 Qwen 不吃 tier，像素走 width/height（size 档位）。
+      id: "qwen-image-2.1-turbo",
+      label: "Qwen Image 2.1 图像（本地 FreeVideo）",
+      type: "image",
+      mode: ["text", "singleImage", "multiReference"],
+      // ACT: 只留 2K 一档是给画布下拉框占位——imageGenerationNode 会把未设置的档位预选为数值最小档（:193），
+      // 列 1K 等于给默认值挂个误导标签；不传 size 的调用（assetImport 非角色卡等）由 imageDefaultSize 补成 2K，
+      // 想出快档显式传 size:"1K"（服务端不校验档位表，供应商照算）。
+      imageSizes: ["2K"],
+      // ACT: 2:3 是角色四视图整版（2×2 竖版）的标准档位，实测引擎接受 width/height 直给。
+      // 引擎侧上限是每边 4096（旧记录里的 2048 来自 0.4.x 引擎，已过时），本模型按 size 档位推到 2048 封顶。
+      imageRatios: ["1:1", "16:9", "9:16", "4:3", "3:4", "2:3"],
+    },
+    {
+      // ACT: 高像素档：约 4 MP（standard）/ 16 MP（high），像素由 quality 决定、size 不参与换算。
+      // 与 qwen-image-2.1-turbo 同为引擎 kind=image 的 model 枚举名；freevideo-image 不发 model，保留兼容历史配置。
+      id: "minimax-h3-image",
+      label: "MiniMax-H3 图像（本地 FreeVideo）",
+      type: "image",
+      mode: ["text", "singleImage", "multiReference"],
+      // ACT: 本模型的像素由 quality 档位决定（standard≈4 MP、high≈16 MP，省略按 high），size 不参与换算；
+      // 这里只留 2K 一档是给画布下拉框占位——imageGenerationNode 会把未设置的档位预选为数值最小档（:193），
+      // 列 1K 等于给默认值挂个误导标签。要快档请显式传 quality:"standard"。
+      imageSizes: ["2K"],
+      // ACT: 2:3 是角色四视图整版（2×2 竖版）的标准档位，实测引擎接受 width/height 直给；它不在引擎 aspect 五档内，
+      // 由 tierImageDimensions 按档位像素预算推边长。引擎侧上限是每边 4096（旧记录里的 2048 来自 0.4.x 引擎，已过时）。
+      imageRatios: ["1:1", "16:9", "9:16", "4:3", "3:4", "2:3"],
+    },
+    {
       id: "freevideo-image",
       label: "FreeVideo 图像（本地）",
       type: "image",
       mode: ["text", "singleImage", "multiReference"],
       imageSizes: ["1K", "2K"],
-      // ACT: 2:3 是角色四视图整版（2×2 竖版）的标准档位，实测引擎接受 width/height 直给（832×1248 等）；
-      // 其余四档是历史基线。新增档位只影响 imageDimensions 推算，引擎侧上限仍是每边 2048。
+      // ACT: 2:3 是角色四视图整版（2×2 竖版）的标准档位，实测引擎接受 width/height 直给；它不在引擎 kind=image 的 aspect 五档内。
+      // 本模型不发 model/tier（沿用引擎自选的已装模型，1K 为快档）；引擎侧上限是每边 4096（旧记录里的 2048 来自 0.4.x 引擎，已过时）。
       imageRatios: ["1:1", "16:9", "9:16", "4:3", "3:4", "2:3"],
     },
   ] satisfies ProviderModel[],
@@ -564,14 +626,25 @@ export default {
     const images: string[] = [];
     for (const image of submittedImages) images.push(await upload(this, token, agent, image, signal));
 
-    const { width, height } = imageDimensions(request.ratio, request.size);
+    // ACT: 画质档位不写死在供应商里——调用方（画布图片节点、MCP generateImage）传 quality 就照它走，
+    // 省略才用 imageDefaultTier；比例在引擎 aspect 五档内只发 aspect（像素交给引擎按档位取），
+    // 2:3 这类不在档内的用 tierImageDimensions 按档位预算推边长。size 对 H3 图像不生效（像素由档位决定）。
+    // ACT: tier 只对 MiniMax-H3 图像有意义（引擎文档 "Not used by Qwen"）；默认的 Qwen 与老口径 freevideo-image
+    // 都按 size 推 width/height，传了 quality 也不发 tier，档位引导见 packages/skills/filmProduction/references/07assetsImages.md。
+    // Qwen 省略 size 时补声明档 2K（见 imageDefaultSize），否则 assetImport 非角色卡那类不传 size 的调用会掉到 1024 底档。
+    const engineModel = imageModels[request.model];
+    const tier = engineModel === "minimax-h3-image" ? imageTier(request.quality) : "";
+    const useAspect = !!tier && !!request.ratio && imageAspects.includes(request.ratio);
+    const dimensions = tier ? tierImageDimensions(request.ratio ?? "1:1", tier) : imageDimensions(request.ratio, request.size ?? imageDefaultSize[request.model ?? ""]);
     const { job } = await runJob(this, token, agent, {
       kind: "image",
       label: jobLabel(request, "image"),
       ref: makeRef('img', request),
       prompt: request.prompt,
-      width,
-      height,
+      ...(useAspect ? { aspect: request.ratio } : dimensions),
+      ...(engineModel ? { model: engineModel } : {}),
+      ...(tier ? { tier } : {}),
+      ...(typeof request.seed === "number" ? { seed: request.seed } : {}),
       ...(images.length ? { images } : {}),
       ...(loras.length ? { loras: loras.map(l => ({ name: l.name, strength: l.strength ?? 1, enabled: true })) } : {}),
     }, signal);
@@ -579,7 +652,11 @@ export default {
     const url = result.url ?? result.file;
     if (typeof url !== "string" || !url) throw new Error("未返回生成结果");
     const data = await download(this, token, origin, url, signal);
-    return [{ mediaType: "image", type: "binary", data, mimeType: "image/png" }];
+    // ACT: 引擎按档位回不同容器——high 档实测回 .jpg（4736×3552），旧档回 .png；mimeType 跟着结果文件后缀走，
+    // 否则 apps/server/src/utils/media/generation.ts 的 mime→扩展名映射会把 JPEG 字节存成 .png，
+    // 下游 mediaDispatch.mimeOf 再按扩展名读回成 image/png，供应商就拿错类型收素材。
+    const mimeType = /\.jpe?g$/i.test(String(result.file ?? "")) ? "image/jpeg" : "image/png";
+    return [{ mediaType: "image", type: "binary", data, mimeType }];
   },
   async generateVideo(request: VideoRequest): Promise<MediaAsset[]> {
     const token = this.config.apiKey?.trim();

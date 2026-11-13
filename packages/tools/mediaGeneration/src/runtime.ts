@@ -38,6 +38,14 @@ export const listMediaModelsSchema = z.strictObject({});
 export const imageGenerationSchema = z.strictObject({
   ...sharedFields,
   size: z.string().trim().min(1).max(64).optional(),
+  /**
+   * 画质档位；供应商按模型能力校验，省略时走供应商默认。只对按档位取像素的模型有意义：
+   * 本机 FreeVideo 选 minimax-h3-image 时 standard 约 4 MP 适合草稿迭代、high 约 16 MP 适合大画幅成片（省略按 high）；
+   * 默认图片模型 qwen-image-2.1-turbo 不看档位，像素由 size 决定（引擎文档：Qwen 不用 tier）。
+   */
+  quality: z.string().trim().min(1).max(64).optional(),
+  /** 随机种子：同种子 + 同提示词 ≈ 同结果，重 roll 时保住满意的图。 */
+  seed: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
   loras: imageLoras,
 });
 export const videoGenerationSchema = z.strictObject({
