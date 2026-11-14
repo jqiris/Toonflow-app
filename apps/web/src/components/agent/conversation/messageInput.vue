@@ -280,6 +280,7 @@ async function restoreTextAttachment(index: number) {
   try {
     const text = await readTextAttachment(attachment, props.directory);
     if (sender !== instance || !props.active || props.disabled || !draftAttachments.value.includes(attachment)) return;
+    if (text.length > 100000) return void ElMessage.warning("文本过长，不还原到输入框，请让 Agent 按附件读取");
     instance.focus("last");
     await instance.setText(`${instance.isEmpty(false) ? "" : "\n"}${text}`);
     if (sender === instance) draftAttachments.value = draftAttachments.value.filter(item => item !== attachment);
@@ -361,10 +362,6 @@ function addAttachments(files: File[]) {
     }
     if (!file.size || file.size > 100 * 1024 * 1024) {
       ElMessage.warning("附件不能为空且不能超过 100 MB");
-      continue;
-    }
-    if (mimeType === "text/plain" && file.size > 400000) {
-      ElMessage.warning("文本附件不能超过 400000 字节");
       continue;
     }
     if (draftAttachments.value.length >= 20) {

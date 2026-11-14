@@ -358,10 +358,6 @@ function addAttachments(files: File[]) {
       ElMessage.warning("附件不能为空且不能超过 100 MB");
       continue;
     }
-    if (mimeType === "text/plain" && file.size > 400000) {
-      ElMessage.warning("文本附件不能超过 400000 字节");
-      continue;
-    }
     if (promptAttachments.value.length >= 20) {
       ElMessage.warning("每条消息最多添加 20 个附件");
       break;
@@ -377,6 +373,7 @@ async function restoreAttachment(index: number) {
     const text = await readTextAttachment(attachment);
     const currentIndex = promptAttachments.value.indexOf(attachment);
     if (currentIndex < 0 || creating.value || opening.value) return;
+    if (text.length > 100000) return void ElMessage.warning("文本过长，不还原到输入框，请让 Agent 按附件读取");
     prompt.value += `${prompt.value ? "\n" : ""}${text}`;
     promptAttachments.value.splice(currentIndex, 1);
     await nextTick();
