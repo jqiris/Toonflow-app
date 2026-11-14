@@ -14,9 +14,9 @@
 
 **库进工作区降级（app 内可用的第二条路）**：若用户愿意把知识库（或其精选子集，如只拷 05/06/08 三个分类）放进当前工作区（例如 `<项目>/knowledgeLibrary/`），app 内会话就能用工作区读文件工具**直接按目录浏览+分段读取**替代脚本：先用 `knowledgeCatalog.csv`（同在库内，工作区可读）按书名/分类筛候选 → 打开候选 MD 的命中章节读短证据 → 按两轮制的候选卡/证据卡格式手工登记。此路径慢于索引检索、召回低于分词，适合"点名某本书/某个分类"的场景；**证据标准不降**：仍必须报真实路径+章节/页锚点+短原文，禁止凭文件名或记忆写结论。库不在工作区时不假装能读——报告缺项并给出下面两条之一：请用户把库放入工作区，或在有脚本能力的会话跑检索后把结果写回 `filmProject/knowledge/`。
 
-**工作区外降级路径（app 内可用，优先推荐）**：知识检索的成果物一律写回工作区，创作会话只读工作区文件。因此在有脚本能力的会话里跑完两轮后，把 `profile/candidates/reference` 三类文件写进项目的 `filmProject/knowledge/`；换到 app 内继续创作时，13 册的"各阶段沿用规则"照常执行——**`referenceMemory.md` 与知识卡在工作区内，就是跨运行时的唯一事实源**。需要新检索时，app 内会话输出这句交接即可："在能执行脚本的会话中运行 `python scripts/retrieve_stage_sources.py --profile <阶段>-profile.json --config filmProject/knowledgeBase.json --output <阶段>-candidates.md`，把结果放回项目 `filmProject/knowledge/`。"
+**工作区外降级路径（app 内可用，优先推荐）**：知识检索的成果物一律写回工作区，创作会话只读工作区文件。因此在有脚本能力的会话里跑完两轮后，把 `profile/candidates/reference` 三类文件写进项目的 `filmProject/knowledge/`；换到 app 内继续创作时，13 册的"各阶段沿用规则"照常执行——**`referenceMemory.md` 与知识卡在工作区内，就是跨运行时的唯一事实源**。需要新检索时，app 内会话输出这句交接即可："在能执行脚本的会话中运行 `python scripts/retrieve_stage_sources.py --profile <阶段>-profile.json --config <技能安装根>/knowledgeBase.json --output <阶段>-candidates.md`，把结果放回项目 `filmProject/knowledge/`。"（`<技能安装根>` 用 `available_skills` 里本技能 `location` 的父目录展开成绝对路径再交给脚本。）
 
-配置与脚本位置：脚本随本技能分发（`<技能安装根>/scripts/`——**用 skillOperator list/read 定位实际安装路径，脚本不在项目工作区，也不在 `packages/skills/...` 源码路径**；检索与配置的输入输出文件用绝对路径显式传参，画像与成果落项目 `filmProject/knowledge/`）。脚本配置搜索顺序：`--config` 显式指定（缺文件即报错不回落）→ 从当前目录向上探测的项目配置 → 环境变量 → 技能根 `scripts/` 目录。`filmProject/knowledgeBase.json` 记录库根目录（工作区外的绝对路径，脚本可读、工作区文件工具不可读——这是预期行为，不是缺文件）。
+配置与脚本位置：脚本与库根配置都随本技能分发在 `<技能安装根>` 下（`<技能安装根>/scripts/`，`<技能安装根>/knowledgeBase.json` 记录库根目录）——定位实际安装路径：本轮有 skillOperator 时用 `action=list` 查技能目录；没有 skillOperator 时从 `available_skills` 取本技能条目的 `location`，其父目录即 `<技能安装根>`，用 `read`（只读已放行技能目录）打开 `knowledgeBase.json`。脚本、库根配置都不在项目工作区，也不在 `packages/skills/...` 源码路径。检索画像与知识卡落项目 `filmProject/knowledge/`——这些是**可重建产物**（项目重建后重跑检索即可），唯独**库根配置必须留在技能安装根**：项目文件会被重新创建，把库根只写进项目就会丢。库根配置搜索顺序（与 `retrieve_stage_sources.py` 一致）：`--config` 显式指定（缺文件即报错不回落）→ 从当前目录向上探测的项目覆盖 `filmProject/knowledgeBase.json` → 环境变量 `AI_FILM_KNOWLEDGE_CONFIG` → 技能安装根 `knowledgeBase.json`（**兜底底座，项目没配或重建丢失时命中这里**）。
 
 ## 库在哪、怎么配
 
@@ -33,13 +33,13 @@
 
 配套库：知识库根目录**同级**的 `directorStyleLibrary`（导演风格与色卡，10 类风格包，默认在 `Documents\AI STUDIO洋子AI电影工作流\` 下）——只在 07/09 需要视觉方向参考时按用户选定挂载，最多取 3 份，不把整库塞进上下文。方法见 [14enhancements](14enhancements.md) 的 07-J 条目与 `enhancements/visual/directorStyle.md`；同样受上面的运行时判定约束（app 内读取需该文件夹已放进工作区）。
 
-**配置事实源**：脚本读 `filmProject/knowledgeBase.json`（项目级），其次 `scripts/knowledge-base-template.json` 同目录的用户配置。首次使用：
+**配置事实源**：库根目录记在 `<技能安装根>/knowledgeBase.json`——这是 `configure_knowledge_base.py` 的默认输出位置，属于技能安装数据，跨项目持久、项目重建或新建都不会丢。首次使用在有脚本能力的会话里运行（不带 `--output` 即写技能安装根）：
 
 ```bash
-python scripts/configure_knowledge_base.py "<知识库根目录>" --output <项目>/filmProject/knowledgeBase.json
+python scripts/configure_knowledge_base.py "<知识库根目录>"
 ```
 
-之后所有检索脚本用 `--config` 指这份 JSON。不要求用户手工编辑 JSON；未配置时先只让用户选一次根目录，绝不预填作者盘符。
+之后所有检索脚本用 `--config <技能安装根>/knowledgeBase.json` 指这份 JSON；app 内会话（无脚本）用 `read` 打开同一路径取库根，再用已放开的只读能力读库内文件。项目内**可以**另放一份 `filmProject/knowledgeBase.json` 作为本项目的覆盖，但技能安装根那份始终是底座：项目重建把覆盖丢了，会自动回退到技能安装根配置，不需要重新选库。不要求用户手工编辑 JSON；未配置时先只让用户选一次根目录，绝不预填作者盘符。
 
 ## 什么时候问、什么时候查
 
