@@ -26,7 +26,8 @@ export function createAgentToolContext(cwd: string, config: Record<string, unkno
     requireWorkspace();
     const absolute = resolve(cwd, path);
     const root = readOnly && isWithin(skillsDirectory, absolute) ? skillsDirectory : cwd;
-    return (await resolveWorkspacePath(root, relative(root, absolute), true)).path;
+    // ACT: readOnly 同时放开工作区外读（如知识库目录）；写操作不传 readOnly，仍锁工作区。
+  return (await resolveWorkspacePath(root, relative(root, absolute), true, readOnly)).path;
   };
   const withWritePaths = async (paths: string[], operation: (targets: string[]) => Promise<void>) => {
     const targets = await Promise.all(paths.map(path => resolvePath(path)));

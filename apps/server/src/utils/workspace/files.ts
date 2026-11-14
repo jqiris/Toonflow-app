@@ -64,9 +64,17 @@ export async function resolveWorkspaceFile(req: Request, directory: string, path
   return resolveWorkspacePath(root, path);
 }
 
-export async function resolveWorkspacePath(root: string, path: string, allowMissingParents = false) {
-  if (isAbsolute(path) || path.split(/[\\/]/).some(part => part === ".." || /[<>:"|?*\x00-\x1f]/.test(part)
-    || (process.platform === "win32" && part !== "." && (/[. ]$/.test(part) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part))))) {
+export async function resolveWorkspacePath(root: string, path: string, allowMissingParents = false, allowOutsideRead = false) {
+  const isAbsolutePath = isAbsolute(path);
+  const parts = path.split(/[\\/]/);
+  // win32 绝对路径的盘符段（如 "C:"）不视为非法冒号
+  const checkParts = process.platform === "win32" && isAbsolutePath && /^[a-zA-Z]:$/.test(parts[0] ?? "") ? parts.slice(1) : parts;
+  const hasInvalid = checkParts.some(part => /[<>:"|?*\x00-\x1f]/.test(part)
+    || (process.platform === "win32" && part !== "." && part !== ".." && (/[. ]$/.test(part) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part))));
+  const hasTraversal = parts.some(part => part === "..");
+  // ACT: 默认拒绝绝对路径与越界段；allowOutsideRead 仅用于明确的读操作（如 agent 读工作区外知识库），
+  // 放宽绝对路径与越界段，但非法字符与 win32 保留名始终拒绝。写操作不得传入该参数。
+  if (hasInvalid || (!allowOutsideRead && (isAbsolutePath || hasTraversal))) {
     throw Object.assign(new Error("文件路径无效"), { status: 400 });
   }
   const target = resolve(root, path);
@@ -77,7 +85,7 @@ export async function resolveWorkspacePath(root: string, path: string, allowMiss
     while (!(await lstat(parent).catch((err: NodeJS.ErrnoException) => { if (err.code === "ENOENT") return null; throw err; }))) parent = dirname(parent);
   }
   const actual = info ? await realpath(target) : resolve(await realpath(parent), relative(parent, target));
-  if (!isWithin(root, actual)) throw Object.assign(new Error("只能操作当前工作区内的文件"), { status: 403 });
+  if (!allowOutsideRead && !isWithin(root, actual)) throw Object.assign(new Error("只能操作当前工作区内的文件"), { status: 403 });
   return { directory: root, path: actual };
 }
 
